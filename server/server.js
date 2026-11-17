@@ -22,6 +22,7 @@ app.use('/api/sales', require('./routes/sales'));
 app.use('/api/finance', require('./routes/finance'));
 app.use('/api/amc', require('./routes/amc'));
 app.use('/api/hr', require('./routes/hr'));
+app.use('/api/zoho', require('./routes/zoho'));
 
 // Fallback to index.html for SPA
 app.use((req, res) => {

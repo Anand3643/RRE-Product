@@ -308,6 +308,30 @@ async function initDb() {
     )
   `);
 
+  // 17. Zoho Sync Audit Log (Reconstructed via REA)
+  await run(`
+    CREATE TABLE IF NOT EXISTS zoho_sync_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity_type TEXT NOT NULL, -- 'Customer', 'Product', 'Quotation', 'Invoice'
+      entity_id INTEGER NOT NULL,
+      zoho_id TEXT,
+      status TEXT NOT NULL, -- 'Success', 'Failed'
+      message TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  // Dynamic column additions for Zoho IDs
+  const addCol = async (table, col, type) => {
+    try {
+      await run(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`);
+    } catch (e) {}
+  };
+  await addCol('customers', 'zoho_contact_id', 'TEXT');
+  await addCol('products', 'zoho_item_id', 'TEXT');
+  await addCol('quotations', 'zoho_estimate_id', 'TEXT');
+  await addCol('invoices', 'zoho_invoice_id', 'TEXT');
+
   // Seed sample data if empty
   await seedData();
 }

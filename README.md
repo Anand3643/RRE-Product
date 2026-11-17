@@ -14,6 +14,7 @@ An all-in-one industrial ERP system designed to replace fragmented software (Zoh
 | **AMC & Servicing** | Zoho Desk / Custom | Annual Maintenance Contracts tracker, machine serial numbers, visit frequency, automated upcoming service date alerts |
 | **Finance & GST** | Zoho Books | Tax Invoices (CGST/SGST/IGST), accounts receivable tracking, partial payment receipts, operational expense ledger |
 | **HR & Payroll** | Zoho People / Payroll | Staff directory, daily attendance tracker with quick-mark (Present/Absent/Half-day), automated monthly salary slip calculation |
+| **Zoho Sync Hub** | Zoho Integration | Bi-directional live sync with Zoho Books API v3 (Estimates, Invoices, Contacts, Items) with GSTIN matching and audit logs |
 | **Executive Dashboard** | Zoho Analytics | Live KPIs (Total revenue, stock valuation, active jobs, active AMCs, staff attendance) |
 
 ---

@@ -86,6 +86,7 @@ function switchTab(tabName) {
   else if (tabName === 'amc') loadAMC();
   else if (tabName === 'finance') loadFinance();
   else if (tabName === 'hr') loadHR();
+  else if (tabName === 'zoho') loadZoho();
 
   setTimeout(initIcons, 50);
 }
@@ -1327,5 +1328,174 @@ async function viewPrintInvoice(invId) {
     openModal('printModal');
   } catch (err) {
     alert('Error loading invoice: ' + err.message);
+  }
+}
+
+
+// --- 8. ZOHO BOOKS INTEGRATION (Reconstructed via REA) ---
+async function loadZoho() {
+  await Promise.all([
+    checkZohoStatus(),
+    loadZohoTransactions(),
+    loadZohoLogs()
+  ]);
+}
+
+async function checkZohoStatus() {
+  try {
+    const res = await fetch(`${API_BASE}/zoho/status`);
+    const json = await res.json();
+    const badge = document.getElementById('zoho-status-badge');
+    const orgName = document.getElementById('zoho-org-name');
+    const orgId = document.getElementById('zoho-org-id');
+    const dc = document.getElementById('zoho-dc');
+
+    if (json.success && json.data.connected) {
+      if (badge) {
+        badge.className = 'badge badge-success';
+        badge.innerText = 'Connected';
+      }
+      if (orgName) orgName.innerText = json.data.org_name || 'Ramraj Enterprises';
+      if (orgId) orgId.innerText = json.data.org_id || '639436206';
+      if (dc) dc.innerText = json.data.dc || 'com';
+    } else {
+      if (badge) {
+        badge.className = 'badge badge-danger';
+        badge.innerText = 'Disconnected';
+      }
+      if (orgName) orgName.innerText = 'Status: ' + (json.data?.error || json.error || 'Check .env configuration');
+    }
+  } catch (err) {
+    console.error('Zoho status error:', err);
+  }
+}
+
+async function loadZohoTransactions() {
+  try {
+    const [qRes, iRes] = await Promise.all([
+      fetch(`${API_BASE}/sales/quotations`),
+      fetch(`${API_BASE}/finance/invoices`)
+    ]);
+    const qData = await qRes.json();
+    const iData = await iRes.json();
+
+    const qTbody = document.getElementById('zoho-quotes-tbody');
+    if (qTbody && qData.success) {
+      qTbody.innerHTML = qData.data.map(q => `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="p-2.5 font-bold text-blue-600">${q.quote_no}</td>
+          <td class="p-2.5 font-medium text-slate-900">${q.customer_company}</td>
+          <td class="p-2.5 text-right font-bold">${formatINR(q.total)}</td>
+          <td class="p-2.5 text-center">
+            ${q.zoho_estimate_id ? `<span class="badge badge-success">Synced (#${q.zoho_estimate_id})</span>` : `<span class="badge badge-neutral">Not Synced</span>`}
+          </td>
+          <td class="p-2.5 text-right">
+            <button onclick="syncQuoteToZoho(${q.id})" class="px-2 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold rounded text-[11px]">
+              ${q.zoho_estimate_id ? 'Re-Sync' : 'Push to Zoho'}
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    const iTbody = document.getElementById('zoho-invoices-tbody');
+    if (iTbody && iData.success) {
+      iTbody.innerHTML = iData.data.map(i => `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="p-2.5 font-bold text-blue-600">${i.invoice_no}</td>
+          <td class="p-2.5 font-medium text-slate-900">${i.customer_company}</td>
+          <td class="p-2.5 text-right font-bold">${formatINR(i.total)}</td>
+          <td class="p-2.5 text-center">
+            ${i.zoho_invoice_id ? `<span class="badge badge-success">Synced (#${i.zoho_invoice_id})</span>` : `<span class="badge badge-neutral">Not Synced</span>`}
+          </td>
+          <td class="p-2.5 text-right">
+            <button onclick="syncInvoiceToZoho(${i.id})" class="px-2 py-1 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 font-semibold rounded text-[11px]">
+              ${i.zoho_invoice_id ? 'Re-Sync' : 'Push to Zoho'}
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    }
+  } catch (err) {
+    console.error('Failed to load Zoho transactions:', err);
+  }
+}
+
+async function loadZohoLogs() {
+  try {
+    const res = await fetch(`${API_BASE}/zoho/logs`);
+    const json = await res.json();
+    const tbody = document.getElementById('zoho-logs-tbody');
+    if (tbody && json.success) {
+      if (json.data.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">No sync actions performed yet</td></tr>`;
+      } else {
+        tbody.innerHTML = json.data.map(l => `
+          <tr class="hover:bg-slate-50 transition">
+            <td class="p-2.5 text-slate-500">${formatDate(l.created_at)}</td>
+            <td class="p-2.5 font-semibold text-slate-800">${l.entity_type} #${l.entity_id}</td>
+            <td class="p-2.5 font-mono text-indigo-600">${l.zoho_id || '-'}</td>
+            <td class="p-2.5 text-center"><span class="badge ${l.status === 'Success' ? 'badge-success' : 'badge-danger'}">${l.status}</span></td>
+            <td class="p-2.5 text-slate-600">${l.message || '-'}</td>
+          </tr>
+        `).join('');
+      }
+    }
+  } catch (err) {
+    console.error('Failed to load Zoho logs:', err);
+  }
+}
+
+async function syncQuoteToZoho(quoteId) {
+  try {
+    const res = await fetch(`${API_BASE}/zoho/sync-quote/${quoteId}`, { method: 'POST' });
+    const json = await res.json();
+    if (json.success) {
+      alert(json.message);
+      loadZoho();
+    } else {
+      alert(json.error || 'Sync failed');
+    }
+  } catch (err) {
+    alert('Error syncing quote: ' + err.message);
+  }
+}
+
+async function syncInvoiceToZoho(invId) {
+  try {
+    const res = await fetch(`${API_BASE}/zoho/sync-invoice/${invId}`, { method: 'POST' });
+    const json = await res.json();
+    if (json.success) {
+      alert(json.message);
+      loadZoho();
+    } else {
+      alert(json.error || 'Sync failed');
+    }
+  } catch (err) {
+    alert('Error syncing invoice: ' + err.message);
+  }
+}
+
+async function syncAllCustomersToZoho() {
+  if (!confirm('Push all customer records to Zoho Books as Contacts?')) return;
+  try {
+    const res = await fetch(`${API_BASE}/zoho/sync-all-customers`, { method: 'POST' });
+    const json = await res.json();
+    alert(json.message || 'Sync completed');
+    loadZoho();
+  } catch (err) {
+    alert('Error syncing customers: ' + err.message);
+  }
+}
+
+async function syncAllProductsToZoho() {
+  if (!confirm('Push all product & spare items to Zoho Books as Items?')) return;
+  try {
+    const res = await fetch(`${API_BASE}/zoho/sync-all-products`, { method: 'POST' });
+    const json = await res.json();
+    alert(json.message || 'Sync completed');
+    loadZoho();
+  } catch (err) {
+    alert('Error syncing products: ' + err.message);
   }
 }
