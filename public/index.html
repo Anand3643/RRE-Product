@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ramraj Enterprises — Industrial Manufacturing & Operations ERP</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Custom Styles -->
+  <link rel="stylesheet" href="styles.css">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              800: '#1e40af',
+              900: '#1e3a8a'
+            }
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-slate-50 text-slate-800 antialiased min-h-screen flex flex-col">
+
+  <!-- TOP NAVIGATION BAR -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
+    <div class="px-6 py-3 flex items-center justify-between">
+      <!-- Brand & Title -->
+      <div class="flex items-center space-x-3">
+        <div class="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center font-bold text-xl tracking-wider shadow">
+          RRE
+        </div>
+        <div>
+          <div class="flex items-center space-x-2">
+            <h1 class="text-lg font-bold text-slate-900 leading-tight">Ramraj Enterprises</h1>
+            <span class="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded font-semibold">Manufacturing Suite</span>
+          </div>
+          <p class="text-xs text-slate-500">Air Compressors • Spares • AMC Services • Production ERP</p>
+        </div>
+      </div>
+
+      <!-- Quick Action Buttons -->
+      <div class="flex items-center space-x-3">
+        <button onclick="openModal('quoteModal')" class="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm transition">
+          <i data-lucide="file-plus" class="w-4 h-4"></i>
+          <span>+ Quotation</span>
+        </button>
+        <button onclick="openModal('workOrderModal')" class="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-lg shadow-sm transition">
+          <i data-lucide="cog" class="w-4 h-4"></i>
+          <span>+ Work Order</span>
+        </button>
+        <button onclick="openModal('stockModal')" class="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-sm transition">
+          <i data-lucide="arrow-down-circle" class="w-4 h-4"></i>
+          <span>+ Stock IN</span>
+        </button>
+
+        <!-- User profile -->
+        <div class="flex items-center pl-4 border-l border-slate-200 space-x-2">
+          <div class="w-8 h-8 rounded-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs">
+            AP
+          </div>
+          <div class="text-left hidden md:block">
+            <div class="text-xs font-bold text-slate-900 leading-tight">Anand P</div>
+            <div class="text-[10px] text-slate-500">Administrator</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PRIMARY MODULE TABS -->
+    <nav class="px-6 bg-slate-100/70 border-t border-slate-200 flex space-x-1 overflow-x-auto text-sm font-medium text-slate-600">
+      <button onclick="switchTab('dashboard')" id="tab-dashboard" class="tab-btn px-4 py-2.5 border-b-2 border-blue-600 text-blue-600 font-semibold flex items-center space-x-2">
+        <i data-lucide="layout-dashboard" class="w-4 h-4"></i>
+        <span>Dashboard</span>
+      </button>
+      <button onclick="switchTab('manufacturing')" id="tab-manufacturing" class="tab-btn px-4 py-2.5 border-b-2 border-transparent hover:text-slate-900 flex items-center space-x-2">
+        <i data-lucide="factory" class="w-4 h-4"></i>
+        <span>Manufacturing & BOM</span>
+      </button>
+      <button onclick="switchTab('inventory')" id="tab-inventory" class="tab-btn px-4 py-2.5 border-b-2 border-transparent hover:text-slate-900 flex items-center space-x-2">
+        <i data-lucide="boxes" class="w-4 h-4"></i>
+        <span>Inventory & Stock</span>
+      </button>
+      <button onclick="switchTab('sales')" id="tab-sales" class="tab-btn px-4 py-2.5 border-b-2 border-transparent hover:text-slate-900 flex items-center space-x-2">
+        <i data-lucide="badge-dollar-sign" class="w-4 h-4"></i>
+        <span>Sales & Quotations</span>
+      </button>
+      <button onclick="switchTab('amc')" id="tab-amc" class="tab-btn px-4 py-2.5 border-b-2 border-transparent hover:text-slate-900 flex items-center space-x-2">
+        <i data-lucide="wrench" class="w-4 h-4"></i>
+        <span>AMC & Service</span>
+      </button>
+      <button onclick="switchTab('finance')" id="tab-finance" class="tab-btn px-4 py-2.5 border-b-2 border-transparent hover:text-slate-900 flex items-center space-x-2">
+        <i data-lucide="receipt" class="w-4 h-4"></i>
+        <span>Finance & Invoices</span>
+      </button>
+      <button onclick="switchTab('hr')" id="tab-hr" class="tab-btn px-4 py-2.5 border-b-2 border-transparent hover:text-slate-900 flex items-center space-x-2">
+        <i data-lucide="users" class="w-4 h-4"></i>
+        <span>HR & Staff</span>
+      </button>
+    </nav>
+  </header>
+
+  <!-- MAIN VIEWPORT CONTAINER -->
+  <main class="flex-1 p-6 max-w-7xl w-full mx-auto">
+
+    <!-- 1. DASHBOARD TAB -->
+    <section id="view-dashboard" class="tab-content fade-in space-y-6">
+      <!-- Metric Cards Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Revenue Card -->
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-start justify-between">
+          <div>
+            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Total Sales Invoiced</p>
+            <h3 class="text-2xl font-bold text-slate-900 mt-1" id="dash-revenue">₹0</h3>
+            <p class="text-xs text-emerald-600 font-medium mt-1">
+              <span id="dash-collected">₹0</span> collected
+            </p>
+          </div>
+          <div class="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+            <i data-lucide="trending-up" class="w-5 h-5"></i>
+          </div>
+        </div>
+
+        <!-- Inventory Valuation -->
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-start justify-between">
+          <div>
+            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Inventory Valuation</p>
+            <h3 class="text-2xl font-bold text-slate-900 mt-1" id="dash-stock-value">₹0</h3>
+            <p class="text-xs text-amber-600 font-medium mt-1">
+              <span id="dash-low-stock">0</span> items low on stock
+            </p>
+          </div>
+          <div class="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
+            <i data-lucide="boxes" class="w-5 h-5"></i>
+          </div>
+        </div>
+
+        <!-- Active Work Orders -->
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-start justify-between">
+          <div>
+            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Production Work Orders</p>
+            <h3 class="text-2xl font-bold text-slate-900 mt-1" id="dash-active-wo">0</h3>
+            <p class="text-xs text-slate-500 font-medium mt-1">In assembly / quality check</p>
+          </div>
+          <div class="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
+            <i data-lucide="cog" class="w-5 h-5"></i>
+          </div>
+        </div>
+
+        <!-- AMC Contracts -->
+        <div class="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-start justify-between">
+          <div>
+            <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Active AMC Contracts</p>
+            <h3 class="text-2xl font-bold text-slate-900 mt-1" id="dash-amc-count">0</h3>
+            <p class="text-xs text-blue-600 font-medium mt-1">
+              ₹<span id="dash-amc-value">0</span> annual value
+            </p>
+          </div>
+          <div class="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
+            <i data-lucide="shield-check" class="w-5 h-5"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Recent Tables -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Recent Invoices -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-5 py-4 border-b border-slate-200 flex justify-between items-center">
+            <h3 class="font-bold text-slate-800 text-sm">Recent Invoices</h3>
+            <button onclick="switchTab('finance')" class="text-xs text-blue-600 hover:underline font-semibold">View All →</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs text-left">
+              <thead class="bg-slate-50 text-slate-600 border-b border-slate-200">
+                <tr>
+                  <th class="p-3">Invoice #</th>
+                  <th class="p-3">Customer</th>
+                  <th class="p-3">Date</th>
+                  <th class="p-3">Amount</th>
+                  <th class="p-3">Status</th>
+                </tr>
+              </thead>
+              <tbody id="dash-recent-invoices" class="divide-y divide-slate-100"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Active Production Jobs -->
+        <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div class="px-5 py-4 border-b border-slate-200 flex justify-between items-center">
+            <h3 class="font-bold text-slate-800 text-sm">Active Production Orders</h3>
+            <button onclick="switchTab('manufacturing')" class="text-xs text-blue-600 hover:underline font-semibold">View All →</button>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-xs text-left">
+              <thead class="bg-slate-50 text-slate-600 border-b border-slate-200">
+                <tr>
+                  <th class="p-3">Order #</th>
+                  <th class="p-3">Machine Model</th>
+                  <th class="p-3">Qty</th>
+                  <th class="p-3">Due Date</th>
+                  <th class="p-3">Status</th>
+                </tr>
+              </thead>
+              <tbody id="dash-recent-wo" class="divide-y divide-slate-100"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. MANUFACTURING & BOM TAB -->
+    <section id="view-manufacturing" class="tab-content hidden space-y-6">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-slate-900">Manufacturing & Work Orders</h2>
+          <p class="text-xs text-slate-500">Manage production job cards, BOM assemblies, and auto-stock consumption</p>
+        </div>
+        <div class="flex space-x-2">
+          <button onclick="openModal('workOrderModal')" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center space-x-1.5">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>Create Work Order</span>
+          </button>
+          <button onclick="openModal('productModal')" class="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center space-x-1.5">
+            <i data-lucide="package-plus" class="w-4 h-4"></i>
+            <span>+ New Assembly / Model</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Work Orders Table -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+          <h3 class="font-bold text-slate-800 text-sm">Production Orders Queue</h3>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead class="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+              <tr>
+                <th class="p-3">Order No</th>
+                <th class="p-3">Product / Assembly</th>
+                <th class="p-3">Batch Qty</th>
+                <th class="p-3">Start Date</th>
+                <th class="p-3">Due Date</th>
+                <th class="p-3">Status</th>
+                <th class="p-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="work-orders-tbody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- BOM Catalog Accordion / Table -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-4">
+        <h3 class="font-bold text-slate-800 text-sm">Standard Bill of Materials (BOM) Library</h3>
+        <p class="text-xs text-slate-500">Components and raw materials required to assemble each standard compressor model.</p>
+        <div id="bom-models-container" class="space-y-3"></div>
+      </div>
+    </section>
+
+    <!-- 3. INVENTORY TAB -->
+    <section id="view-inventory" class="tab-content hidden space-y-6">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-slate-900">Inventory & Spares Management</h2>
+          <p class="text-xs text-slate-500">Live stock quantities, reorder thresholds, and warehouse transaction audit trail</p>
+        </div>
+        <div class="flex space-x-2">
+          <button onclick="openModal('stockModal')" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center space-x-1.5">
+            <i data-lucide="arrow-down-circle" class="w-4 h-4"></i>
+            <span>Goods Receipt (Stock In)</span>
+          </button>
+          <button onclick="openStockOutModal()" class="px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center space-x-1.5">
+            <i data-lucide="arrow-up-circle" class="w-4 h-4"></i>
+            <span>Dispatch (Stock Out)</span>
+          </button>
+          <button onclick="openModal('productModal')" class="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center space-x-1.5">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>Add Item / SKU</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Search & Filters -->
+      <div class="flex items-center space-x-3 bg-white p-3 rounded-lg border border-slate-200 shadow-sm">
+        <div class="relative flex-1">
+          <i data-lucide="search" class="w-4 h-4 absolute left-3 top-2.5 text-slate-400"></i>
+          <input type="text" id="inventory-search" placeholder="Search by SKU, item name, or category..." onkeyup="filterInventoryTable()" class="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300 rounded-md focus:outline-none focus:border-blue-500">
+        </div>
+        <select id="inventory-filter-cat" onchange="filterInventoryTable()" class="text-xs border border-slate-300 rounded-md px-3 py-1.5 bg-white text-slate-700">
+          <option value="">All Categories</option>
+          <option value="Finished Goods">Finished Goods</option>
+          <option value="Core Components">Core Components</option>
+          <option value="Spares & Consumables">Spares & Consumables</option>
+        </select>
+      </div>
+
+      <!-- Inventory Table -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left" id="inventory-table">
+            <thead class="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+              <tr>
+                <th class="p-3">SKU</th>
+                <th class="p-3">Item Name</th>
+                <th class="p-3">Category</th>
+                <th class="p-3">Unit</th>
+                <th class="p-3">HSN Code</th>
+                <th class="p-3 text-right">Cost Price</th>
+                <th class="p-3 text-right">Selling Price</th>
+                <th class="p-3 text-center">Min Stock</th>
+                <th class="p-3 text-center">Current Stock</th>
+                <th class="p-3 text-center">Status</th>
+                <th class="p-3 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody id="inventory-tbody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Recent Transactions Audit -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
+        <h3 class="font-bold text-slate-800 text-sm">Recent Inventory Movements (Ledger)</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead class="bg-slate-50 text-slate-600 border-b border-slate-200">
+              <tr>
+                <th class="p-2.5">Date & Time</th>
+                <th class="p-2.5">Type</th>
+                <th class="p-2.5">Item</th>
+                <th class="p-2.5">Quantity</th>
+                <th class="p-2.5">Reference No</th>
+                <th class="p-2.5">Notes</th>
+              </tr>
+            </thead>
+            <tbody id="inventory-tx-tbody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. SALES & QUOTATIONS TAB -->
+    <section id="view-sales" class="tab-content hidden space-y-6">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-slate-900">Sales & Quotation Management</h2>
+          <p class="text-xs text-slate-500">Generate professional GST estimates, track order conversions, and customer records</p>
+        </div>
+        <div class="flex space-x-2">
+          <button onclick="openModal('quoteModal')" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center space-x-1.5">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>Create Quotation</span>
+          </button>
+          <button onclick="openModal('customerModal')" class="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center space-x-1.5">
+            <i data-lucide="user-plus" class="w-4 h-4"></i>
+            <span>+ Add Customer</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Quotations Table -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+          <h3 class="font-bold text-slate-800 text-sm">Quotations & Proposals</h3>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead class="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+              <tr>
+                <th class="p-3">Quote #</th>
+                <th class="p-3">Customer / Company</th>
+                <th class="p-3">Date</th>
+                <th class="p-3">Valid Until</th>
+                <th class="p-3 text-right">Subtotal</th>
+                <th class="p-3 text-right">Tax (18% GST)</th>
+                <th class="p-3 text-right">Grand Total</th>
+                <th class="p-3 text-center">Status</th>
+                <th class="p-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="quotations-tbody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Confirmed Sales Orders -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+          <h3 class="font-bold text-slate-800 text-sm">Confirmed Sales Orders</h3>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead class="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+              <tr>
+                <th class="p-3">Order #</th>
+                <th class="p-3">Customer</th>
+                <th class="p-3">Order Date</th>
+                <th class="p-3 text-right">Total Value</th>
+                <th class="p-3 text-center">Status</th>
+                <th class="p-3 text-right">Generate Invoice</th>
+              </tr>
+            </thead>
+            <tbody id="sales-orders-tbody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Customers Directory -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
+        <h3 class="font-bold text-slate-800 text-sm">Customer Database</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead class="bg-slate-50 text-slate-600 border-b border-slate-200">
+              <tr>
+                <th class="p-2.5">Company Name</th>
+                <th class="p-2.5">Contact Person</th>
+                <th class="p-2.5">GSTIN</th>
+                <th class="p-2.5">Phone</th>
+                <th class="p-2.5">Email</th>
+                <th class="p-2.5">City / Location</th>
+              </tr>
+            </thead>
+            <tbody id="customers-tbody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5. AMC & SERVICE CONTRACTS TAB -->
+    <section id="view-amc" class="tab-content hidden space-y-6">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-slate-900">Annual Maintenance Contracts (AMC)</h2>
+          <p class="text-xs text-slate-500">Track industrial compressor service contracts, routine maintenance visits, and renewal dates</p>
+        </div>
+        <button onclick="openModal('amcModal')" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center space-x-1.5">
+          <i data-lucide="plus" class="w-4 h-4"></i>
+          <span>Create AMC Contract</span>
+        </button>
+      </div>
+
+      <!-- AMC Table -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead class="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+              <tr>
+                <th class="p-3">Contract No</th>
+                <th class="p-3">Customer / Plant</th>
+                <th class="p-3">Machine Model</th>
+                <th class="p-3">Serial No</th>
+                <th class="p-3">Visit Frequency</th>
+                <th class="p-3">Valid Until</th>
+                <th class="p-3">Next Service</th>
+                <th class="p-3 text-right">Contract Value</th>
+                <th class="p-3 text-center">Status</th>
+                <th class="p-3 text-right">Schedule</th>
+              </tr>
+            </thead>
+            <tbody id="amc-tbody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. FINANCE & INVOICES TAB -->
+    <section id="view-finance" class="tab-content hidden space-y-6">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-slate-900">Finance, GST & Invoices</h2>
+          <p class="text-xs text-slate-500">GST-compliant tax invoices, payment receipts, accounts receivable, and operational expenses</p>
+        </div>
+        <div class="flex space-x-2">
+          <button onclick="openModal('invoiceModal')" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center space-x-1.5">
+            <i data-lucide="receipt" class="w-4 h-4"></i>
+            <span>+ Tax Invoice</span>
+          </button>
+          <button onclick="openModal('expenseModal')" class="px-3 py-2 bg-slate-800 hover:bg-slate-900 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center space-x-1.5">
+            <i data-lucide="minus-circle" class="w-4 h-4"></i>
+            <span>+ Log Expense</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Invoices Table -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+          <h3 class="font-bold text-slate-800 text-sm">Tax Invoices (GST 18%)</h3>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead class="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+              <tr>
+                <th class="p-3">Invoice #</th>
+                <th class="p-3">Customer / Client</th>
+                <th class="p-3">Date</th>
+                <th class="p-3">Due Date</th>
+                <th class="p-3 text-right">Taxable Subtotal</th>
+                <th class="p-3 text-right">CGST + SGST / IGST</th>
+                <th class="p-3 text-right">Total Amount</th>
+                <th class="p-3 text-right">Paid Amount</th>
+                <th class="p-3 text-center">Status</th>
+                <th class="p-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="invoices-tbody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Expenses Ledger -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
+        <div class="flex justify-between items-center">
+          <h3 class="font-bold text-slate-800 text-sm">Operational Expense Records</h3>
+          <span class="text-xs text-slate-500 font-semibold">Total Expenses: ₹<span id="expense-total">0</span></span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead class="bg-slate-50 text-slate-600 border-b border-slate-200">
+              <tr>
+                <th class="p-2.5">Date</th>
+                <th class="p-2.5">Category</th>
+                <th class="p-2.5">Paid To</th>
+                <th class="p-2.5">Description</th>
+                <th class="p-2.5">Mode</th>
+                <th class="p-2.5 text-right">Amount</th>
+              </tr>
+            </thead>
+            <tbody id="expenses-tbody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7. HR & STAFF TAB -->
+    <section id="view-hr" class="tab-content hidden space-y-6">
+      <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h2 class="text-xl font-bold text-slate-900">HR, Attendance & Payroll</h2>
+          <p class="text-xs text-slate-500">Employee records, daily attendance tracking, and monthly salary disbursement</p>
+        </div>
+        <div class="flex space-x-2">
+          <button onclick="runMonthlyPayroll()" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center space-x-1.5">
+            <i data-lucide="calculator" class="w-4 h-4"></i>
+            <span>Process Monthly Payroll</span>
+          </button>
+          <button onclick="openModal('employeeModal')" class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold rounded-lg shadow-sm flex items-center space-x-1.5">
+            <i data-lucide="user-plus" class="w-4 h-4"></i>
+            <span>+ Add Employee</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Today's Attendance Table -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+          <h3 class="font-bold text-slate-800 text-sm">Today's Attendance Sheet</h3>
+          <span class="text-xs text-slate-500 font-medium" id="attendance-date-label">Today</span>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead class="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+              <tr>
+                <th class="p-3">Emp Code</th>
+                <th class="p-3">Name</th>
+                <th class="p-3">Department</th>
+                <th class="p-3">Designation</th>
+                <th class="p-3">Check-In</th>
+                <th class="p-3">Check-Out</th>
+                <th class="p-3 text-center">Status</th>
+                <th class="p-3 text-right">Quick Mark</th>
+              </tr>
+            </thead>
+            <tbody id="attendance-tbody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Monthly Payroll Slips -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div class="p-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+          <h3 class="font-bold text-slate-800 text-sm">Current Month Payroll Summary</h3>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead class="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+              <tr>
+                <th class="p-3">Emp Code</th>
+                <th class="p-3">Employee Name</th>
+                <th class="p-3">Department</th>
+                <th class="p-3 text-right">Basic Pay</th>
+                <th class="p-3 text-right">Allowances</th>
+                <th class="p-3 text-right">Deductions (PF/ESI)</th>
+                <th class="p-3 text-right">Net Salary</th>
+                <th class="p-3 text-center">Status</th>
+              </tr>
+            </thead>
+            <tbody id="payroll-tbody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Employee Directory -->
+      <div class="bg-white rounded-xl border border-slate-200 shadow-sm p-4 space-y-3">
+        <h3 class="font-bold text-slate-800 text-sm">Employee Roster</h3>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead class="bg-slate-50 text-slate-600 border-b border-slate-200">
+              <tr>
+                <th class="p-2.5">Code</th>
+                <th class="p-2.5">Name</th>
+                <th class="p-2.5">Department</th>
+                <th class="p-2.5">Designation</th>
+                <th class="p-2.5">Phone</th>
+                <th class="p-2.5">Email</th>
+                <th class="p-2.5 text-right">Basic Salary</th>
+              </tr>
+            </thead>
+            <tbody id="employees-tbody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==================== MODALS ==================== -->
+
+  <!-- 1. QUOTATION MODAL -->
+  <div id="quoteModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+        <h3 class="text-base font-bold text-slate-900">Create New Quotation</h3>
+        <button onclick="closeModal('quoteModal')" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <form id="form-quote" onsubmit="handleCreateQuote(event)" class="p-6 overflow-y-auto space-y-4 text-xs">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Customer / Company *</label>
+            <select id="quote-customer" required class="w-full border border-slate-300 rounded-lg p-2 bg-white"></select>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Quotation Date</label>
+            <input type="date" id="quote-date" class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Validity Period</label>
+            <input type="date" id="quote-validity" class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-700 mb-2">Quote Line Items</label>
+          <div id="quote-items-container" class="space-y-2"></div>
+          <button type="button" onclick="addQuoteLineItem()" class="mt-2 text-blue-600 font-semibold hover:underline flex items-center space-x-1">
+            <i data-lucide="plus-circle" class="w-4 h-4"></i>
+            <span>Add Item</span>
+          </button>
+        </div>
+
+        <div class="border-t border-slate-200 pt-3 flex justify-end">
+          <div class="w-64 space-y-1 text-right text-xs">
+            <div class="flex justify-between"><span class="text-slate-500">Subtotal:</span><span id="quote-preview-subtotal" class="font-bold">₹0</span></div>
+            <div class="flex justify-between"><span class="text-slate-500">GST (18%):</span><span id="quote-preview-tax" class="font-bold">₹0</span></div>
+            <div class="flex justify-between border-t border-slate-200 pt-1 text-sm font-bold text-blue-600"><span>Grand Total:</span><span id="quote-preview-total">₹0</span></div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Terms & Delivery Notes</label>
+          <textarea id="quote-notes" rows="2" placeholder="e.g. Standard 1 year warranty, payment 30 days..." class="w-full border border-slate-300 rounded-lg p-2"></textarea>
+        </div>
+
+        <div class="flex justify-end space-x-3 pt-2">
+          <button type="button" onclick="closeModal('quoteModal')" class="px-4 py-2 border border-slate-300 text-slate-700 font-medium rounded-lg">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm">Save & Generate Quote</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 2. STOCK ADJUSTMENT MODAL -->
+  <div id="stockModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+        <h3 class="text-base font-bold text-slate-900" id="stock-modal-title">Record Stock Movement</h3>
+        <button onclick="closeModal('stockModal')" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <form id="form-stock" onsubmit="handleStockAdjust(event)" class="p-6 space-y-4 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Item / SKU *</label>
+          <select id="stock-product" required class="w-full border border-slate-300 rounded-lg p-2 bg-white"></select>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Movement Type *</label>
+          <select id="stock-type" required class="w-full border border-slate-300 rounded-lg p-2 bg-white">
+            <option value="IN">Goods Receipt (Stock In +)</option>
+            <option value="OUT">Delivery Challan (Stock Out -)</option>
+            <option value="ADJUST">Inventory Count Correction</option>
+          </select>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Quantity *</label>
+          <input type="number" id="stock-qty" step="any" min="0.01" required placeholder="e.g. 5" class="w-full border border-slate-300 rounded-lg p-2">
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Reference Number / PO / DC</label>
+          <input type="text" id="stock-ref" placeholder="e.g. PO-8492 or DC-104" class="w-full border border-slate-300 rounded-lg p-2">
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Notes</label>
+          <input type="text" id="stock-notes" placeholder="e.g. Supplier delivery or warranty spare replacement" class="w-full border border-slate-300 rounded-lg p-2">
+        </div>
+        <div class="flex justify-end space-x-3 pt-2">
+          <button type="button" onclick="closeModal('stockModal')" class="px-4 py-2 border border-slate-300 text-slate-700 font-medium rounded-lg">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-lg shadow-sm">Save Stock Entry</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 3. WORK ORDER MODAL -->
+  <div id="workOrderModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+        <h3 class="text-base font-bold text-slate-900">Create Production Work Order</h3>
+        <button onclick="closeModal('workOrderModal')" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <form id="form-workorder" onsubmit="handleCreateWorkOrder(event)" class="p-6 space-y-4 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Machine Model to Assemble *</label>
+          <select id="wo-product" required class="w-full border border-slate-300 rounded-lg p-2 bg-white"></select>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Batch Quantity *</label>
+          <input type="number" id="wo-qty" min="1" value="1" required class="w-full border border-slate-300 rounded-lg p-2">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Start Date</label>
+            <input type="date" id="wo-start" class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Target Due Date</label>
+            <input type="date" id="wo-due" class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Assembly Notes</label>
+          <textarea id="wo-notes" rows="2" placeholder="e.g. Specific motor brand or custom voltage requirement" class="w-full border border-slate-300 rounded-lg p-2"></textarea>
+        </div>
+        <div class="flex justify-end space-x-3 pt-2">
+          <button type="button" onclick="closeModal('workOrderModal')" class="px-4 py-2 border border-slate-300 text-slate-700 font-medium rounded-lg">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm">Issue Work Order</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 4. CUSTOMER MODAL -->
+  <div id="customerModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+        <h3 class="text-base font-bold text-slate-900">Add Customer / Industrial Client</h3>
+        <button onclick="closeModal('customerModal')" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <form id="form-customer" onsubmit="handleCreateCustomer(event)" class="p-6 space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Company / Plant Name *</label>
+          <input type="text" id="cust-company" required placeholder="e.g. Sakthi Auto Components Ltd" class="w-full border border-slate-300 rounded-lg p-2">
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Contact Person Name</label>
+          <input type="text" id="cust-name" placeholder="e.g. Mr. K. Sundaram" class="w-full border border-slate-300 rounded-lg p-2">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">GSTIN</label>
+            <input type="text" id="cust-gstin" placeholder="33AAAAA0000A1Z5" class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Phone</label>
+            <input type="text" id="cust-phone" placeholder="+91 98401 23456" class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Email</label>
+          <input type="email" id="cust-email" placeholder="purchase@company.com" class="w-full border border-slate-300 rounded-lg p-2">
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Address / Industrial Area</label>
+          <input type="text" id="cust-addr" placeholder="Plot 12, SIPCOT Industrial Estate" class="w-full border border-slate-300 rounded-lg p-2">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">City</label>
+            <input type="text" id="cust-city" value="Chennai" class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">State</label>
+            <input type="text" id="cust-state" value="Tamil Nadu" class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+        </div>
+        <div class="flex justify-end space-x-3 pt-2">
+          <button type="button" onclick="closeModal('customerModal')" class="px-4 py-2 border border-slate-300 text-slate-700 font-medium rounded-lg">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm">Save Customer</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 5. PRODUCT / ITEM MODAL -->
+  <div id="productModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+        <h3 class="text-base font-bold text-slate-900">Add Product / Spare / Machine</h3>
+        <button onclick="closeModal('productModal')" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <form id="form-product" onsubmit="handleCreateProduct(event)" class="p-6 space-y-3 text-xs">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">SKU / Item Code *</label>
+            <input type="text" id="prod-sku" required placeholder="e.g. RRE-SC-45HP" class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Category *</label>
+            <select id="prod-cat" required class="w-full border border-slate-300 rounded-lg p-2 bg-white">
+              <option value="Finished Goods">Finished Goods (Compressors)</option>
+              <option value="Core Components">Core Components (Airend, Motor)</option>
+              <option value="Spares & Consumables">Spares & Consumables (Oil, Filters)</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Product Name *</label>
+          <input type="text" id="prod-name" required placeholder="e.g. 45 HP Rotary Screw Compressor" class="w-full border border-slate-300 rounded-lg p-2">
+        </div>
+        <div class="grid grid-cols-3 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Unit</label>
+            <input type="text" id="prod-unit" value="NOS" class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">HSN / SAC</label>
+            <input type="text" id="prod-hsn" placeholder="84148011" class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Is Assembly?</label>
+            <select id="prod-assembly" class="w-full border border-slate-300 rounded-lg p-2 bg-white">
+              <option value="0">No (Simple Item)</option>
+              <option value="1">Yes (Has BOM)</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Cost Price (₹)</label>
+            <input type="number" id="prod-cost" step="any" placeholder="0" class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Selling Price (₹)</label>
+            <input type="number" id="prod-price" step="any" placeholder="0" class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Initial Stock Qty</label>
+            <input type="number" id="prod-stock" value="0" class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Min Reorder Level</label>
+            <input type="number" id="prod-min" value="5" class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Technical Specs & Description</label>
+          <textarea id="prod-desc" rows="2" placeholder="e.g. Free Air Delivery: 180 CFM @ 7.5 Bar, 415V 50Hz" class="w-full border border-slate-300 rounded-lg p-2"></textarea>
+        </div>
+        <div class="flex justify-end space-x-3 pt-2">
+          <button type="button" onclick="closeModal('productModal')" class="px-4 py-2 border border-slate-300 text-slate-700 font-medium rounded-lg">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm">Save Product</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 6. PRINT DOCUMENT MODAL (Invoices & Quotations) -->
+  <div id="printModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-3xl w-full max-h-[92vh] flex flex-col overflow-hidden">
+      <div class="px-6 py-3 border-b border-slate-200 flex justify-between items-center bg-slate-50 no-print">
+        <h3 class="text-sm font-bold text-slate-900" id="print-doc-title">Document Preview</h3>
+        <div class="flex items-center space-x-2">
+          <button onclick="window.print()" class="px-3 py-1.5 bg-blue-600 text-white text-xs font-semibold rounded-lg flex items-center space-x-1.5 shadow-sm">
+            <i data-lucide="printer" class="w-4 h-4"></i>
+            <span>Print / Save PDF</span>
+          </button>
+          <button onclick="closeModal('printModal')" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+        </div>
+      </div>
+      <div id="print-content" class="p-8 overflow-y-auto space-y-6 text-slate-900">
+        <!-- Rendered dynamically via JavaScript -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. AMC MODAL -->
+  <div id="amcModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+        <h3 class="text-base font-bold text-slate-900">Create AMC Service Contract</h3>
+        <button onclick="closeModal('amcModal')" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <form id="form-amc" onsubmit="handleCreateAMC(event)" class="p-6 space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Customer *</label>
+          <select id="amc-customer" required class="w-full border border-slate-300 rounded-lg p-2 bg-white"></select>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Machine Model *</label>
+          <input type="text" id="amc-model" required placeholder="e.g. RRE-SC-30HP Screw Compressor" class="w-full border border-slate-300 rounded-lg p-2">
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Machine Serial Number</label>
+          <input type="text" id="amc-serial" placeholder="e.g. RRE-2025-SC30-104" class="w-full border border-slate-300 rounded-lg p-2">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Start Date</label>
+            <input type="date" id="amc-start" required class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">End Date</label>
+            <input type="date" id="amc-end" required class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Visit Frequency</label>
+            <select id="amc-freq" class="w-full border border-slate-300 rounded-lg p-2 bg-white">
+              <option value="Quarterly (4 visits/yr)">Quarterly (4 visits/yr)</option>
+              <option value="Bi-Monthly (6 visits/yr)">Bi-Monthly (6 visits/yr)</option>
+              <option value="Monthly (12 visits/yr)">Monthly (12 visits/yr)</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Contract Value (₹) *</label>
+            <input type="number" id="amc-val" required placeholder="45000" class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+        </div>
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">First Scheduled Service Date</label>
+          <input type="date" id="amc-next-date" class="w-full border border-slate-300 rounded-lg p-2">
+        </div>
+        <div class="flex justify-end space-x-3 pt-2">
+          <button type="button" onclick="closeModal('amcModal')" class="px-4 py-2 border border-slate-300 text-slate-700 font-medium rounded-lg">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm">Save AMC</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 8. EMPLOYEE MODAL -->
+  <div id="employeeModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-xl max-w-md w-full overflow-hidden">
+      <div class="px-6 py-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+        <h3 class="text-base font-bold text-slate-900">Add Employee Record</h3>
+        <button onclick="closeModal('employeeModal')" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-5 h-5"></i></button>
+      </div>
+      <form id="form-employee" onsubmit="handleCreateEmployee(event)" class="p-6 space-y-3 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-700 mb-1">Full Name *</label>
+          <input type="text" id="emp-name" required placeholder="e.g. S. Murugan" class="w-full border border-slate-300 rounded-lg p-2">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Department *</label>
+            <select id="emp-dept" required class="w-full border border-slate-300 rounded-lg p-2 bg-white">
+              <option value="Production">Production & Assembly</option>
+              <option value="Field Service">Field Service & AMC</option>
+              <option value="Sales">Sales & Marketing</option>
+              <option value="Finance & Accounts">Finance & Accounts</option>
+              <option value="Management">Management</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Designation *</label>
+            <input type="text" id="emp-desig" required placeholder="e.g. Service Technician" class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Phone</label>
+            <input type="text" id="emp-phone" placeholder="+91 98401 23456" class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Email</label>
+            <input type="email" id="emp-email" placeholder="name@ramrajenterprises.com" class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Basic Monthly Salary (₹)</label>
+            <input type="number" id="emp-salary" value="30000" class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-700 mb-1">Joining Date</label>
+            <input type="date" id="emp-join" class="w-full border border-slate-300 rounded-lg p-2">
+          </div>
+        </div>
+        <div class="flex justify-end space-x-3 pt-2">
+          <button type="button" onclick="closeModal('employeeModal')" class="px-4 py-2 border border-slate-300 text-slate-700 font-medium rounded-lg">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm">Save Employee</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- App Logic Scripts -->
+  <script src="app.js"></script>
+</body>
+</html>
