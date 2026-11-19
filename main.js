@@ -50,7 +50,7 @@ async function createWindow() {
     height: 820,
     minWidth: 1024,
     minHeight: 700,
-    title: 'TallyPrime Gold — Ramraj Enterprises',
+    title: 'RRE Tally — Ramraj Enterprises',
     icon: path.join(__dirname, 'tally_icon.ico'),
     backgroundColor: '#0a192f',
     webPreferences: {
@@ -109,7 +109,7 @@ async function createWindow() {
         },
         { type: 'separator' },
         {
-          label: 'Exit TallyPrime',
+          label: 'Exit RRE Tally',
           accelerator: 'Ctrl+Q',
           click: () => app.quit()
         }
@@ -182,12 +182,12 @@ async function createWindow() {
         },
         { type: 'separator' },
         {
-          label: 'About TallyPrime Gold',
+          label: 'About RRE Tally',
           click: () => {
             dialog.showMessageBox(mainWindow, {
               type: 'info',
-              title: 'About TallyPrime Gold',
-              message: 'TallyPrime Gold (V5 Edition) — Standalone Desktop',
+              title: 'About RRE Tally',
+              message: 'RRE Tally (V5 Edition) — Standalone Desktop',
               detail: 'Company: Ramraj Enterprises\nMode: 100% Offline Standalone (No Internet or External Server Required)\nData Storage: Local PC SQLite (company.db)\nCompany No: 100000 | Tamil Nadu (33)\nNative Tally XML Port: 9000 (ODBC / Tally Protocol)\nFull double-entry integrity & statutory compliance.'
             });
           }

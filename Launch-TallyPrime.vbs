@@ -5,7 +5,10 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 ScriptDir = fso.GetParentFolderName(WScript.ScriptFullName)
 
 ' Paths
-DistExe = ScriptDir & "\dist\win-unpacked\TallyPrime Gold.exe"
+DistExe = ScriptDir & "\dist\win-unpacked\RRE Tally.exe"
+If Not fso.FileExists(DistExe) Then
+    DistExe = ScriptDir & "\dist\win-unpacked\TallyPrime Gold.exe"
+End If
 ElectronExe = ScriptDir & "\node_modules\electron\dist\electron.exe"
 EdgePath = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 ChromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"

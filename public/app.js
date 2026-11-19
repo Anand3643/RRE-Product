@@ -1,5 +1,5 @@
 // ========================================================
-// TALLYPRIME GOLD — MASTER APPLICATION ENGINE
+// RRE TALLY — MASTER APPLICATION ENGINE
 // ========================================================
 
 let currentApiOrigin = (function() {
@@ -2287,7 +2287,7 @@ async function checkForUpdates() {
       if (btnDoUpdate) btnDoUpdate.classList.remove('hidden');
     } else {
       if (statusMsg) statusMsg.className = 'p-2.5 bg-blue-50 border border-blue-200 rounded text-[11px] text-blue-900 flex items-center space-x-2';
-      if (statusText) statusText.textContent = 'Your TallyPrime Gold installation is completely up to date!';
+      if (statusText) statusText.textContent = 'Your RRE Tally installation is completely up to date!';
       if (btnDoUpdate) btnDoUpdate.classList.add('hidden');
     }
   } catch (err) {
@@ -2307,7 +2307,7 @@ async function performDirectUpdate() {
   const btnDoUpdate = document.getElementById('btn-do-update');
   const statusText = document.getElementById('update-status-text');
 
-  if (!confirm('Download and install the latest TallyPrime update directly on this PC? All your company accounting data in company.db will remain 100% intact.')) {
+  if (!confirm('Download and install the latest RRE Tally update directly on this PC? All your company accounting data in company.db will remain 100% intact.')) {
     return;
   }
 
@@ -2322,7 +2322,7 @@ async function performDirectUpdate() {
     const res = await fetch(`${API_BASE}/system/perform-update`, { method: 'POST' });
     const data = await res.json();
     if (data.success) {
-      alert('TallyPrime has been updated successfully to the latest version! The application will now reload.');
+      alert('RRE Tally has been updated successfully to the latest version! The application will now reload.');
       location.reload();
     } else {
       alert(`Update failed: ${data.error || 'Unknown error'}`);

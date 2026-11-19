@@ -1,10 +1,10 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-title Packaging TallyPrime Gold Windows Installer...
+title Packaging RRE Tally Windows Installer...
 
 echo ========================================================
-echo       BUILDING TALLYPRIME GOLD STANDALONE INSTALLER
+echo       BUILDING RRE TALLY STANDALONE INSTALLER
 echo ========================================================
 echo.
 echo Compiling Windows NSIS Installer (.exe) and Portable App...

@@ -314,7 +314,7 @@ app.get('/api/system/update-status', async (req, res) => {
       can_auto_update: hasGit,
       message: updateAvailable
         ? `New version available: ${remoteSha} - "${remoteMessage.split('\n')[0]}"`
-        : 'Your TallyPrime Gold installation is completely up to date!'
+        : 'Your RRE Tally installation is completely up to date!'
     });
   } catch (err) {
     // Offline mode
@@ -335,7 +335,7 @@ app.post('/api/system/perform-update', async (req, res) => {
     console.log('[System Update] git pull result:', pullOut);
 
     // Trigger silent rebuild and installation in background
-    exec('npm run build:win && powershell -Command "Start-Process dist\\\"TallyPrime Gold Setup 1.0.0.exe\\\" -ArgumentList \\\"/S\\\" -Wait"', (err) => {
+    exec('npm run build:win && powershell -Command "Start-Process dist\\\"RRE Tally Setup 1.0.0.exe\\\" -ArgumentList \\\"/S\\\" -Wait"', (err) => {
       if (err) console.warn('[System Update] Background installer warning:', err.message);
       else console.log('[System Update] Successfully rebuilt and updated desktop app on PC!');
     });
@@ -397,7 +397,7 @@ function startServer(preferredPort = WEB_PORT, preferredHost = '127.0.0.1') {
 
       server.listen(portToTry, host, () => {
         console.log(`=======================================================`);
-        console.log(`✨ TallyPrime Gold (V5 Edition) Running!`);
+        console.log(`✨ RRE Tally (V5 Edition) Running!`);
         console.log(`👉 Web Interface: http://${host}:${portToTry}`);
         console.log(`📂 Data Storage: data/100000/company.db (Local PC SQLite)`);
         console.log(`⚡ Offline Mode: 100% Standalone (No Internet Required)`);

@@ -1,8 +1,8 @@
 {
-  "name": "tallyprime-gold",
-  "productName": "TallyPrime Gold",
+  "name": "rre-tally",
+  "productName": "RRE Tally",
   "version": "1.0.0",
-  "description": "TallyPrime Gold Enterprise Accounting & Inventory Suite",
+  "description": "RRE Tally Enterprise Accounting & Inventory Suite",
   "main": "main.js",
   "scripts": {
     "start": "node server.js",
@@ -36,8 +36,8 @@
     "electron-builder": "^26.18.0"
   },
   "build": {
-    "appId": "com.ramraj.tallyprime",
-    "productName": "TallyPrime Gold",
+    "appId": "com.ramraj.rretally",
+    "productName": "RRE Tally",
     "copyright": "Copyright © 2026 Ramraj Enterprises",
     "npmRebuild": false,
     "directories": {
@@ -72,7 +72,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "TallyPrime Gold"
+      "shortcutName": "RRE Tally"
     }
   }
 }
