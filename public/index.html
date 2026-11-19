@@ -3,42 +3,46 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TallyPrime Gold — Ramraj Enterprises</title>
+  <title>TallyPrime Gold — Ramraj Enterprises (Full Accounting Suite)</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
-  <!-- Custom Tally Styles -->
   <link rel="stylesheet" href="styles.css">
 </head>
-<body class="bg-slate-100 text-slate-800 antialiased min-h-screen flex flex-col font-sans">
+<body class="bg-slate-100 text-slate-800 antialiased min-h-screen flex flex-col font-sans select-none">
 
-  <!-- TOP TALLY HEADER -->
-  <header class="bg-[#1f3a52] text-white border-b border-slate-700 shadow-sm sticky top-0 z-30">
-    <!-- Row 1: Brand & Current State -->
-    <div class="px-5 py-2.5 flex items-center justify-between border-b border-slate-700/60">
+  <!-- ============================================== -->
+  <!-- TOP TALLY STATUS & HOTKEY HEADER               -->
+  <!-- ============================================== -->
+  <header class="bg-[#1f3a52] text-white border-b border-slate-700 shadow-md sticky top-0 z-40">
+    <!-- Top Band: Company & Period Metadata -->
+    <div class="px-5 py-2 flex items-center justify-between border-b border-slate-700/70 text-xs">
       <div class="flex items-center space-x-3">
-        <div class="bg-amber-500 text-slate-900 font-black px-2 py-0.5 rounded text-xs tracking-wider uppercase">
+        <span class="bg-amber-400 text-slate-900 font-black px-2 py-0.5 rounded text-[11px] tracking-widest uppercase">
           TallyPrime
-        </div>
+        </span>
         <div class="h-4 w-[1px] bg-slate-600"></div>
-        <div class="text-sm font-bold tracking-wide flex items-center space-x-2">
-          <span>Ramraj Enterprises</span>
-          <span class="text-[11px] font-normal text-slate-300">(Financial Year: 2026-2027)</span>
+        <div class="font-bold tracking-wide flex items-center space-x-2">
+          <span class="text-white text-sm" id="top-company-name">Ramraj Enterprises</span>
+          <span class="text-[11px] font-normal text-slate-300">(Screw Compressors &amp; Spares)</span>
         </div>
       </div>
 
-      <div class="flex items-center space-x-6 text-xs text-slate-300">
-        <div>Period: <strong class="text-white">1-Apr-26 to 31-Mar-27</strong></div>
-        <div>Current Date: <strong class="text-amber-400" id="top-current-date">1-Jun-2026</strong></div>
-        <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-white rounded text-[11px] font-semibold flex items-center space-x-1">
-          <span>Esc: Gateway</span>
+      <div class="flex items-center space-x-5 text-slate-300">
+        <div>Period: <strong class="text-white font-mono">1-Apr-26 to 31-Mar-27</strong></div>
+        <div>Current Date: <strong class="text-amber-300 font-mono" id="top-current-date">1-Jun-2026</strong></div>
+        <a href="/api/export/tally-xml" download class="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded text-[11px] font-bold flex items-center space-x-1 transition shadow-sm">
+          <span>Alt+E: XML Export</span>
+        </a>
+        <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-white rounded text-[11px] font-semibold transition">
+          Esc: Gateway
         </button>
       </div>
     </div>
 
-    <!-- Row 2: Function Keys Bar (F4 to F9) -->
-    <div class="px-5 py-1.5 bg-[#162a3b] flex items-center justify-between overflow-x-auto text-xs">
+    <!-- Second Band: Voucher Function Keys Ribbon (F4 to F9 + Alt Notes) -->
+    <div class="px-5 py-1.5 bg-[#162a3b] flex items-center justify-between overflow-x-auto text-xs border-b border-slate-700/50">
       <div class="flex items-center space-x-2">
         <button onclick="openVoucherScreen('Contra')" id="fn-contra" class="fn-btn">
           <span class="fn-badge">F4</span>Contra
@@ -58,61 +62,90 @@
         <button onclick="openVoucherScreen('Purchase')" id="fn-purchase" class="fn-btn">
           <span class="fn-badge">F9</span>Purchase
         </button>
+        <button onclick="openVoucherScreen('Credit Note')" class="fn-btn">
+          <span class="fn-badge">Alt+F6</span>Cr Note
+        </button>
+        <button onclick="openVoucherScreen('Debit Note')" class="fn-btn">
+          <span class="fn-badge">Alt+F5</span>Dr Note
+        </button>
       </div>
 
-      <div class="flex items-center space-x-2 text-[11px] text-slate-300">
-        <button onclick="openReport('trial-balance')" class="px-2 py-1 hover:text-white hover:underline">Trial Balance (T)</button>
-        <button onclick="openReport('balance-sheet')" class="px-2 py-1 hover:text-white hover:underline">Balance Sheet (B)</button>
-        <button onclick="openReport('profit-loss')" class="px-2 py-1 hover:text-white hover:underline">P&L A/c (P)</button>
-        <button onclick="openReport('stock-summary')" class="px-2 py-1 hover:text-white hover:underline">Stock (S)</button>
-        <button onclick="openReport('daybook')" class="px-2 py-1 hover:text-white hover:underline">Day Book (D)</button>
+      <div class="flex items-center space-x-3 text-[11px] text-slate-300">
+        <button onclick="openReport('trial-balance')" class="hover:text-amber-300 transition"><u>T</u>rial Balance</button>
+        <button onclick="openReport('balance-sheet')" class="hover:text-amber-300 transition"><u>B</u>alance Sheet</button>
+        <button onclick="openReport('profit-loss')" class="hover:text-amber-300 transition"><u>P</u>&amp;L A/c</button>
+        <button onclick="openReport('stock-summary')" class="hover:text-amber-300 transition"><u>S</u>tock Summary</button>
+        <button onclick="openReport('daybook')" class="hover:text-amber-300 transition"><u>D</u>ay Book</button>
+        <button onclick="openReport('ratio-analysis')" class="hover:text-amber-300 transition"><u>R</u>atio Analysis</button>
+        <button onclick="openReport('gst')" class="hover:text-amber-300 transition"><u>G</u>ST Portal</button>
+        <button onclick="openReport('outstandings')" class="hover:text-amber-300 transition"><u>O</u>utstandings</button>
+        <button onclick="toggleCalculator()" class="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-amber-300 font-mono text-[10px]">
+          Ctrl+N: Calc
+        </button>
       </div>
     </div>
   </header>
 
-  <!-- MAIN WORKSPACE CONTAINER -->
-  <main class="flex-1 p-6 max-w-7xl w-full mx-auto flex flex-col justify-center items-center">
+  <!-- ============================================== -->
+  <!-- MAIN WORKSPACE                                 -->
+  <!-- ============================================== -->
+  <main class="flex-1 p-5 max-w-7xl w-full mx-auto flex flex-col justify-center items-center">
 
     <!-- ============================================== -->
     <!-- VIEW 1: GATEWAY OF TALLY (THE CLASSIC MENU)    -->
     <!-- ============================================== -->
-    <section id="view-gateway" class="w-full max-w-4xl bg-white border border-slate-300 rounded-lg shadow-lg overflow-hidden fade-in">
-      <div class="bg-[#1f3a52] text-white px-5 py-2 font-bold text-xs uppercase tracking-wider flex justify-between items-center">
-        <span>Gateway of Tally</span>
-        <span class="text-[11px] text-amber-300">Keyboard: Press highlighted letters</span>
+    <section id="view-gateway" class="w-full max-w-4xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden fade-in">
+      <div class="bg-[#1f3a52] text-white px-5 py-2.5 font-bold text-xs uppercase tracking-wider flex justify-between items-center border-b border-slate-600">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="layout-grid" class="w-4 h-4 text-amber-400"></i>
+          <span>Gateway of Tally</span>
+        </div>
+        <span class="text-[11px] text-amber-300 font-normal">Press underlined hotkey letters</span>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200">
-        <!-- Left Panel: Current Company Status -->
+        <!-- Left Panel: Current Company Status & Quick Actions -->
         <div class="p-6 bg-slate-50/70 space-y-5">
           <div class="border-b border-slate-200 pb-4">
-            <h2 class="text-lg font-bold text-slate-900 leading-tight">Ramraj Enterprises</h2>
-            <p class="text-xs text-slate-500 mt-0.5">M/s. RAMRAJ ENTERPRISES (Screw Compressors & Spares)</p>
-            <p class="text-[11px] font-mono text-slate-600 mt-1">GSTIN: 33ANUPS7331M1Z8</p>
-          </div>
-
-          <div class="space-y-3 text-xs">
-            <div class="flex justify-between border-b border-slate-200 pb-1.5">
-              <span class="text-slate-500">Current Period:</span>
-              <span class="font-bold text-slate-800">1-Apr-2026 to 31-Mar-2027</span>
-            </div>
-            <div class="flex justify-between border-b border-slate-200 pb-1.5">
-              <span class="text-slate-500">Current Date:</span>
-              <span class="font-bold text-amber-700" id="gateway-date">1-Jun-2026</span>
-            </div>
-            <div class="flex justify-between border-b border-slate-200 pb-1.5">
-              <span class="text-slate-500">Last Voucher Date:</span>
-              <span class="font-bold text-slate-800" id="gateway-last-voucher">-</span>
-            </div>
-            <div class="flex justify-between border-b border-slate-200 pb-1.5">
-              <span class="text-slate-500">Total Vouchers Posted:</span>
-              <span class="font-bold text-blue-600" id="gateway-vouchers-count">4</span>
+            <h2 class="text-xl font-black text-slate-900 tracking-tight" id="gw-company-name">Ramraj Enterprises</h2>
+            <p class="text-xs text-slate-600 mt-0.5 font-medium">M/s. RAMRAJ ENTERPRISES (Screw Compressors)</p>
+            <div class="flex items-center space-x-2 mt-1.5">
+              <span class="px-2 py-0.5 bg-blue-100 text-blue-800 rounded font-mono text-[11px] font-bold" id="gw-company-gstin">GSTIN: 33ANUPS7331M1Z8</span>
+              <span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-mono text-[11px]">PAN: ANUPS7331M</span>
             </div>
           </div>
 
-          <div class="pt-4 border-t border-slate-200 flex justify-center">
-            <button onclick="openVoucherScreen('Sales')" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold text-xs shadow-sm transition">
-              + New Voucher Entry (V)
+          <div class="space-y-2.5 text-xs">
+            <div class="flex justify-between border-b border-slate-200 pb-1.5">
+              <span class="text-slate-500 font-medium">Current Period:</span>
+              <span class="font-bold text-slate-800 font-mono">1-Apr-2026 to 31-Mar-2027</span>
+            </div>
+            <div class="flex justify-between border-b border-slate-200 pb-1.5">
+              <span class="text-slate-500 font-medium">Current Date:</span>
+              <span class="font-bold text-amber-800 font-mono" id="gateway-date">1-Jun-2026</span>
+            </div>
+            <div class="flex justify-between border-b border-slate-200 pb-1.5">
+              <span class="text-slate-500 font-medium">Last Voucher Date:</span>
+              <span class="font-bold text-slate-800 font-mono" id="gateway-last-voucher">-</span>
+            </div>
+            <div class="flex justify-between border-b border-slate-200 pb-1.5">
+              <span class="text-slate-500 font-medium">Total Vouchers:</span>
+              <span class="font-bold text-blue-700 font-mono" id="gateway-vouchers-count">8</span>
+            </div>
+            <div class="flex justify-between border-b border-slate-200 pb-1.5">
+              <span class="text-slate-500 font-medium">Active Ledgers:</span>
+              <span class="font-bold text-indigo-700 font-mono" id="gateway-ledgers-count">24</span>
+            </div>
+          </div>
+
+          <div class="pt-2 grid grid-cols-2 gap-2">
+            <button onclick="openVoucherScreen('Sales')" class="py-2.5 bg-[#1f3a52] hover:bg-[#162a3b] text-white rounded font-bold text-xs shadow-sm transition flex items-center justify-center space-x-1.5">
+              <i data-lucide="plus-circle" class="w-4 h-4 text-amber-400"></i>
+              <span>Voucher Entry (V)</span>
+            </button>
+            <button onclick="openReport('balance-sheet')" class="py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded font-bold text-xs shadow-sm transition flex items-center justify-center space-x-1.5">
+              <i data-lucide="file-text" class="w-4 h-4 text-emerald-400"></i>
+              <span>Balance Sheet (B)</span>
             </button>
           </div>
         </div>
@@ -127,13 +160,13 @@
                 <span><span class="hotkey">C</span>reate Ledger</span>
                 <span class="text-[10px] text-slate-400 font-mono">Alt+C</span>
               </div>
+              <div onclick="openModal('createStockModal')" class="gateway-item">
+                <span>Create <span class="hotkey">I</span>tem (Stock)</span>
+                <span class="text-[10px] text-slate-400">Inventory</span>
+              </div>
               <div onclick="openReport('chart-accounts')" class="gateway-item">
                 <span><span class="hotkey">A</span>lter / Chart of Accounts</span>
-                <span class="text-[10px] text-slate-400">Masters</span>
-              </div>
-              <div onclick="openReport('stock-summary')" class="gateway-item">
-                <span><span class="hotkey">I</span>nventory / Stock Items</span>
-                <span class="text-[10px] text-slate-400">Stock</span>
+                <span class="text-[10px] text-slate-400">Hierarchy</span>
               </div>
             </div>
           </div>
@@ -144,34 +177,50 @@
             <div class="space-y-0.5">
               <div onclick="openVoucherScreen('Sales')" class="gateway-item">
                 <span><span class="hotkey">V</span>ouchers</span>
-                <span class="text-[10px] text-slate-400 font-mono">F4-F9</span>
+                <span class="text-[10px] text-slate-400 font-mono">F4 - F9</span>
               </div>
               <div onclick="openReport('daybook')" class="gateway-item">
                 <span><span class="hotkey">D</span>ay Book</span>
-                <span class="text-[10px] text-slate-400 font-mono">Journals</span>
+                <span class="text-[10px] text-slate-400 font-mono">Daily Audit</span>
               </div>
             </div>
           </div>
 
-          <!-- UTILITIES & REPORTS -->
+          <!-- UTILITIES & STATUTORY REPORTS -->
           <div>
-            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Reports</div>
+            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Reports &amp; Statutory</div>
             <div class="space-y-0.5">
               <div onclick="openReport('balance-sheet')" class="gateway-item">
                 <span><span class="hotkey">B</span>alance Sheet</span>
-                <span class="text-[10px] text-slate-400">Financial</span>
+                <span class="text-[10px] text-slate-400 font-mono">Liab / Asset</span>
               </div>
               <div onclick="openReport('profit-loss')" class="gateway-item">
                 <span><span class="hotkey">P</span>rofit &amp; Loss A/c</span>
-                <span class="text-[10px] text-slate-400">Trading</span>
+                <span class="text-[10px] text-slate-400 font-mono">Trading / Net</span>
               </div>
               <div onclick="openReport('trial-balance')" class="gateway-item">
                 <span><span class="hotkey">T</span>rial Balance</span>
-                <span class="text-[10px] text-slate-400">Audit</span>
+                <span class="text-[10px] text-slate-400 font-mono">Sum Dr = Cr</span>
               </div>
               <div onclick="openReport('stock-summary')" class="gateway-item">
                 <span><span class="hotkey">S</span>tock Summary</span>
-                <span class="text-[10px] text-slate-400">Valuation</span>
+                <span class="text-[10px] text-slate-400 font-mono">Weighted Avg</span>
+              </div>
+              <div onclick="openReport('ratio-analysis')" class="gateway-item">
+                <span><span class="hotkey">R</span>atio Analysis</span>
+                <span class="text-[10px] text-slate-400 font-mono">CR / QR / DE</span>
+              </div>
+              <div onclick="openReport('gst')" class="gateway-item">
+                <span><span class="hotkey">G</span>ST Portal (GSTR-1 &amp; 3B)</span>
+                <span class="text-[10px] text-slate-400 font-mono">Tax / ITC</span>
+              </div>
+              <div onclick="openReport('outstandings')" class="gateway-item">
+                <span><span class="hotkey">O</span>utstandings (Ageing)</span>
+                <span class="text-[10px] text-slate-400 font-mono">Rec / Pay</span>
+              </div>
+              <div onclick="openReport('bank-recon')" class="gateway-item">
+                <span>Ban<span class="hotkey">K</span> Reconciliation (BRS)</span>
+                <span class="text-[10px] text-slate-400 font-mono">Clearing</span>
               </div>
             </div>
           </div>
@@ -182,72 +231,168 @@
     <!-- ============================================== -->
     <!-- VIEW 2: VOUCHER CREATION SCREEN (F4 TO F9)     -->
     <!-- ============================================== -->
-    <section id="view-voucher" class="w-full max-w-4xl bg-white border border-slate-300 rounded-lg shadow-lg overflow-hidden hidden fade-in">
-      <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
+    <section id="view-voucher" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden hidden fade-in">
+      <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center border-b border-slate-600">
         <div class="flex items-center space-x-3">
-          <span class="bg-amber-400 text-slate-900 font-black px-2 py-0.5 rounded text-xs uppercase" id="v-type-badge">F8: Sales</span>
+          <span class="bg-amber-400 text-slate-900 font-black px-2.5 py-0.5 rounded text-xs uppercase shadow-sm" id="v-type-badge">
+            F8: Sales
+          </span>
           <h2 class="text-sm font-bold uppercase tracking-wider" id="v-title">Accounting Voucher Creation</h2>
         </div>
-        <div class="flex items-center space-x-2 text-xs">
-          <span class="text-slate-300">Press <strong class="text-amber-400">Esc</strong> to cancel</span>
-          <button onclick="showGateway()" class="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[11px]">✕</button>
+        
+        <!-- Voucher Mode Toggle: Item Invoice vs Accounting Voucher -->
+        <div class="flex items-center space-x-3 text-xs">
+          <div class="bg-[#162a3b] p-0.5 rounded flex items-center border border-slate-600">
+            <button type="button" onclick="setVoucherMode('invoice')" id="btn-mode-invoice" class="px-2.5 py-1 rounded text-[11px] font-bold bg-amber-500 text-slate-900 transition">
+              Item Invoice (Auto GST)
+            </button>
+            <button type="button" onclick="setVoucherMode('manual')" id="btn-mode-manual" class="px-2.5 py-1 rounded text-[11px] font-semibold text-slate-300 hover:text-white transition">
+              As Voucher (Dr/Cr)
+            </button>
+          </div>
+          <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs text-white">Esc: Quit</button>
         </div>
       </div>
 
       <form id="form-voucher" onsubmit="handleSaveVoucher(event)" class="p-6 space-y-5 text-xs">
-        <!-- Voucher Meta (No, Date, Ref, Party) -->
-        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 bg-slate-50 p-4 rounded border border-slate-200">
+        <!-- Header Metadata: Type, Number, Date, Reference -->
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
           <div>
             <label class="block font-bold text-slate-700 mb-1">Voucher Type</label>
-            <select id="v-select-type" onchange="switchVoucherType(this.value)" class="w-full border border-slate-300 rounded p-1.5 bg-white font-semibold text-blue-700">
+            <select id="v-select-type" onchange="switchVoucherType(this.value)" class="w-full border border-slate-300 rounded p-1.5 bg-white font-bold text-blue-700">
               <option value="Sales">F8: Sales</option>
               <option value="Purchase">F9: Purchase</option>
               <option value="Payment">F5: Payment</option>
               <option value="Receipt">F6: Receipt</option>
               <option value="Contra">F4: Contra</option>
               <option value="Journal">F7: Journal</option>
+              <option value="Credit Note">Credit Note (Sales Return)</option>
+              <option value="Debit Note">Debit Note (Purchase Return)</option>
             </select>
           </div>
           <div>
-            <label class="block font-bold text-slate-700 mb-1">Voucher Number *</label>
+            <label class="block font-bold text-slate-700 mb-1">Voucher No *</label>
             <input type="text" id="v-no" required class="w-full border border-slate-300 rounded p-1.5 font-mono font-bold bg-white">
           </div>
           <div>
             <label class="block font-bold text-slate-700 mb-1">Voucher Date *</label>
-            <input type="date" id="v-date" required class="w-full border border-slate-300 rounded p-1.5 bg-white">
+            <input type="date" id="v-date" required class="w-full border border-slate-300 rounded p-1.5 bg-white font-mono">
           </div>
           <div>
-            <label class="block font-bold text-slate-700 mb-1">Ref / Bill No</label>
-            <input type="text" id="v-ref" placeholder="e.g. PO-9842" class="w-full border border-slate-300 rounded p-1.5 bg-white font-mono">
+            <label class="block font-bold text-slate-700 mb-1">Reference / Bill No</label>
+            <input type="text" id="v-ref" placeholder="e.g. PO-8842 / INV-01" class="w-full border border-slate-300 rounded p-1.5 bg-white font-mono">
           </div>
         </div>
 
-        <!-- Double-Entry Particulars Grid -->
-        <div class="space-y-2">
+        <!-- Party Selection (For Sales, Purchase, Payment, Receipt) -->
+        <div id="v-party-container" class="bg-blue-50/70 border border-blue-200 p-3.5 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div class="flex-1">
+            <label class="block font-bold text-slate-800 mb-1 flex items-center justify-between">
+              <span>Party A/c Name (Debtor / Creditor / Cash / Bank) *</span>
+              <button type="button" onclick="openModal('createLedgerModal')" class="text-blue-600 hover:underline font-normal text-[11px]">+ Alt+C: New Ledger</button>
+            </label>
+            <select id="v-party-ledger" onchange="handlePartyChange()" class="w-full border border-slate-300 rounded p-1.5 bg-white font-semibold text-slate-800"></select>
+          </div>
+          <div class="text-[11px] text-slate-600 space-y-0.5 bg-white p-2.5 rounded border border-blue-100 min-w-[240px]">
+            <div>State: <strong id="v-party-state" class="text-slate-800">Tamil Nadu (33)</strong></div>
+            <div>GSTIN: <span id="v-party-gstin" class="font-mono text-blue-700">33AABCC1234F1Z1</span></div>
+            <div>GST Type: <strong id="v-party-gst-type" class="text-emerald-700">Intra-State (CGST + SGST)</strong></div>
+          </div>
+        </div>
+
+        <!-- ================================================= -->
+        <!-- MODE A: ITEM INVOICE TABLE (AUTO-GST & INVENTORY) -->
+        <!-- ================================================= -->
+        <div id="section-item-invoice" class="space-y-3">
           <div class="flex justify-between items-center">
-            <h3 class="font-bold text-slate-800 text-xs uppercase tracking-wider">Accounting Entries (Double Entry)</h3>
-            <span class="text-[11px] text-slate-500">Every voucher must balance: Total Dr = Total Cr</span>
+            <h3 class="font-bold text-slate-800 text-xs uppercase tracking-wider flex items-center space-x-1.5">
+              <i data-lucide="package" class="w-4 h-4 text-blue-600"></i>
+              <span>Item Invoicing &amp; Allocation</span>
+            </h3>
+            <span class="text-[11px] text-slate-500">Auto-computes Taxable Value, CGST/SGST/IGST and Round Off</span>
           </div>
 
-          <div class="border border-slate-300 rounded overflow-hidden">
+          <div class="border border-slate-300 rounded-lg overflow-hidden shadow-sm">
+            <table class="w-full text-xs">
+              <thead class="bg-slate-800 text-white font-semibold">
+                <tr>
+                  <th class="p-2 text-left">Stock Item Name</th>
+                  <th class="p-2 w-36 text-left">Godown / Location</th>
+                  <th class="p-2 w-24 text-center">Qty</th>
+                  <th class="p-2 w-28 text-right">Rate (₹)</th>
+                  <th class="p-2 w-20 text-center">Disc %</th>
+                  <th class="p-2 w-32 text-right">Amount (₹)</th>
+                  <th class="p-2 w-10 text-center">✕</th>
+                </tr>
+              </thead>
+              <tbody id="invoice-items-tbody" class="divide-y divide-slate-200 bg-white"></tbody>
+            </table>
+          </div>
+
+          <button type="button" onclick="addInvoiceItemRow()" class="text-blue-600 hover:text-blue-800 font-bold flex items-center space-x-1">
+            <i data-lucide="plus" class="w-4 h-4"></i>
+            <span>Add Stock Item Row</span>
+          </button>
+
+          <!-- Automatic Tax Summary Calculation Card -->
+          <div class="bg-slate-50 border border-slate-200 rounded-lg p-4 space-y-2 max-w-md ml-auto text-xs font-mono">
+            <div class="flex justify-between text-slate-600">
+              <span>Subtotal (Taxable):</span>
+              <span id="inv-subtotal" class="font-bold text-slate-800">₹0.00</span>
+            </div>
+            <div id="inv-cgst-row" class="flex justify-between text-slate-600">
+              <span id="inv-cgst-label">Output CGST (9%):</span>
+              <span id="inv-cgst-val" class="font-bold text-slate-800">₹0.00</span>
+            </div>
+            <div id="inv-sgst-row" class="flex justify-between text-slate-600">
+              <span id="inv-sgst-label">Output SGST (9%):</span>
+              <span id="inv-sgst-val" class="font-bold text-slate-800">₹0.00</span>
+            </div>
+            <div id="inv-igst-row" class="flex justify-between text-slate-600 hidden">
+              <span id="inv-igst-label">Output IGST (18%):</span>
+              <span id="inv-igst-val" class="font-bold text-slate-800">₹0.00</span>
+            </div>
+            <div class="flex justify-between text-slate-600">
+              <span>Round Off:</span>
+              <span id="inv-roundoff" class="text-slate-700">₹0.00</span>
+            </div>
+            <div class="flex justify-between text-sm font-bold text-blue-900 border-t border-slate-300 pt-2">
+              <span>Total Invoice Value:</span>
+              <span id="inv-grand-total">₹0.00</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ================================================= -->
+        <!-- MODE B: ACCOUNTING VOUCHER (MANUAL DR/CR GRID)     -->
+        <!-- ================================================= -->
+        <div id="section-accounting-voucher" class="space-y-3 hidden">
+          <div class="flex justify-between items-center">
+            <h3 class="font-bold text-slate-800 text-xs uppercase tracking-wider flex items-center space-x-1.5">
+              <i data-lucide="scale" class="w-4 h-4 text-amber-600"></i>
+              <span>Double-Entry Ledger Lines (By/To or Dr/Cr)</span>
+            </h3>
+            <span class="text-[11px] text-slate-500">Every voucher must satisfy: $\sum Dr == \sum Cr$</span>
+          </div>
+
+          <div class="border border-slate-300 rounded-lg overflow-hidden shadow-sm">
             <table class="w-full text-xs">
               <thead class="bg-slate-800 text-white font-semibold">
                 <tr>
                   <th class="p-2 w-16 text-center">Dr/Cr</th>
                   <th class="p-2 text-left">Particulars (Ledger Name)</th>
-                  <th class="p-2 w-36 text-right">Debit Amount (₹)</th>
-                  <th class="p-2 w-36 text-right">Credit Amount (₹)</th>
-                  <th class="p-2 w-12 text-center">✕</th>
+                  <th class="p-2 w-40 text-left">Cost Centre</th>
+                  <th class="p-2 w-36 text-right">Debit (₹)</th>
+                  <th class="p-2 w-36 text-right">Credit (₹)</th>
+                  <th class="p-2 w-10 text-center">✕</th>
                 </tr>
               </thead>
-              <tbody id="voucher-entries-tbody" class="divide-y divide-slate-200 bg-white">
-                <!-- Injected via JavaScript -->
-              </tbody>
+              <tbody id="voucher-entries-tbody" class="divide-y divide-slate-200 bg-white"></tbody>
               <tfoot class="bg-slate-100 font-bold border-t-2 border-slate-300">
                 <tr>
-                  <td colspan="2" class="p-2.5 text-right uppercase text-slate-700">Total:</td>
-                  <td class="p-2.5 text-right font-mono text-sm" id="v-total-dr">₹0.00</td>
-                  <td class="p-2.5 text-right font-mono text-sm" id="v-total-cr">₹0.00</td>
+                  <td colspan="3" class="p-2.5 text-right uppercase text-slate-700">Total:</td>
+                  <td class="p-2.5 text-right font-mono text-sm text-blue-800" id="v-total-dr">₹0.00</td>
+                  <td class="p-2.5 text-right font-mono text-sm text-blue-800" id="v-total-cr">₹0.00</td>
                   <td></td>
                 </tr>
               </tfoot>
@@ -256,51 +401,55 @@
 
           <div class="flex justify-between items-center pt-1">
             <button type="button" onclick="addDoubleEntryRow()" class="text-blue-600 hover:text-blue-800 font-bold flex items-center space-x-1">
-              <span>+ Add Entry Line</span>
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              <span>Add Dr/Cr Entry Line</span>
             </button>
-            <div id="v-balance-indicator" class="text-xs font-bold px-3 py-1 rounded bg-red-100 text-red-700">
-              Difference: ₹0.00
+            <div id="v-balance-indicator" class="text-xs font-bold px-3 py-1 rounded bg-emerald-100 text-emerald-800">
+              Balanced: Difference = ₹0.00
             </div>
           </div>
         </div>
 
-        <!-- Item Invoicing (Optional for Sales & Purchase) -->
-        <div id="voucher-inventory-section" class="space-y-2 border-t border-slate-200 pt-4">
+        <!-- Bill-by-Bill Allocation Option -->
+        <div id="bill-alloc-section" class="bg-slate-50 border border-slate-200 p-3.5 rounded-lg space-y-2">
           <div class="flex justify-between items-center">
-            <h3 class="font-bold text-slate-800 text-xs uppercase tracking-wider">Item Allocation (Inventory Inward/Outward)</h3>
-            <span class="text-[10px] text-slate-500">Updates stock summary in real-time</span>
+            <span class="font-bold text-slate-700 text-xs">Bill-wise Details (New Ref / Against Ref Allocation)</span>
+            <span class="text-[10px] text-slate-500">Links payment/receipt to invoice numbers for ageing reports</span>
           </div>
-          <div class="border border-slate-200 rounded overflow-hidden">
-            <table class="w-full text-xs">
-              <thead class="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
-                <tr>
-                  <th class="p-2 text-left">Stock Item Name</th>
-                  <th class="p-2 w-28 text-center">Quantity</th>
-                  <th class="p-2 w-32 text-right">Rate (₹)</th>
-                  <th class="p-2 w-32 text-right">Amount (₹)</th>
-                  <th class="p-2 w-12 text-center">✕</th>
-                </tr>
-              </thead>
-              <tbody id="voucher-inventory-tbody" class="divide-y divide-slate-100 bg-white"></tbody>
-            </table>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-[11px] text-slate-500 mb-0.5">Ref Type</label>
+              <select id="bill-ref-type" class="w-full border border-slate-300 rounded p-1.5 bg-white font-semibold">
+                <option value="New Ref">New Ref</option>
+                <option value="Agst Ref">Agst Ref</option>
+                <option value="Advance">Advance</option>
+                <option value="On Account">On Account</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-500 mb-0.5">Bill Reference Name</label>
+              <input type="text" id="bill-ref-name" placeholder="Bill No." class="w-full border border-slate-300 rounded p-1.5 bg-white font-mono">
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-500 mb-0.5">Credit Period / Due Date</label>
+              <input type="date" id="bill-due-date" class="w-full border border-slate-300 rounded p-1.5 bg-white font-mono">
+            </div>
           </div>
-          <button type="button" onclick="addInventoryRow()" class="text-indigo-600 hover:text-indigo-800 font-bold">
-            + Allocate Stock Item
-          </button>
         </div>
 
-        <!-- Narration -->
+        <!-- Narration Field -->
         <div>
           <label class="block font-bold text-slate-700 mb-1">Narration (Being...)</label>
-          <input type="text" id="v-narration" placeholder="e.g. Being goods sold against PO number..." class="w-full border border-slate-300 rounded p-2 bg-white">
+          <input type="text" id="v-narration" placeholder="e.g. Being goods sold against customer PO 8842..." class="w-full border border-slate-300 rounded p-2 bg-white">
         </div>
 
-        <!-- Submit Button / Actions -->
+        <!-- Submit Buttons -->
         <div class="pt-4 border-t border-slate-200 flex justify-between items-center">
           <button type="button" onclick="showGateway()" class="px-4 py-2 border border-slate-300 text-slate-700 rounded font-semibold hover:bg-slate-50">
             Esc: Quit
           </button>
-          <button type="submit" id="btn-save-voucher" class="px-6 py-2.5 bg-[#1f3a52] hover:bg-[#162a3b] text-white rounded font-bold shadow transition flex items-center space-x-2">
+          <button type="submit" id="btn-save-voucher" class="px-6 py-2.5 bg-[#1f3a52] hover:bg-[#162a3b] text-white rounded font-bold shadow-md transition flex items-center space-x-2">
+            <i data-lucide="check" class="w-4 h-4 text-emerald-400"></i>
             <span>Accept (Ctrl+A / Enter)</span>
           </button>
         </div>
@@ -310,11 +459,11 @@
     <!-- ============================================== -->
     <!-- VIEW 3: BALANCE SHEET                          -->
     <!-- ============================================== -->
-    <section id="view-balance-sheet" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-lg overflow-hidden hidden fade-in">
+    <section id="view-balance-sheet" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden hidden fade-in">
       <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
         <div>
           <h2 class="text-sm font-bold uppercase tracking-wider">Balance Sheet — Ramraj Enterprises</h2>
-          <p class="text-[10px] text-slate-300">As on 31-Mar-2027</p>
+          <p class="text-[10px] text-slate-300">As on 31-Mar-2027 (Schedule III Double-Entry Format)</p>
         </div>
         <div class="space-x-2">
           <button onclick="window.print()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Print (Alt+P)</button>
@@ -323,36 +472,37 @@
       </div>
 
       <div class="p-6 overflow-x-auto">
-        <div class="grid grid-cols-1 md:grid-cols-2 border border-slate-300 rounded text-xs">
-          <!-- LIABILITIES SIDE -->
+        <div class="grid grid-cols-1 md:grid-cols-2 border border-slate-300 rounded-lg text-xs overflow-hidden">
+          <!-- LIABILITIES -->
           <div class="border-b md:border-b-0 md:border-r border-slate-300">
             <div class="bg-slate-800 text-white font-bold p-2.5 flex justify-between">
               <span>Liabilities</span>
               <span>Amount (₹)</span>
             </div>
-            <div class="p-4 space-y-4" id="bs-liabilities-content">
-              <!-- Rendered via JS -->
-            </div>
+            <div class="p-4 space-y-4" id="bs-liabilities-content"></div>
             <div class="p-3 bg-slate-100 font-bold border-t border-slate-300 flex justify-between text-sm">
               <span>Total Liabilities:</span>
               <span class="font-mono text-blue-700" id="bs-total-liabilities">₹0.00</span>
             </div>
           </div>
 
-          <!-- ASSETS SIDE -->
+          <!-- ASSETS -->
           <div>
             <div class="bg-slate-800 text-white font-bold p-2.5 flex justify-between">
               <span>Assets</span>
               <span>Amount (₹)</span>
             </div>
-            <div class="p-4 space-y-4" id="bs-assets-content">
-              <!-- Rendered via JS -->
-            </div>
+            <div class="p-4 space-y-4" id="bs-assets-content"></div>
             <div class="p-3 bg-slate-100 font-bold border-t border-slate-300 flex justify-between text-sm">
               <span>Total Assets:</span>
-              <span class="font-mono text-emerald-700" id="bs-total-assets">₹0.00</span>
+              <span class="font-mono text-blue-700" id="bs-total-assets">₹0.00</span>
             </div>
           </div>
+        </div>
+
+        <div id="bs-balance-status" class="mt-4 p-3 rounded-lg text-xs font-bold flex justify-between items-center bg-emerald-50 text-emerald-800 border border-emerald-200">
+          <span>Dual Balance Invariant: Assets = Liabilities + Capital + Net Profit</span>
+          <span id="bs-diff-val">Difference: ₹0.00 (Balanced)</span>
         </div>
       </div>
     </section>
@@ -360,11 +510,11 @@
     <!-- ============================================== -->
     <!-- VIEW 4: PROFIT & LOSS ACCOUNT                  -->
     <!-- ============================================== -->
-    <section id="view-profit-loss" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-lg overflow-hidden hidden fade-in">
+    <section id="view-profit-loss" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden hidden fade-in">
       <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
         <div>
-          <h2 class="text-sm font-bold uppercase tracking-wider">Profit &amp; Loss A/c — Ramraj Enterprises</h2>
-          <p class="text-[10px] text-slate-300">For the Period 1-Apr-2026 to 31-Mar-2027</p>
+          <h2 class="text-sm font-bold uppercase tracking-wider">Profit &amp; Loss Account — Trading &amp; Net Statement</h2>
+          <p class="text-[10px] text-slate-300">For 1-Apr-2026 to 31-Mar-2027</p>
         </div>
         <div class="space-x-2">
           <button onclick="window.print()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Print (Alt+P)</button>
@@ -372,80 +522,36 @@
         </div>
       </div>
 
-      <div class="p-6 space-y-6">
-        <!-- Part 1: Trading Account (Gross Profit) -->
-        <div class="border border-slate-300 rounded overflow-hidden text-xs">
-          <div class="bg-slate-100 font-bold p-2 border-b border-slate-300 text-slate-800 uppercase tracking-wider">
-            Trading Account (Cost of Sales vs Gross Incomes)
+      <div class="p-6 space-y-6 text-xs">
+        <!-- TRADING ACCOUNT -->
+        <div class="border border-slate-300 rounded-lg overflow-hidden">
+          <div class="bg-slate-800 text-white font-bold p-2.5 flex justify-between">
+            <span>Trading Account (Manufacturing &amp; Gross Margin)</span>
+            <span>Formula: Gross Profit = Sales + Closing Stock - (Opening Stock + Purchases + Direct Expenses)</span>
           </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-300">
-            <!-- Expenses Side -->
-            <div class="p-3 space-y-2">
-              <div class="flex justify-between font-semibold border-b border-slate-100 pb-1">
-                <span>Opening Stock:</span>
-                <span class="font-mono" id="pl-opening-stock">₹0.00</span>
-              </div>
-              <div class="flex justify-between font-semibold border-b border-slate-100 pb-1">
-                <span>Purchase Accounts:</span>
-                <span class="font-mono" id="pl-purchases">₹0.00</span>
-              </div>
-              <div class="flex justify-between font-semibold border-b border-slate-100 pb-1">
-                <span>Direct Expenses:</span>
-                <span class="font-mono" id="pl-direct-expenses">₹0.00</span>
-              </div>
-              <div class="flex justify-between font-bold text-emerald-700 pt-2 border-t border-slate-200">
-                <span>Gross Profit c/o:</span>
-                <span class="font-mono" id="pl-gross-profit-left">₹0.00</span>
-              </div>
-            </div>
-
-            <!-- Incomes Side -->
-            <div class="p-3 space-y-2">
-              <div class="flex justify-between font-semibold border-b border-slate-100 pb-1">
-                <span>Sales Accounts:</span>
-                <span class="font-mono" id="pl-sales">₹0.00</span>
-              </div>
-              <div class="flex justify-between font-semibold border-b border-slate-100 pb-1">
-                <span>Closing Stock:</span>
-                <span class="font-mono text-blue-700" id="pl-closing-stock">₹0.00</span>
-              </div>
-              <div class="flex justify-between font-semibold border-b border-slate-100 pb-1">
-                <span>Direct Incomes:</span>
-                <span class="font-mono" id="pl-direct-incomes">₹0.00</span>
-              </div>
-            </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 divide-x divide-slate-200">
+            <div class="p-4 space-y-3" id="pl-trading-debit"></div>
+            <div class="p-4 space-y-3" id="pl-trading-credit"></div>
+          </div>
+          <div class="p-3 bg-amber-50 font-bold border-t border-slate-300 flex justify-between text-xs text-amber-900">
+            <span>Gross Profit c/d:</span>
+            <span class="font-mono text-sm" id="pl-gross-profit">₹0.00</span>
           </div>
         </div>
 
-        <!-- Part 2: Income Statement (Net Profit) -->
-        <div class="border border-slate-300 rounded overflow-hidden text-xs">
-          <div class="bg-slate-100 font-bold p-2 border-b border-slate-300 text-slate-800 uppercase tracking-wider">
-            Operating Expenses &amp; Net Profit
+        <!-- PROFIT & LOSS STATEMENT -->
+        <div class="border border-slate-300 rounded-lg overflow-hidden">
+          <div class="bg-slate-800 text-white font-bold p-2.5 flex justify-between">
+            <span>Indirect Incomes &amp; Overheads Statement</span>
+            <span>Formula: Net Profit = Gross Profit + Indirect Incomes - Indirect Expenses</span>
           </div>
-          <div class="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-300">
-            <!-- Indirect Expenses -->
-            <div class="p-3 space-y-2">
-              <div class="font-bold text-slate-700 border-b border-slate-100 pb-1">Indirect Expenses:</div>
-              <div id="pl-indirect-expenses-list" class="space-y-1 text-slate-600"></div>
-              <div class="flex justify-between font-bold border-t border-slate-200 pt-1">
-                <span>Total Indirect Expenses:</span>
-                <span class="font-mono" id="pl-total-indirect-expenses">₹0.00</span>
-              </div>
-              <div class="flex justify-between font-black text-sm text-emerald-700 pt-3 border-t-2 border-slate-300">
-                <span>Nett Profit:</span>
-                <span class="font-mono" id="pl-net-profit">₹0.00</span>
-              </div>
-            </div>
-
-            <!-- Indirect Incomes -->
-            <div class="p-3 space-y-2">
-              <div class="flex justify-between font-bold text-slate-800 border-b border-slate-100 pb-1">
-                <span>Gross Profit b/f:</span>
-                <span class="font-mono text-emerald-700" id="pl-gross-profit-right">₹0.00</span>
-              </div>
-              <div class="font-bold text-slate-700 border-b border-slate-100 pb-1">Indirect Incomes:</div>
-              <div id="pl-indirect-incomes-list" class="space-y-1 text-slate-600"></div>
-            </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 divide-x divide-slate-200">
+            <div class="p-4 space-y-3" id="pl-indirect-debit"></div>
+            <div class="p-4 space-y-3" id="pl-indirect-credit"></div>
+          </div>
+          <div class="p-3 bg-emerald-50 font-bold border-t border-slate-300 flex justify-between text-sm text-emerald-900">
+            <span>Net Profit (Transferred to Capital Account):</span>
+            <span class="font-mono text-base" id="pl-net-profit">₹0.00</span>
           </div>
         </div>
       </div>
@@ -454,11 +560,11 @@
     <!-- ============================================== -->
     <!-- VIEW 5: TRIAL BALANCE                          -->
     <!-- ============================================== -->
-    <section id="view-trial-balance" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-lg overflow-hidden hidden fade-in">
+    <section id="view-trial-balance" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden hidden fade-in">
       <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
         <div>
           <h2 class="text-sm font-bold uppercase tracking-wider">Trial Balance — Ramraj Enterprises</h2>
-          <p class="text-[10px] text-slate-300">1-Apr-2026 to 31-Mar-2027</p>
+          <p class="text-[10px] text-slate-300">As on 31-Mar-2027 (Strict Mathematical Double-Entry Proof)</p>
         </div>
         <div class="space-x-2">
           <button onclick="window.print()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Print</button>
@@ -466,159 +572,375 @@
         </div>
       </div>
 
-      <div class="p-6 overflow-x-auto">
-        <table class="tally-table">
-          <thead>
-            <tr>
-              <th>Particulars (Ledger Account)</th>
-              <th>Group Classification</th>
-              <th class="text-right w-40">Debit Amount (₹)</th>
-              <th class="text-right w-40">Credit Amount (₹)</th>
-            </tr>
-          </thead>
-          <tbody id="tb-tbody"></tbody>
-          <tfoot class="bg-slate-800 text-white font-bold text-xs">
-            <tr>
-              <td colspan="2" class="p-3 text-right uppercase">Total:</td>
-              <td class="p-3 text-right font-mono" id="tb-total-dr">₹0.00</td>
-              <td class="p-3 text-right font-mono" id="tb-total-cr">₹0.00</td>
-            </tr>
-          </tfoot>
-        </table>
+      <div class="p-6">
+        <div class="border border-slate-300 rounded-lg overflow-hidden text-xs">
+          <table class="w-full">
+            <thead class="bg-slate-800 text-white font-semibold">
+              <tr>
+                <th class="p-2.5 text-left">Particulars (Ledger Name)</th>
+                <th class="p-2.5 text-left w-48">Parent Group</th>
+                <th class="p-2.5 text-right w-36">Debit (₹)</th>
+                <th class="p-2.5 text-right w-36">Credit (₹)</th>
+              </tr>
+            </thead>
+            <tbody id="tb-tbody" class="divide-y divide-slate-200 bg-white font-mono"></tbody>
+            <tfoot class="bg-slate-100 font-bold border-t-2 border-slate-300">
+              <tr>
+                <td colspan="2" class="p-3 text-right uppercase text-slate-700 font-sans">Total:</td>
+                <td class="p-3 text-right font-mono text-sm text-blue-700" id="tb-total-dr">₹0.00</td>
+                <td class="p-3 text-right font-mono text-sm text-blue-700" id="tb-total-cr">₹0.00</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <div id="tb-status-badge" class="mt-4 p-3 rounded-lg text-xs font-bold text-center bg-emerald-100 text-emerald-800">
+          Trial Balance In Equilibrium: Total Debit matches Total Credit exactly!
+        </div>
       </div>
     </section>
 
     <!-- ============================================== -->
-    <!-- VIEW 6: DAY BOOK                               -->
+    <!-- VIEW 6: STOCK SUMMARY                          -->
     <!-- ============================================== -->
-    <section id="view-daybook" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-lg overflow-hidden hidden fade-in">
+    <section id="view-stock-summary" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden hidden fade-in">
       <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
         <div>
-          <h2 class="text-sm font-bold uppercase tracking-wider">Day Book (Journal Register)</h2>
-          <p class="text-[10px] text-slate-300">Chronological transaction vouchers</p>
+          <h2 class="text-sm font-bold uppercase tracking-wider">Stock Summary — Inventory Valuation</h2>
+          <p class="text-[10px] text-slate-300">Method: Weighted Average Rate</p>
         </div>
-        <div class="flex items-center space-x-2">
-          <button onclick="openVoucherScreen('Sales')" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs font-semibold">+ New Voucher</button>
+        <div class="space-x-2">
+          <button onclick="openModal('createStockModal')" class="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded text-xs font-bold">+ New Item</button>
           <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
         </div>
       </div>
 
-      <div class="p-6 overflow-x-auto">
-        <table class="tally-table">
-          <thead>
-            <tr>
-              <th class="w-24">Date</th>
-              <th>Particulars</th>
-              <th class="w-28 text-center">Vch Type</th>
-              <th class="w-36">Vch No</th>
-              <th class="text-right w-36">Debit Amount (₹)</th>
-              <th class="text-right w-36">Credit Amount (₹)</th>
-            </tr>
-          </thead>
-          <tbody id="daybook-tbody"></tbody>
-        </table>
+      <div class="p-6">
+        <div class="border border-slate-300 rounded-lg overflow-hidden text-xs">
+          <table class="w-full">
+            <thead class="bg-slate-800 text-white font-semibold">
+              <tr>
+                <th class="p-2.5 text-left">Item Name</th>
+                <th class="p-2.5 text-center w-20">HSN</th>
+                <th class="p-2.5 text-center w-24">GST %</th>
+                <th class="p-2.5 text-right w-24">Inward</th>
+                <th class="p-2.5 text-right w-24">Outward</th>
+                <th class="p-2.5 text-right w-28">Closing Qty</th>
+                <th class="p-2.5 text-right w-32">Rate (₹)</th>
+                <th class="p-2.5 text-right w-36">Closing Value (₹)</th>
+              </tr>
+            </thead>
+            <tbody id="stock-tbody" class="divide-y divide-slate-200 bg-white font-mono"></tbody>
+            <tfoot class="bg-slate-100 font-bold border-t-2 border-slate-300">
+              <tr>
+                <td colspan="7" class="p-3 text-right uppercase font-sans">Total Stock Valuation:</td>
+                <td class="p-3 text-right font-mono text-sm text-blue-700" id="stock-total-val">₹0.00</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
       </div>
     </section>
 
     <!-- ============================================== -->
-    <!-- VIEW 7: STOCK SUMMARY                          -->
+    <!-- VIEW 7: DAY BOOK                               -->
     <!-- ============================================== -->
-    <section id="view-stock-summary" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-lg overflow-hidden hidden fade-in">
+    <section id="view-daybook" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden hidden fade-in">
       <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
         <div>
-          <h2 class="text-sm font-bold uppercase tracking-wider">Stock Summary — Ramraj Enterprises</h2>
-          <p class="text-[10px] text-slate-300">Inventory valuation & quantity on hand</p>
+          <h2 class="text-sm font-bold uppercase tracking-wider">Day Book — Voucher Register</h2>
+          <p class="text-[10px] text-slate-300">Audit trail of all accounting vouchers</p>
+        </div>
+        <div class="space-x-2">
+          <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
+        </div>
+      </div>
+
+      <div class="p-6 space-y-4">
+        <!-- Date & Type Filter -->
+        <div class="flex flex-wrap items-center justify-between gap-3 text-xs bg-slate-50 p-3 rounded-lg border border-slate-200">
+          <div class="flex items-center space-x-2">
+            <span class="font-bold text-slate-700">Filter Type:</span>
+            <select id="daybook-type-filter" onchange="loadDaybook()" class="border border-slate-300 rounded p-1.5 bg-white font-semibold">
+              <option value="">All Voucher Types</option>
+              <option value="Sales">Sales (F8)</option>
+              <option value="Purchase">Purchase (F9)</option>
+              <option value="Payment">Payment (F5)</option>
+              <option value="Receipt">Receipt (F6)</option>
+              <option value="Contra">Contra (F4)</option>
+              <option value="Journal">Journal (F7)</option>
+            </select>
+          </div>
+          <div class="text-slate-500 font-medium">Click any voucher row to inspect double-entry details</div>
+        </div>
+
+        <div class="border border-slate-300 rounded-lg overflow-hidden text-xs">
+          <table class="w-full">
+            <thead class="bg-slate-800 text-white font-semibold">
+              <tr>
+                <th class="p-2.5 text-center w-28">Date</th>
+                <th class="p-2.5 text-left w-36">Voucher No</th>
+                <th class="p-2.5 text-center w-28">Type</th>
+                <th class="p-2.5 text-left">Particulars / Party</th>
+                <th class="p-2.5 text-right w-36">Amount (₹)</th>
+              </tr>
+            </thead>
+            <tbody id="daybook-tbody" class="divide-y divide-slate-200 bg-white"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- VIEW 8: RATIO ANALYSIS                         -->
+    <!-- ============================================== -->
+    <section id="view-ratio-analysis" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden hidden fade-in">
+      <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
+        <div>
+          <h2 class="text-sm font-bold uppercase tracking-wider">Ratio Analysis — Financial Health &amp; Solvency</h2>
+          <p class="text-[10px] text-slate-300">Dynamic Tally KPI Metrics</p>
         </div>
         <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
       </div>
 
-      <div class="p-6 overflow-x-auto">
-        <table class="tally-table">
-          <thead>
-            <tr>
-              <th>Stock Item Name</th>
-              <th>HSN Code</th>
-              <th class="text-center w-28">Closing Qty</th>
-              <th class="text-right w-36">Valuation Rate (₹)</th>
-              <th class="text-right w-40">Closing Value (₹)</th>
-            </tr>
-          </thead>
-          <tbody id="stock-tbody"></tbody>
-          <tfoot class="bg-slate-800 text-white font-bold text-xs">
-            <tr>
-              <td colspan="4" class="p-3 text-right uppercase">Total Inventory Valuation:</td>
-              <td class="p-3 text-right font-mono" id="stock-total-val">₹0.00</td>
-            </tr>
-          </tfoot>
-        </table>
+      <div class="p-6 space-y-6 text-xs">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="ratio-cards-container">
+          <!-- Populated via JS -->
+        </div>
+
+        <div class="border border-slate-200 rounded-lg p-4 bg-slate-50 space-y-2">
+          <h3 class="font-bold text-slate-800 uppercase text-xs">Principal Accounting Figures</h3>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs font-mono">
+            <div class="p-2.5 bg-white rounded border border-slate-200">
+              <span class="text-slate-500 block text-[10px]">Current Assets:</span>
+              <span id="ra-ca" class="font-bold text-slate-900 text-sm">₹0.00</span>
+            </div>
+            <div class="p-2.5 bg-white rounded border border-slate-200">
+              <span class="text-slate-500 block text-[10px]">Current Liabilities:</span>
+              <span id="ra-cl" class="font-bold text-slate-900 text-sm">₹0.00</span>
+            </div>
+            <div class="p-2.5 bg-white rounded border border-slate-200">
+              <span class="text-slate-500 block text-[10px]">Working Capital:</span>
+              <span id="ra-wc" class="font-bold text-blue-700 text-sm">₹0.00</span>
+            </div>
+            <div class="p-2.5 bg-white rounded border border-slate-200">
+              <span class="text-slate-500 block text-[10px]">Net Sales Turnover:</span>
+              <span id="ra-sales" class="font-bold text-emerald-700 text-sm">₹0.00</span>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
     <!-- ============================================== -->
-    <!-- VIEW 8: ACCOUNT KHATA / LEDGER STATEMENT       -->
+    <!-- VIEW 9: GST PORTAL (GSTR-1 & GSTR-3B)          -->
     <!-- ============================================== -->
-    <section id="view-ledger-statement" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-lg overflow-hidden hidden fade-in">
+    <section id="view-gst" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden hidden fade-in">
       <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
         <div>
-          <h2 class="text-sm font-bold uppercase tracking-wider" id="khata-title">Ledger Account Statement</h2>
-          <p class="text-[10px] text-slate-300" id="khata-group">Group: -</p>
+          <h2 class="text-sm font-bold uppercase tracking-wider">GST Portal — Statutory Returns</h2>
+          <p class="text-[10px] text-slate-300">GSTR-1 (Outward Supplies) &amp; GSTR-3B (Eligible ITC &amp; Net Tax)</p>
         </div>
-        <div class="flex items-center space-x-2">
-          <select id="khata-ledger-select" onchange="loadLedgerStatement(this.value)" class="text-xs bg-slate-800 text-white border border-slate-600 rounded px-2 py-1"></select>
-          <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
-        </div>
+        <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
       </div>
 
-      <div class="p-6 overflow-x-auto space-y-4">
-        <div class="flex justify-between items-center bg-slate-50 p-3 rounded border border-slate-200 text-xs">
-          <div>Opening Balance: <strong class="font-mono text-slate-800" id="khata-opening-bal">₹0.00 Dr</strong></div>
-          <div>Closing Balance: <strong class="font-mono text-blue-700 text-sm" id="khata-closing-bal">₹0.00 Dr</strong></div>
+      <div class="p-6 space-y-6 text-xs">
+        <!-- GSTR-1 Section -->
+        <div class="border border-slate-300 rounded-lg overflow-hidden">
+          <div class="bg-slate-800 text-white font-bold p-2.5 flex justify-between">
+            <span>GSTR-1: Table 4 (B2B Taxable Invoices)</span>
+            <span id="gst-gstr1-total">Total Outward Tax: ₹0.00</span>
+          </div>
+          <table class="w-full text-xs">
+            <thead class="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+              <tr>
+                <th class="p-2 text-left">Invoice No</th>
+                <th class="p-2 text-center">Date</th>
+                <th class="p-2 text-left">Recipient</th>
+                <th class="p-2 text-center">GSTIN</th>
+                <th class="p-2 text-right">Taxable (₹)</th>
+                <th class="p-2 text-right">CGST (₹)</th>
+                <th class="p-2 text-right">SGST (₹)</th>
+                <th class="p-2 text-right">IGST (₹)</th>
+                <th class="p-2 text-right">Total (₹)</th>
+              </tr>
+            </thead>
+            <tbody id="gst-b2b-tbody" class="divide-y divide-slate-200 bg-white font-mono"></tbody>
+          </table>
         </div>
 
-        <table class="tally-table">
-          <thead>
-            <tr>
-              <th class="w-24">Date</th>
-              <th>Particulars / Narration</th>
-              <th class="w-24 text-center">Vch Type</th>
-              <th class="w-32">Vch No</th>
-              <th class="text-right w-32">Debit (₹)</th>
-              <th class="text-right w-32">Credit (₹)</th>
-              <th class="text-right w-36">Balance (₹)</th>
-            </tr>
-          </thead>
-          <tbody id="khata-tbody"></tbody>
-        </table>
+        <!-- GSTR-3B Computation Summary -->
+        <div class="border border-slate-300 rounded-lg overflow-hidden">
+          <div class="bg-slate-800 text-white font-bold p-2.5">
+            <span>GSTR-3B: Net Tax Payable Computation</span>
+          </div>
+          <div class="p-4 grid grid-cols-1 md:grid-cols-3 gap-4 font-mono">
+            <div class="bg-slate-50 p-3 rounded border border-slate-200">
+              <span class="text-slate-500 block text-[10px] font-sans">Table 3.1 Outward Liability:</span>
+              <div id="gstr3b-outward" class="text-slate-800 font-bold mt-1">₹0.00</div>
+            </div>
+            <div class="bg-slate-50 p-3 rounded border border-slate-200">
+              <span class="text-slate-500 block text-[10px] font-sans">Table 4 Eligible ITC (Input Credit):</span>
+              <div id="gstr3b-itc" class="text-emerald-700 font-bold mt-1">₹0.00</div>
+            </div>
+            <div class="bg-blue-50 p-3 rounded border border-blue-200">
+              <span class="text-blue-900 block text-[10px] font-sans font-bold">Net Tax Payable (Cash Ledger):</span>
+              <div id="gstr3b-net" class="text-blue-800 font-black text-sm mt-1">₹0.00</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- VIEW 10: BILL-BY-BILL OUTSTANDINGS (AGEING)    -->
+    <!-- ============================================== -->
+    <section id="view-outstandings" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden hidden fade-in">
+      <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
+        <div>
+          <h2 class="text-sm font-bold uppercase tracking-wider">Statement of Outstandings — Ageing Analysis</h2>
+          <p class="text-[10px] text-slate-300">Bills Receivable &amp; Bills Payable</p>
+        </div>
+        <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
+      </div>
+
+      <div class="p-6 space-y-6 text-xs">
+        <!-- Bills Receivable -->
+        <div class="border border-slate-300 rounded-lg overflow-hidden">
+          <div class="bg-slate-800 text-white font-bold p-2.5 flex justify-between">
+            <span>Bills Receivable (Sundry Debtors Pending Payments)</span>
+            <span id="out-total-rec">Total: ₹0.00</span>
+          </div>
+          <table class="w-full text-xs">
+            <thead class="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+              <tr>
+                <th class="p-2 text-left">Bill Ref</th>
+                <th class="p-2 text-center">Date</th>
+                <th class="p-2 text-left">Party Name</th>
+                <th class="p-2 text-right">Bill Amt (₹)</th>
+                <th class="p-2 text-right">Cleared (₹)</th>
+                <th class="p-2 text-right">Pending Balance (₹)</th>
+              </tr>
+            </thead>
+            <tbody id="out-rec-tbody" class="divide-y divide-slate-200 bg-white font-mono"></tbody>
+          </table>
+        </div>
+
+        <!-- Bills Payable -->
+        <div class="border border-slate-300 rounded-lg overflow-hidden">
+          <div class="bg-slate-800 text-white font-bold p-2.5 flex justify-between">
+            <span>Bills Payable (Sundry Creditors Pending Payments)</span>
+            <span id="out-total-pay">Total: ₹0.00</span>
+          </div>
+          <table class="w-full text-xs">
+            <thead class="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+              <tr>
+                <th class="p-2 text-left">Bill Ref</th>
+                <th class="p-2 text-center">Date</th>
+                <th class="p-2 text-left">Supplier Name</th>
+                <th class="p-2 text-right">Bill Amt (₹)</th>
+                <th class="p-2 text-right">Paid (₹)</th>
+                <th class="p-2 text-right">Pending Due (₹)</th>
+              </tr>
+            </thead>
+            <tbody id="out-pay-tbody" class="divide-y divide-slate-200 bg-white font-mono"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- VIEW 11: BANK RECONCILIATION STATEMENT (BRS)   -->
+    <!-- ============================================== -->
+    <section id="view-bank-recon" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden hidden fade-in">
+      <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
+        <div>
+          <h2 class="text-sm font-bold uppercase tracking-wider">Bank Reconciliation Statement (BRS)</h2>
+          <p class="text-[10px] text-slate-300">Books Balance vs Bank Statement Balance</p>
+        </div>
+        <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
+      </div>
+
+      <div class="p-6 space-y-5 text-xs">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono">
+          <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+            <span class="text-slate-500 block text-[10px] font-sans">Balance as per Company Books:</span>
+            <div id="brs-book-balance" class="text-slate-900 font-bold text-sm mt-1">₹0.00</div>
+          </div>
+          <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+            <span class="text-slate-500 block text-[10px] font-sans">Balance as per Bank:</span>
+            <div id="brs-bank-balance" class="text-emerald-700 font-bold text-sm mt-1">₹0.00</div>
+          </div>
+          <div class="bg-amber-50 p-3 rounded-lg border border-amber-200">
+            <span class="text-amber-900 block text-[10px] font-sans">Amounts not reflected in Bank:</span>
+            <div id="brs-diff" class="text-amber-800 font-bold text-sm mt-1">₹0.00</div>
+          </div>
+        </div>
+
+        <div class="border border-slate-300 rounded-lg overflow-hidden">
+          <table class="w-full text-xs">
+            <thead class="bg-slate-800 text-white font-semibold">
+              <tr>
+                <th class="p-2 text-center w-24">Date</th>
+                <th class="p-2 text-left">Particulars</th>
+                <th class="p-2 text-center w-24">Vch Type</th>
+                <th class="p-2 text-left w-32">Instrument No</th>
+                <th class="p-2 text-right w-28">Debit (₹)</th>
+                <th class="p-2 text-right w-28">Credit (₹)</th>
+                <th class="p-2 text-center w-36">Bank Date</th>
+                <th class="p-2 text-center w-20">Action</th>
+              </tr>
+            </thead>
+            <tbody id="brs-tbody" class="divide-y divide-slate-200 bg-white font-mono"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- VIEW 12: CHART OF ACCOUNTS (TREE)              -->
+    <!-- ============================================== -->
+    <section id="view-chart-accounts" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden hidden fade-in">
+      <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
+        <div>
+          <h2 class="text-sm font-bold uppercase tracking-wider">Chart of Accounts — Statutory 28 Groups &amp; Ledgers</h2>
+          <p class="text-[10px] text-slate-300">Hierarchical View of Indian Accounting Groups</p>
+        </div>
+        <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
+      </div>
+
+      <div class="p-6">
+        <div id="coa-tree-container" class="space-y-4 text-xs font-mono"></div>
       </div>
     </section>
 
   </main>
 
-  <!-- ==================== MODALS ==================== -->
-  <!-- CREATE LEDGER MODAL -->
-  <div id="createLedgerModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
-    <div class="bg-white rounded-lg shadow-2xl max-w-lg w-full overflow-hidden border border-slate-300">
-      <div class="bg-[#1f3a52] text-white px-5 py-3 flex justify-between items-center">
-        <h3 class="text-sm font-bold uppercase tracking-wider">Ledger Creation (Master)</h3>
+  <!-- ============================================== -->
+  <!-- MODAL: CREATE LEDGER (ALT+C)                   -->
+  <!-- ============================================== -->
+  <div id="createLedgerModal" class="modal-backdrop hidden">
+    <div class="bg-white rounded-lg shadow-2xl max-w-lg w-full border border-slate-300 overflow-hidden text-xs">
+      <div class="bg-[#1f3a52] text-white px-4 py-2.5 font-bold flex justify-between items-center">
+        <span>Ledger Creation Master (Alt+C)</span>
         <button onclick="closeModal('createLedgerModal')" class="text-slate-300 hover:text-white">✕</button>
       </div>
-      <form id="form-create-ledger" onsubmit="handleCreateLedger(event)" class="p-6 space-y-4 text-xs">
+      <form onsubmit="handleSaveLedger(event)" class="p-5 space-y-3">
         <div>
-          <label class="block font-bold text-slate-700 mb-1">Ledger Name *</label>
-          <input type="text" id="m-ledger-name" required placeholder="e.g. Kaeser Compressors India Ltd" class="w-full border border-slate-300 rounded p-2">
+          <label class="block font-bold text-slate-700 mb-0.5">Ledger Name *</label>
+          <input type="text" id="m-ledger-name" required placeholder="e.g. Cummins India Diesel Vendor" class="w-full border border-slate-300 rounded p-1.5 font-semibold">
         </div>
         <div>
-          <label class="block font-bold text-slate-700 mb-1">Under (Account Group) *</label>
-          <select id="m-ledger-group" required class="w-full border border-slate-300 rounded p-2 bg-white"></select>
+          <label class="block font-bold text-slate-700 mb-0.5">Under (Group) *</label>
+          <select id="m-ledger-group" required class="w-full border border-slate-300 rounded p-1.5 font-semibold"></select>
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block font-bold text-slate-700 mb-1">Opening Balance (₹)</label>
-            <input type="number" id="m-ledger-opbal" value="0" step="any" class="w-full border border-slate-300 rounded p-2">
+            <label class="block font-bold text-slate-700 mb-0.5">Opening Balance (₹)</label>
+            <input type="number" step="0.01" id="m-ledger-opbal" value="0" class="w-full border border-slate-300 rounded p-1.5 font-mono">
           </div>
           <div>
-            <label class="block font-bold text-slate-700 mb-1">Balance Type</label>
-            <select id="m-ledger-optype" class="w-full border border-slate-300 rounded p-2 bg-white">
+            <label class="block font-bold text-slate-700 mb-0.5">Type</label>
+            <select id="m-ledger-optype" class="w-full border border-slate-300 rounded p-1.5 font-bold">
               <option value="Dr">Dr (Debit)</option>
               <option value="Cr">Cr (Credit)</option>
             </select>
@@ -626,26 +948,112 @@
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block font-bold text-slate-700 mb-1">GSTIN</label>
-            <input type="text" id="m-ledger-gstin" placeholder="33AAAAA0000A1Z5" class="w-full border border-slate-300 rounded p-2 font-mono">
+            <label class="block font-bold text-slate-700 mb-0.5">GSTIN / UIN</label>
+            <input type="text" id="m-ledger-gstin" placeholder="33AAAAA0000A1Z5" class="w-full border border-slate-300 rounded p-1.5 font-mono">
           </div>
           <div>
-            <label class="block font-bold text-slate-700 mb-1">PAN Number</label>
-            <input type="text" id="m-ledger-pan" placeholder="AAAAA0000A" class="w-full border border-slate-300 rounded p-2 font-mono">
+            <label class="block font-bold text-slate-700 mb-0.5">State</label>
+            <select id="m-ledger-state" onchange="updateStateCode(this.value)" class="w-full border border-slate-300 rounded p-1.5 font-semibold">
+              <option value="Tamil Nadu|33">Tamil Nadu (33)</option>
+              <option value="Karnataka|29">Karnataka (29)</option>
+              <option value="Maharashtra|27">Maharashtra (27)</option>
+              <option value="Andhra Pradesh|37">Andhra Pradesh (37)</option>
+              <option value="Kerala|32">Kerala (32)</option>
+              <option value="Delhi|07">Delhi (07)</option>
+            </select>
           </div>
         </div>
-        <div class="flex justify-end space-x-2 pt-3 border-t border-slate-200">
-          <button type="button" onclick="closeModal('createLedgerModal')" class="px-4 py-2 border border-slate-300 rounded font-semibold text-slate-700">Cancel</button>
-          <button type="submit" class="px-5 py-2 bg-[#1f3a52] text-white rounded font-bold hover:bg-[#162a3b]">Save Ledger</button>
+        <div class="pt-3 border-t border-slate-200 flex justify-end space-x-2">
+          <button type="button" onclick="closeModal('createLedgerModal')" class="px-3 py-1.5 border border-slate-300 rounded font-semibold text-slate-600">Cancel</button>
+          <button type="submit" class="px-4 py-1.5 bg-[#1f3a52] text-white rounded font-bold hover:bg-[#162a3b]">Save Ledger</button>
         </div>
       </form>
     </div>
   </div>
 
-  <!-- Print Modal / Area -->
-  <div id="print-area" class="hidden"></div>
+  <!-- ============================================== -->
+  <!-- MODAL: CREATE STOCK ITEM MASTER                -->
+  <!-- ============================================== -->
+  <div id="createStockModal" class="modal-backdrop hidden">
+    <div class="bg-white rounded-lg shadow-2xl max-w-lg w-full border border-slate-300 overflow-hidden text-xs">
+      <div class="bg-[#1f3a52] text-white px-4 py-2.5 font-bold flex justify-between items-center">
+        <span>Stock Item Master Creation</span>
+        <button onclick="closeModal('createStockModal')" class="text-slate-300 hover:text-white">✕</button>
+      </div>
+      <form onsubmit="handleSaveStockItem(event)" class="p-5 space-y-3">
+        <div>
+          <label class="block font-bold text-slate-700 mb-0.5">Item Name *</label>
+          <input type="text" id="m-item-name" required placeholder="e.g. Airend Rotor 30HP" class="w-full border border-slate-300 rounded p-1.5 font-semibold">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-0.5">Stock Group</label>
+            <select id="m-item-group" class="w-full border border-slate-300 rounded p-1.5 font-semibold"></select>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-0.5">Unit of Measure (UoM)</label>
+            <select id="m-item-uom" class="w-full border border-slate-300 rounded p-1.5 font-semibold"></select>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-0.5">HSN / SAC Code</label>
+            <input type="text" id="m-item-hsn" placeholder="84148011" value="84148011" class="w-full border border-slate-300 rounded p-1.5 font-mono">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-0.5">GST Rate (%)</label>
+            <input type="number" id="m-item-gst" value="18" class="w-full border border-slate-300 rounded p-1.5 font-mono">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-0.5">Opening Qty</label>
+            <input type="number" id="m-item-opqty" value="0" class="w-full border border-slate-300 rounded p-1.5 font-mono">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-0.5">Opening Rate (₹)</label>
+            <input type="number" id="m-item-oprate" value="0" class="w-full border border-slate-300 rounded p-1.5 font-mono">
+          </div>
+        </div>
+        <div class="pt-3 border-t border-slate-200 flex justify-end space-x-2">
+          <button type="button" onclick="closeModal('createStockModal')" class="px-3 py-1.5 border border-slate-300 rounded font-semibold text-slate-600">Cancel</button>
+          <button type="submit" class="px-4 py-1.5 bg-[#1f3a52] text-white rounded font-bold hover:bg-[#162a3b]">Save Stock Item</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
-  <!-- App Script -->
+  <!-- ============================================== -->
+  <!-- TALLY CALCULATOR PANE (CTRL+N)                 -->
+  <!-- ============================================== -->
+  <div id="calculator-drawer" class="fixed bottom-0 right-8 w-80 bg-slate-900 text-white rounded-t-lg shadow-2xl border-t-2 border-amber-400 p-3 hidden z-50">
+    <div class="flex justify-between items-center text-xs pb-1 border-b border-slate-700 mb-2">
+      <span class="font-bold text-amber-400">Tally Calculator (Ctrl+N)</span>
+      <button onclick="toggleCalculator()" class="text-slate-400 hover:text-white">✕</button>
+    </div>
+    <input type="text" id="calc-display" readonly value="0" class="w-full bg-slate-800 text-amber-300 text-right p-2 rounded font-mono text-base mb-2 border border-slate-700">
+    <div class="grid grid-cols-4 gap-1 text-xs font-mono">
+      <button onclick="calcPress('C')" class="p-2 bg-slate-700 hover:bg-slate-600 rounded">C</button>
+      <button onclick="calcPress('/')" class="p-2 bg-slate-700 hover:bg-slate-600 rounded">/</button>
+      <button onclick="calcPress('*')" class="p-2 bg-slate-700 hover:bg-slate-600 rounded">*</button>
+      <button onclick="calcPress('-')" class="p-2 bg-slate-700 hover:bg-slate-600 rounded">-</button>
+      <button onclick="calcPress('7')" class="p-2 bg-slate-800 hover:bg-slate-700 rounded">7</button>
+      <button onclick="calcPress('8')" class="p-2 bg-slate-800 hover:bg-slate-700 rounded">8</button>
+      <button onclick="calcPress('9')" class="p-2 bg-slate-800 hover:bg-slate-700 rounded">9</button>
+      <button onclick="calcPress('+')" class="p-2 bg-slate-700 hover:bg-slate-600 rounded" rowspan="2">+</button>
+      <button onclick="calcPress('4')" class="p-2 bg-slate-800 hover:bg-slate-700 rounded">4</button>
+      <button onclick="calcPress('5')" class="p-2 bg-slate-800 hover:bg-slate-700 rounded">5</button>
+      <button onclick="calcPress('6')" class="p-2 bg-slate-800 hover:bg-slate-700 rounded">6</button>
+      <button onclick="calcPress('1')" class="p-2 bg-slate-800 hover:bg-slate-700 rounded">1</button>
+      <button onclick="calcPress('2')" class="p-2 bg-slate-800 hover:bg-slate-700 rounded">2</button>
+      <button onclick="calcPress('3')" class="p-2 bg-slate-800 hover:bg-slate-700 rounded">3</button>
+      <button onclick="calcPress('=')" class="p-2 bg-amber-500 hover:bg-amber-400 text-slate-900 font-bold rounded" rowspan="2">=</button>
+      <button onclick="calcPress('0')" class="p-2 bg-slate-800 hover:bg-slate-700 rounded col-span-2">0</button>
+      <button onclick="calcPress('.')" class="p-2 bg-slate-800 hover:bg-slate-700 rounded">.</button>
+    </div>
+  </div>
+
+  <!-- Application Logic -->
   <script src="app.js"></script>
 </body>
 </html>
