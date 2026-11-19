@@ -376,6 +376,9 @@ function startServer(preferredPort = WEB_PORT, preferredHost = '127.0.0.1') {
 
     const tryBind = (portToTry) => {
       const server = http.createServer(app);
+      // Keep-alive timeouts to prevent idle connection drop / Failed to fetch
+      server.keepAliveTimeout = 65000;
+      server.headersTimeout = 66000;
 
       server.on('error', (err) => {
         if (err.code === 'EADDRINUSE') {
@@ -403,6 +406,8 @@ function startServer(preferredPort = WEB_PORT, preferredHost = '127.0.0.1') {
         // Start secondary Tally XML / ODBC server on loopback
         try {
           const xmlServer = http.createServer((req, res) => app(req, res));
+          xmlServer.keepAliveTimeout = 65000;
+          xmlServer.headersTimeout = 66000;
           xmlServer.listen(TALLY_PORT, host, () => {
             console.log(`⚡ Tally Native XML Gateway Active on ${host}:${TALLY_PORT}`);
           }).on('error', (xErr) => {
