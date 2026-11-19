@@ -139,6 +139,16 @@ async function createWindow() {
     {
       label: 'View',
       submenu: [
+        {
+          label: 'Theme & Appearance (Alt+T)',
+          accelerator: 'Alt+T',
+          click: () => mainWindow.webContents.executeJavaScript('window.openThemeSelectorModal && window.openThemeSelectorModal()')
+        },
+        {
+          label: 'Cycle Next Color Palette',
+          click: () => mainWindow.webContents.executeJavaScript('window.cycleNextTheme && window.cycleNextTheme()')
+        },
+        { type: 'separator' },
         { role: 'reload' },
         { role: 'forceReload' },
         { role: 'toggleDevTools' },

@@ -107,9 +107,59 @@ function togglePasswordVisibility(inputId) {
 }
 
 // ========================================================
+// THEME & COLOR PALETTE ENGINE
+// ========================================================
+
+const THEMES = ['tally-gold', 'retro-green', 'midnight-dark', 'ruby-red', 'nordic-light', 'solar-amber'];
+
+function initTheme() {
+  const savedTheme = localStorage.getItem('tally_theme') || 'tally-gold';
+  applyTheme(savedTheme, false);
+}
+
+function applyTheme(themeId, notify = false) {
+  if (!THEMES.includes(themeId)) themeId = 'tally-gold';
+
+  document.documentElement.setAttribute('data-theme', themeId);
+  document.body.setAttribute('data-theme', themeId);
+  localStorage.setItem('tally_theme', themeId);
+
+  // Update theme swatch cards in modal
+  THEMES.forEach(t => {
+    const card = document.getElementById(`theme-card-${t}`);
+    if (card) {
+      const activeTag = card.querySelector('.theme-active-tag');
+      if (t === themeId) {
+        card.classList.add('active');
+        if (activeTag) activeTag.classList.remove('hidden');
+      } else {
+        card.classList.remove('active');
+        if (activeTag) activeTag.classList.add('hidden');
+      }
+    }
+  });
+
+  if (window.lucide) window.lucide.createIcons();
+}
+
+function openThemeSelectorModal() {
+  const currentTheme = localStorage.getItem('tally_theme') || 'tally-gold';
+  applyTheme(currentTheme, false);
+  openModal('themeSelectorModal');
+}
+
+function cycleNextTheme() {
+  const current = localStorage.getItem('tally_theme') || 'tally-gold';
+  const currentIndex = THEMES.indexOf(current);
+  const nextTheme = THEMES[(currentIndex + 1) % THEMES.length];
+  applyTheme(nextTheme, true);
+}
+
+// ========================================================
 // 2. INITIALIZATION & SESSION LOADING
 // ========================================================
 document.addEventListener('DOMContentLoaded', async () => {
+  initTheme();
   if (window.lucide) window.lucide.createIcons();
   await loadMasters();
   await loadGatewayInfo();
@@ -1791,6 +1841,12 @@ function setupKeyboardShortcuts() {
       return;
     }
 
+    if (e.altKey && (e.key === 't' || e.key === 'T')) {
+      e.preventDefault();
+      openThemeSelectorModal();
+      return;
+    }
+
     // Function keys (F3 to F9)
     if (e.ctrlKey && (e.key === 'F3')) { e.preventDefault(); showLoginView(); return; }
     if (e.key === 'F3') { e.preventDefault(); openAlterCompany(); return; }
@@ -1818,6 +1874,7 @@ function setupKeyboardShortcuts() {
       if (k === 'C') openModal('createLedgerModal');
       if (k === 'I') openModal('createStockModal');
       if (k === 'U') openUserManagement();
+      if (k === 'M') openThemeSelectorModal();
       if (k === 'W') startCleanSlate();
       if (k === 'Q') showLoginView();
     }
@@ -2146,6 +2203,9 @@ window.handleSaveUser = handleSaveUser;
 window.toggleUserStatus = toggleUserStatus;
 window.handleDeleteUser = handleDeleteUser;
 window.loadAuditTrail = loadAuditTrail;
+window.openThemeSelectorModal = openThemeSelectorModal;
+window.applyTheme = applyTheme;
+window.cycleNextTheme = cycleNextTheme;
 window.showGateway = showGateway;
 window.toggleDashboard = toggleDashboard;
 window.openModal = openModal;

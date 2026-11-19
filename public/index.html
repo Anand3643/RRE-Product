@@ -45,6 +45,10 @@
           <i data-lucide="users" class="w-3 h-3 text-purple-400"></i>
           <span>Alt+K: Users</span>
         </button>
+        <button onclick="openThemeSelectorModal()" id="btn-top-theme" title="Change Theme Palette (Alt+T)" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-amber-300 border border-slate-600 rounded text-[11px] font-bold flex items-center space-x-1.5 transition shadow-sm">
+          <i data-lucide="palette" class="w-3.5 h-3.5 text-amber-400"></i>
+          <span>Alt+T: Theme</span>
+        </button>
         <button onclick="toggleDashboard()" id="btn-top-dashboard" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-[11px] font-bold flex items-center space-x-1 transition shadow-sm">
           <i data-lucide="layout-dashboard" class="w-3.5 h-3.5"></i>
           <span>Dashboard</span>
@@ -63,7 +67,7 @@
     </div>
 
     <!-- Second Band: Voucher Function Keys Ribbon (F4 to F9 + Alt Notes) -->
-    <div class="px-5 py-1.5 bg-[#162a3b] flex items-center justify-between overflow-x-auto text-xs border-b border-slate-700/50">
+    <div class="px-5 py-1.5 bg-[#162a3b] sub-header-band flex items-center justify-between overflow-x-auto text-xs border-b border-slate-700/50">
       <div class="flex items-center space-x-2">
         <button onclick="openVoucherScreen('Contra')" id="fn-contra" class="fn-btn">
           <span class="fn-badge">F4</span>Contra
@@ -548,6 +552,10 @@
               <div onclick="openUserManagement()" class="gateway-item text-purple-900" id="gw-user-security">
                 <span><span class="hotkey">U</span>sers &amp; Passwords (Alt+K)</span>
                 <span class="text-[10px] text-purple-600 font-mono">Security</span>
+              </div>
+              <div onclick="openThemeSelectorModal()" class="gateway-item text-amber-900" id="gw-theme-switcher">
+                <span>Color <span class="hotkey">M</span>odes &amp; Themes (Alt+T)</span>
+                <span class="text-[10px] text-amber-600 font-mono">Palette</span>
               </div>
               <div onclick="openAlterCompany()" class="gateway-item" id="gw-alter-company">
                 <span>Al<span class="hotkey">t</span>er Company (F3)</span>
@@ -1659,6 +1667,134 @@
             Understood (Esc)
           </button>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: THEME & COLOR PALETTE SELECTOR (ALT+T)  -->
+  <!-- ============================================== -->
+  <div id="themeSelectorModal" class="modal-backdrop hidden">
+    <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-300 overflow-hidden text-xs">
+      <div class="bg-[#1f3a52] modal-header-themed text-white px-5 py-3 font-bold flex justify-between items-center">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="palette" class="w-4 h-4 text-amber-400"></i>
+          <span class="text-sm">TallyPrime Display &mdash; Color Themes &amp; Appearance (Alt+T)</span>
+        </div>
+        <button type="button" onclick="closeModal('themeSelectorModal')" class="text-slate-300 hover:text-white font-mono text-sm">✕</button>
+      </div>
+
+      <div class="p-6 space-y-4">
+        <p class="text-slate-600 text-xs">
+          Select your preferred interface color theme. Your selection is automatically saved and remembered across sessions.
+        </p>
+
+        <!-- Themes Grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-3" id="theme-cards-grid">
+          <!-- 1. TallyPrime Gold -->
+          <div onclick="applyTheme('tally-gold')" id="theme-card-tally-gold" class="theme-swatch-card bg-slate-50 border border-slate-200">
+            <div class="flex items-center space-x-1.5 mb-2">
+              <span class="w-4 h-4 rounded-full bg-[#1f3a52] border border-slate-400 inline-block"></span>
+              <span class="w-4 h-4 rounded-full bg-[#f59e0b] border border-slate-400 inline-block"></span>
+              <span class="w-4 h-4 rounded-full bg-[#0284c7] border border-slate-400 inline-block"></span>
+            </div>
+            <div class="font-bold text-slate-900 text-xs">TallyPrime Gold</div>
+            <p class="text-[11px] text-slate-500 mt-0.5">Classic Navy Blue &amp; Gold amber accents</p>
+            <div class="mt-2 flex items-center justify-between">
+              <span class="text-[10px] font-mono text-slate-400">Default</span>
+              <span class="theme-active-tag hidden text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">✓ Active</span>
+            </div>
+          </div>
+
+          <!-- 2. Retro Green -->
+          <div onclick="applyTheme('retro-green')" id="theme-card-retro-green" class="theme-swatch-card bg-emerald-50/60 border border-emerald-200">
+            <div class="flex items-center space-x-1.5 mb-2">
+              <span class="w-4 h-4 rounded-full bg-[#064e3b] border border-emerald-600 inline-block"></span>
+              <span class="w-4 h-4 rounded-full bg-[#eab308] border border-emerald-600 inline-block"></span>
+              <span class="w-4 h-4 rounded-full bg-[#059669] border border-emerald-600 inline-block"></span>
+            </div>
+            <div class="font-bold text-emerald-950 text-xs">Tally.ERP 9 Retro</div>
+            <p class="text-[11px] text-emerald-800/80 mt-0.5">Nostalgic Pine Green &amp; Ledger Gold</p>
+            <div class="mt-2 flex items-center justify-between">
+              <span class="text-[10px] font-mono text-emerald-700">Classic</span>
+              <span class="theme-active-tag hidden text-[10px] font-bold text-emerald-800 bg-emerald-200 px-1.5 py-0.5 rounded">✓ Active</span>
+            </div>
+          </div>
+
+          <!-- 3. Midnight Dark -->
+          <div onclick="applyTheme('midnight-dark')" id="theme-card-midnight-dark" class="theme-swatch-card bg-slate-900 border border-slate-700 text-white">
+            <div class="flex items-center space-x-1.5 mb-2">
+              <span class="w-4 h-4 rounded-full bg-[#0f172a] border border-slate-600 inline-block"></span>
+              <span class="w-4 h-4 rounded-full bg-[#06b6d4] border border-slate-600 inline-block"></span>
+              <span class="w-4 h-4 rounded-full bg-[#3b82f6] border border-slate-600 inline-block"></span>
+            </div>
+            <div class="font-bold text-white text-xs">Midnight Cyber</div>
+            <p class="text-[11px] text-slate-400 mt-0.5">OLED High-Contrast Dark mode</p>
+            <div class="mt-2 flex items-center justify-between">
+              <span class="text-[10px] font-mono text-slate-500">Dark</span>
+              <span class="theme-active-tag hidden text-[10px] font-bold text-cyan-300 bg-cyan-950 border border-cyan-800 px-1.5 py-0.5 rounded">✓ Active</span>
+            </div>
+          </div>
+
+          <!-- 4. Ruby Red -->
+          <div onclick="applyTheme('ruby-red')" id="theme-card-ruby-red" class="theme-swatch-card bg-rose-50/50 border border-rose-200">
+            <div class="flex items-center space-x-1.5 mb-2">
+              <span class="w-4 h-4 rounded-full bg-[#18181b] border border-slate-700 inline-block"></span>
+              <span class="w-4 h-4 rounded-full bg-[#e11d48] border border-rose-600 inline-block"></span>
+              <span class="w-4 h-4 rounded-full bg-[#ffffff] border border-slate-300 inline-block"></span>
+            </div>
+            <div class="font-bold text-slate-900 text-xs">Ramraj Ruby Red</div>
+            <p class="text-[11px] text-slate-600 mt-0.5">Charcoal Black &amp; Custom RE Crimson</p>
+            <div class="mt-2 flex items-center justify-between">
+              <span class="text-[10px] font-mono text-rose-600">Branded</span>
+              <span class="theme-active-tag hidden text-[10px] font-bold text-rose-800 bg-rose-100 px-1.5 py-0.5 rounded">✓ Active</span>
+            </div>
+          </div>
+
+          <!-- 5. Nordic Light -->
+          <div onclick="applyTheme('nordic-light')" id="theme-card-nordic-light" class="theme-swatch-card bg-slate-50 border border-indigo-200">
+            <div class="flex items-center space-x-1.5 mb-2">
+              <span class="w-4 h-4 rounded-full bg-[#334155] border border-slate-400 inline-block"></span>
+              <span class="w-4 h-4 rounded-full bg-[#4f46e5] border border-indigo-500 inline-block"></span>
+              <span class="w-4 h-4 rounded-full bg-[#f8fafc] border border-slate-300 inline-block"></span>
+            </div>
+            <div class="font-bold text-slate-900 text-xs">Clean Nordic Light</div>
+            <p class="text-[11px] text-slate-500 mt-0.5">Minimalist Paper with Royal Indigo</p>
+            <div class="mt-2 flex items-center justify-between">
+              <span class="text-[10px] font-mono text-indigo-600">Modern</span>
+              <span class="theme-active-tag hidden text-[10px] font-bold text-indigo-800 bg-indigo-100 px-1.5 py-0.5 rounded">✓ Active</span>
+            </div>
+          </div>
+
+          <!-- 6. Solarized Amber -->
+          <div onclick="applyTheme('solar-amber')" id="theme-card-solar-amber" class="theme-swatch-card bg-amber-50/70 border border-amber-200">
+            <div class="flex items-center space-x-1.5 mb-2">
+              <span class="w-4 h-4 rounded-full bg-[#78350f] border border-amber-700 inline-block"></span>
+              <span class="w-4 h-4 rounded-full bg-[#d97706] border border-amber-600 inline-block"></span>
+              <span class="w-4 h-4 rounded-full bg-[#fffbeb] border border-amber-300 inline-block"></span>
+            </div>
+            <div class="font-bold text-amber-950 text-xs">Solar Amber</div>
+            <p class="text-[11px] text-amber-900/80 mt-0.5">Warm Sepia &amp; Chestnut Eye-Care</p>
+            <div class="mt-2 flex items-center justify-between">
+              <span class="text-[10px] font-mono text-amber-700">Eye-Care</span>
+              <span class="theme-active-tag hidden text-[10px] font-bold text-amber-900 bg-amber-200 px-1.5 py-0.5 rounded">✓ Active</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="pt-2 flex items-center justify-between border-t border-slate-200 text-xs text-slate-500">
+          <span>Tip: Press <kbd class="px-1.5 py-0.5 bg-slate-100 border border-slate-300 rounded font-mono font-bold text-slate-700">Alt + T</kbd> anytime to cycle themes.</span>
+          <button type="button" onclick="cycleNextTheme()" class="text-blue-600 hover:text-blue-800 font-bold hover:underline flex items-center space-x-1">
+            <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+            <span>Quick Cycle (Next)</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="bg-slate-50 px-5 py-2.5 border-t border-slate-200 flex justify-end">
+        <button type="button" onclick="closeModal('themeSelectorModal')" class="px-4 py-1.5 bg-slate-700 hover:bg-slate-800 text-white rounded font-bold">
+          Done (Esc)
+        </button>
       </div>
     </div>
   </div>
