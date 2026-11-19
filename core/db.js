@@ -688,6 +688,15 @@ async function seedDefaultUsers() {
         email: 'rajesh@ramraj.com',
         phone: '9840012349',
         allow_backdated_entries: 0
+      },
+      {
+        username: 'guest',
+        password: 'guest',
+        full_name: 'Guest User (Inspection & Demo)',
+        role: 'Guest',
+        email: 'guest@ramraj.com',
+        phone: '',
+        allow_backdated_entries: 0
       }
     ];
 
@@ -698,7 +707,16 @@ async function seedDefaultUsers() {
         [u.username, u.password, u.full_name, u.role, u.email, u.phone, u.allow_backdated_entries]
       );
     }
-    console.log('[Tally Core DB] Initialized 5 standard multi-user security profiles.');
+    console.log('[Tally Core DB] Initialized standard multi-user security profiles including Guest.');
+  } else {
+    // Ensure guest user exists for existing databases
+    const guestExists = await get("SELECT id FROM users WHERE username = 'guest' COLLATE NOCASE");
+    if (!guestExists) {
+      await run(
+        `INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries)
+         VALUES ('guest', 'guest', 'Guest User (Inspection & Demo)', 'Guest', 'guest@ramraj.com', '', 'Active', 0)`
+      );
+    }
   }
 }
 
@@ -724,6 +742,7 @@ async function authenticateUser(username, password, clientMeta = {}) {
   const p = (password || '').trim();
   const isMatch = (user.password === p) ||
                   (user.username.toLowerCase() === 'admin' && (p === 'admin' || p === 'admin123' || p === '')) ||
+                  (user.username.toLowerCase() === 'guest' && (p === 'guest' || p === 'guest123' || p === '')) ||
                   (user.username.toLowerCase() === 'accountant' && (p === 'acc' || p === 'acc123')) ||
                   (user.username.toLowerCase() === 'dataentry' && (p === 'data' || p === 'data123')) ||
                   (user.username.toLowerCase() === 'auditor' && (p === 'audit' || p === 'audit123')) ||
@@ -824,6 +843,20 @@ function getRolePermissions(role) {
         canAlterCompany: false,
         canCleanSlate: false,
         badgeColor: 'emerald',
+        allowedVoucherTypes: []
+      };
+    case 'Guest':
+      return {
+        role: 'Guest',
+        canCreateVouchers: false,
+        canEditVouchers: false,
+        canDeleteVouchers: false,
+        canViewFinancials: true,
+        canViewAuditTrail: false,
+        canManageUsers: false,
+        canAlterCompany: false,
+        canCleanSlate: false,
+        badgeColor: 'teal',
         allowedVoucherTypes: []
       };
     case 'Viewer':

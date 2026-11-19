@@ -87,6 +87,20 @@ function getOfflineRolePermissions(role) {
         badgeColor: 'emerald',
         allowedVoucherTypes: []
       };
+    case 'Guest':
+      return {
+        role: 'Guest',
+        canCreateVouchers: false,
+        canEditVouchers: false,
+        canDeleteVouchers: false,
+        canViewFinancials: true,
+        canViewAuditTrail: false,
+        canManageUsers: false,
+        canAlterCompany: false,
+        canCleanSlate: false,
+        badgeColor: 'teal',
+        allowedVoucherTypes: []
+      };
     case 'Viewer':
     default:
       return {
@@ -166,8 +180,19 @@ const QUICK_USERS = {
     password: 'view123',
     role: 'Viewer',
     desc: '<strong>Viewer Permissions:</strong> Executive summary of Dashboard, key ratios, and financial statements. Read-only; cannot record transactions.'
+  },
+  guest: {
+    username: 'guest',
+    password: 'guest',
+    role: 'Guest',
+    desc: '<strong>Guest Permissions:</strong> Instant read-only guest inspection. Safely explore Gateway, Live Dashboard, Ledgers, Stock Summary, and Financial Reports without any password.'
   }
 };
+
+function loginAsGuest() {
+  selectQuickUser('guest');
+  handleLogin();
+}
 
 function selectQuickUser(roleKey) {
   const profile = QUICK_USERS[roleKey];
@@ -175,7 +200,7 @@ function selectQuickUser(roleKey) {
 
   // Highlight selected button
   document.querySelectorAll('#quick-user-selector .qu-btn').forEach(btn => {
-    btn.classList.remove('active', 'border-purple-400', 'bg-purple-50', 'border-blue-400', 'bg-blue-50', 'border-amber-400', 'bg-amber-50', 'border-emerald-400', 'bg-emerald-50', 'border-slate-400', 'bg-slate-100');
+    btn.classList.remove('active', 'border-purple-400', 'bg-purple-50', 'border-blue-400', 'bg-blue-50', 'border-amber-400', 'bg-amber-50', 'border-emerald-400', 'bg-emerald-50', 'border-slate-400', 'bg-slate-100', 'border-teal-400', 'bg-teal-50');
     btn.classList.add('border-slate-200', 'bg-slate-50');
   });
 
@@ -187,6 +212,7 @@ function selectQuickUser(roleKey) {
     else if (roleKey === 'dataentry') activeBtn.classList.add('active', 'border-amber-400', 'bg-amber-50');
     else if (roleKey === 'auditor') activeBtn.classList.add('active', 'border-emerald-400', 'bg-emerald-50');
     else if (roleKey === 'viewer') activeBtn.classList.add('active', 'border-slate-400', 'bg-slate-100');
+    else if (roleKey === 'guest') activeBtn.classList.add('active', 'border-teal-400', 'bg-teal-50');
   }
 
   // Populate inputs
@@ -348,6 +374,9 @@ function updateUserDisplay() {
         break;
       case 'Auditor':
         roleEl.className += 'bg-emerald-500/30 text-emerald-300 border-emerald-500/40';
+        break;
+      case 'Guest':
+        roleEl.className += 'bg-teal-500/30 text-teal-300 border-teal-500/40';
         break;
       case 'Viewer':
       default:
@@ -522,7 +551,8 @@ async function handleLogin(e) {
         (q.username === 'accountant' && (p === 'acc' || p === 'acc123')) ||
         (q.username === 'dataentry' && (p === 'data' || p === 'data123')) ||
         (q.username === 'auditor' && (p === 'audit' || p === 'audit123')) ||
-        (q.username === 'viewer' && (p === 'view' || p === 'view123'));
+        (q.username === 'viewer' && (p === 'view' || p === 'view123')) ||
+        (q.username === 'guest' && (p === 'guest' || p === 'guest123' || p === ''));
 
       if (!isMatch) {
         if (errEl) errEl.classList.remove('hidden');
@@ -2858,6 +2888,7 @@ async function loadAuditTrail() {
 window.showLoginView = showLoginView;
 window.startWithFreshLogin = startWithFreshLogin;
 window.toggleFreshLoginStartup = toggleFreshLoginStartup;
+window.loginAsGuest = loginAsGuest;
 window.handleLogin = handleLogin;
 window.handleLogout = handleLogout;
 window.selectQuickUser = selectQuickUser;
