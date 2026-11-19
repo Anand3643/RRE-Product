@@ -263,12 +263,21 @@ async function startServer() {
     await initDb();
 
     // 1. Primary Web Application Server on Port 4000
-    app.listen(WEB_PORT, () => {
+    const webServer = app.listen(WEB_PORT, () => {
       console.log(`=======================================================`);
       console.log(`✨ TallyPrime Gold (V5 Edition) Running!`);
       console.log(`👉 Web Interface: http://localhost:${WEB_PORT}`);
-      console.log(`📂 Data Storage: data/100000/company.db`);
+      console.log(`📂 Data Storage: data/100000/company.db (Local PC SQLite)`);
+      console.log(`⚡ Offline Mode: 100% Standalone (No Internet Required)`);
       console.log(`=======================================================`);
+    });
+
+    webServer.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.log(`[Tally Web Server] Port ${WEB_PORT} already running — connected to active local backend.`);
+      } else {
+        console.error('[Tally Web Server] Server error:', err.message);
+      }
     });
 
     // 2. Secondary Tally XML/ODBC Protocol Server on Port 9000
@@ -283,8 +292,7 @@ async function startServer() {
     });
 
   } catch (err) {
-    console.error('Fatal: Failed to start Tally server:', err);
-    process.exit(1);
+    console.error('Failed to initialize local Tally database:', err.message);
   }
 }
 

@@ -169,15 +169,19 @@ async function createWindow() {
             dialog.showMessageBox(mainWindow, {
               type: 'info',
               title: 'About TallyPrime Gold',
-              message: 'TallyPrime Gold (V5 Edition) Desktop',
-              detail: 'Company: Ramraj Enterprises\nGSTIN: 33ANUPS7331M1Z8\nWeb Port: 4000\nNative Tally XML Port: 9000 (ServerPort=9000)\nStorage: data/100000/company.db\nReverse engineered architecture with full double-entry integrity.'
+              message: 'TallyPrime Gold (V5 Edition) — Standalone Desktop',
+              detail: 'Company: Ramraj Enterprises\nMode: 100% Offline Standalone (No Internet or External Server Required)\nData Storage: Local PC SQLite (company.db)\nCompany No: 100000 | Tamil Nadu (33)\nNative Tally XML Port: 9000 (ODBC / Tally Protocol)\nFull double-entry integrity & statutory compliance.'
             });
           }
         },
         {
-          label: 'Open Data Directory',
+          label: 'Open Company Data Folder (Local PC)',
           click: () => {
-            shell.openPath(path.join(__dirname, 'data', '100000'));
+            const isPackaged = __dirname.includes('app.asar');
+            const dataDir = isPackaged
+              ? path.join(app.getPath('appData'), 'TallyPrimeGold', 'data', '100000')
+              : path.join(__dirname, 'data', '100000');
+            shell.openPath(dataDir);
           }
         }
       ]
