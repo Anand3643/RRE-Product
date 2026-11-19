@@ -10,6 +10,11 @@ ElectronExe = ScriptDir & "\node_modules\electron\dist\electron.exe"
 EdgePath = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 ChromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
 
+' Ensure ELECTRON_RUN_AS_NODE is cleared
+On Error Resume Next
+WshShell.Environment("PROCESS").Remove("ELECTRON_RUN_AS_NODE")
+On Error GoTo 0
+
 If fso.FileExists(DistExe) Then
     ' 1. Launch via Standalone Built Windows Executable
     WshShell.CurrentDirectory = ScriptDir
