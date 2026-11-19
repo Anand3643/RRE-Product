@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TallyPrime Gold — Ramraj Enterprises</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Custom Tally Styles -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="bg-slate-100 text-slate-800 antialiased min-h-screen flex flex-col font-sans">
+
+  <!-- TOP TALLY HEADER -->
+  <header class="bg-[#1f3a52] text-white border-b border-slate-700 shadow-sm sticky top-0 z-30">
+    <!-- Row 1: Brand & Current State -->
+    <div class="px-5 py-2.5 flex items-center justify-between border-b border-slate-700/60">
+      <div class="flex items-center space-x-3">
+        <div class="bg-amber-500 text-slate-900 font-black px-2 py-0.5 rounded text-xs tracking-wider uppercase">
+          TallyPrime
+        </div>
+        <div class="h-4 w-[1px] bg-slate-600"></div>
+        <div class="text-sm font-bold tracking-wide flex items-center space-x-2">
+          <span>Ramraj Enterprises</span>
+          <span class="text-[11px] font-normal text-slate-300">(Financial Year: 2026-2027)</span>
+        </div>
+      </div>
+
+      <div class="flex items-center space-x-6 text-xs text-slate-300">
+        <div>Period: <strong class="text-white">1-Apr-26 to 31-Mar-27</strong></div>
+        <div>Current Date: <strong class="text-amber-400" id="top-current-date">1-Jun-2026</strong></div>
+        <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-white rounded text-[11px] font-semibold flex items-center space-x-1">
+          <span>Esc: Gateway</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Row 2: Function Keys Bar (F4 to F9) -->
+    <div class="px-5 py-1.5 bg-[#162a3b] flex items-center justify-between overflow-x-auto text-xs">
+      <div class="flex items-center space-x-2">
+        <button onclick="openVoucherScreen('Contra')" id="fn-contra" class="fn-btn">
+          <span class="fn-badge">F4</span>Contra
+        </button>
+        <button onclick="openVoucherScreen('Payment')" id="fn-payment" class="fn-btn">
+          <span class="fn-badge">F5</span>Payment
+        </button>
+        <button onclick="openVoucherScreen('Receipt')" id="fn-receipt" class="fn-btn">
+          <span class="fn-badge">F6</span>Receipt
+        </button>
+        <button onclick="openVoucherScreen('Journal')" id="fn-journal" class="fn-btn">
+          <span class="fn-badge">F7</span>Journal
+        </button>
+        <button onclick="openVoucherScreen('Sales')" id="fn-sales" class="fn-btn">
+          <span class="fn-badge">F8</span>Sales
+        </button>
+        <button onclick="openVoucherScreen('Purchase')" id="fn-purchase" class="fn-btn">
+          <span class="fn-badge">F9</span>Purchase
+        </button>
+      </div>
+
+      <div class="flex items-center space-x-2 text-[11px] text-slate-300">
+        <button onclick="openReport('trial-balance')" class="px-2 py-1 hover:text-white hover:underline">Trial Balance (T)</button>
+        <button onclick="openReport('balance-sheet')" class="px-2 py-1 hover:text-white hover:underline">Balance Sheet (B)</button>
+        <button onclick="openReport('profit-loss')" class="px-2 py-1 hover:text-white hover:underline">P&L A/c (P)</button>
+        <button onclick="openReport('stock-summary')" class="px-2 py-1 hover:text-white hover:underline">Stock (S)</button>
+        <button onclick="openReport('daybook')" class="px-2 py-1 hover:text-white hover:underline">Day Book (D)</button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN WORKSPACE CONTAINER -->
+  <main class="flex-1 p-6 max-w-7xl w-full mx-auto flex flex-col justify-center items-center">
+
+    <!-- ============================================== -->
+    <!-- VIEW 1: GATEWAY OF TALLY (THE CLASSIC MENU)    -->
+    <!-- ============================================== -->
+    <section id="view-gateway" class="w-full max-w-4xl bg-white border border-slate-300 rounded-lg shadow-lg overflow-hidden fade-in">
+      <div class="bg-[#1f3a52] text-white px-5 py-2 font-bold text-xs uppercase tracking-wider flex justify-between items-center">
+        <span>Gateway of Tally</span>
+        <span class="text-[11px] text-amber-300">Keyboard: Press highlighted letters</span>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200">
+        <!-- Left Panel: Current Company Status -->
+        <div class="p-6 bg-slate-50/70 space-y-5">
+          <div class="border-b border-slate-200 pb-4">
+            <h2 class="text-lg font-bold text-slate-900 leading-tight">Ramraj Enterprises</h2>
+            <p class="text-xs text-slate-500 mt-0.5">M/s. RAMRAJ ENTERPRISES (Screw Compressors & Spares)</p>
+            <p class="text-[11px] font-mono text-slate-600 mt-1">GSTIN: 33ANUPS7331M1Z8</p>
+          </div>
+
+          <div class="space-y-3 text-xs">
+            <div class="flex justify-between border-b border-slate-200 pb-1.5">
+              <span class="text-slate-500">Current Period:</span>
+              <span class="font-bold text-slate-800">1-Apr-2026 to 31-Mar-2027</span>
+            </div>
+            <div class="flex justify-between border-b border-slate-200 pb-1.5">
+              <span class="text-slate-500">Current Date:</span>
+              <span class="font-bold text-amber-700" id="gateway-date">1-Jun-2026</span>
+            </div>
+            <div class="flex justify-between border-b border-slate-200 pb-1.5">
+              <span class="text-slate-500">Last Voucher Date:</span>
+              <span class="font-bold text-slate-800" id="gateway-last-voucher">-</span>
+            </div>
+            <div class="flex justify-between border-b border-slate-200 pb-1.5">
+              <span class="text-slate-500">Total Vouchers Posted:</span>
+              <span class="font-bold text-blue-600" id="gateway-vouchers-count">4</span>
+            </div>
+          </div>
+
+          <div class="pt-4 border-t border-slate-200 flex justify-center">
+            <button onclick="openVoucherScreen('Sales')" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold text-xs shadow-sm transition">
+              + New Voucher Entry (V)
+            </button>
+          </div>
+        </div>
+
+        <!-- Right Panel: Gateway Menu List -->
+        <div class="p-5 space-y-4">
+          <!-- MASTERS -->
+          <div>
+            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Masters</div>
+            <div class="space-y-0.5">
+              <div onclick="openModal('createLedgerModal')" class="gateway-item">
+                <span><span class="hotkey">C</span>reate Ledger</span>
+                <span class="text-[10px] text-slate-400 font-mono">Alt+C</span>
+              </div>
+              <div onclick="openReport('chart-accounts')" class="gateway-item">
+                <span><span class="hotkey">A</span>lter / Chart of Accounts</span>
+                <span class="text-[10px] text-slate-400">Masters</span>
+              </div>
+              <div onclick="openReport('stock-summary')" class="gateway-item">
+                <span><span class="hotkey">I</span>nventory / Stock Items</span>
+                <span class="text-[10px] text-slate-400">Stock</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- TRANSACTIONS -->
+          <div>
+            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Transactions</div>
+            <div class="space-y-0.5">
+              <div onclick="openVoucherScreen('Sales')" class="gateway-item">
+                <span><span class="hotkey">V</span>ouchers</span>
+                <span class="text-[10px] text-slate-400 font-mono">F4-F9</span>
+              </div>
+              <div onclick="openReport('daybook')" class="gateway-item">
+                <span><span class="hotkey">D</span>ay Book</span>
+                <span class="text-[10px] text-slate-400 font-mono">Journals</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- UTILITIES & REPORTS -->
+          <div>
+            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Reports</div>
+            <div class="space-y-0.5">
+              <div onclick="openReport('balance-sheet')" class="gateway-item">
+                <span><span class="hotkey">B</span>alance Sheet</span>
+                <span class="text-[10px] text-slate-400">Financial</span>
+              </div>
+              <div onclick="openReport('profit-loss')" class="gateway-item">
+                <span><span class="hotkey">P</span>rofit &amp; Loss A/c</span>
+                <span class="text-[10px] text-slate-400">Trading</span>
+              </div>
+              <div onclick="openReport('trial-balance')" class="gateway-item">
+                <span><span class="hotkey">T</span>rial Balance</span>
+                <span class="text-[10px] text-slate-400">Audit</span>
+              </div>
+              <div onclick="openReport('stock-summary')" class="gateway-item">
+                <span><span class="hotkey">S</span>tock Summary</span>
+                <span class="text-[10px] text-slate-400">Valuation</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- VIEW 2: VOUCHER CREATION SCREEN (F4 TO F9)     -->
+    <!-- ============================================== -->
+    <section id="view-voucher" class="w-full max-w-4xl bg-white border border-slate-300 rounded-lg shadow-lg overflow-hidden hidden fade-in">
+      <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
+        <div class="flex items-center space-x-3">
+          <span class="bg-amber-400 text-slate-900 font-black px-2 py-0.5 rounded text-xs uppercase" id="v-type-badge">F8: Sales</span>
+          <h2 class="text-sm font-bold uppercase tracking-wider" id="v-title">Accounting Voucher Creation</h2>
+        </div>
+        <div class="flex items-center space-x-2 text-xs">
+          <span class="text-slate-300">Press <strong class="text-amber-400">Esc</strong> to cancel</span>
+          <button onclick="showGateway()" class="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-[11px]">✕</button>
+        </div>
+      </div>
+
+      <form id="form-voucher" onsubmit="handleSaveVoucher(event)" class="p-6 space-y-5 text-xs">
+        <!-- Voucher Meta (No, Date, Ref, Party) -->
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 bg-slate-50 p-4 rounded border border-slate-200">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Voucher Type</label>
+            <select id="v-select-type" onchange="switchVoucherType(this.value)" class="w-full border border-slate-300 rounded p-1.5 bg-white font-semibold text-blue-700">
+              <option value="Sales">F8: Sales</option>
+              <option value="Purchase">F9: Purchase</option>
+              <option value="Payment">F5: Payment</option>
+              <option value="Receipt">F6: Receipt</option>
+              <option value="Contra">F4: Contra</option>
+              <option value="Journal">F7: Journal</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Voucher Number *</label>
+            <input type="text" id="v-no" required class="w-full border border-slate-300 rounded p-1.5 font-mono font-bold bg-white">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Voucher Date *</label>
+            <input type="date" id="v-date" required class="w-full border border-slate-300 rounded p-1.5 bg-white">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Ref / Bill No</label>
+            <input type="text" id="v-ref" placeholder="e.g. PO-9842" class="w-full border border-slate-300 rounded p-1.5 bg-white font-mono">
+          </div>
+        </div>
+
+        <!-- Double-Entry Particulars Grid -->
+        <div class="space-y-2">
+          <div class="flex justify-between items-center">
+            <h3 class="font-bold text-slate-800 text-xs uppercase tracking-wider">Accounting Entries (Double Entry)</h3>
+            <span class="text-[11px] text-slate-500">Every voucher must balance: Total Dr = Total Cr</span>
+          </div>
+
+          <div class="border border-slate-300 rounded overflow-hidden">
+            <table class="w-full text-xs">
+              <thead class="bg-slate-800 text-white font-semibold">
+                <tr>
+                  <th class="p-2 w-16 text-center">Dr/Cr</th>
+                  <th class="p-2 text-left">Particulars (Ledger Name)</th>
+                  <th class="p-2 w-36 text-right">Debit Amount (₹)</th>
+                  <th class="p-2 w-36 text-right">Credit Amount (₹)</th>
+                  <th class="p-2 w-12 text-center">✕</th>
+                </tr>
+              </thead>
+              <tbody id="voucher-entries-tbody" class="divide-y divide-slate-200 bg-white">
+                <!-- Injected via JavaScript -->
+              </tbody>
+              <tfoot class="bg-slate-100 font-bold border-t-2 border-slate-300">
+                <tr>
+                  <td colspan="2" class="p-2.5 text-right uppercase text-slate-700">Total:</td>
+                  <td class="p-2.5 text-right font-mono text-sm" id="v-total-dr">₹0.00</td>
+                  <td class="p-2.5 text-right font-mono text-sm" id="v-total-cr">₹0.00</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div class="flex justify-between items-center pt-1">
+            <button type="button" onclick="addDoubleEntryRow()" class="text-blue-600 hover:text-blue-800 font-bold flex items-center space-x-1">
+              <span>+ Add Entry Line</span>
+            </button>
+            <div id="v-balance-indicator" class="text-xs font-bold px-3 py-1 rounded bg-red-100 text-red-700">
+              Difference: ₹0.00
+            </div>
+          </div>
+        </div>
+
+        <!-- Item Invoicing (Optional for Sales & Purchase) -->
+        <div id="voucher-inventory-section" class="space-y-2 border-t border-slate-200 pt-4">
+          <div class="flex justify-between items-center">
+            <h3 class="font-bold text-slate-800 text-xs uppercase tracking-wider">Item Allocation (Inventory Inward/Outward)</h3>
+            <span class="text-[10px] text-slate-500">Updates stock summary in real-time</span>
+          </div>
+          <div class="border border-slate-200 rounded overflow-hidden">
+            <table class="w-full text-xs">
+              <thead class="bg-slate-100 text-slate-700 font-semibold border-b border-slate-200">
+                <tr>
+                  <th class="p-2 text-left">Stock Item Name</th>
+                  <th class="p-2 w-28 text-center">Quantity</th>
+                  <th class="p-2 w-32 text-right">Rate (₹)</th>
+                  <th class="p-2 w-32 text-right">Amount (₹)</th>
+                  <th class="p-2 w-12 text-center">✕</th>
+                </tr>
+              </thead>
+              <tbody id="voucher-inventory-tbody" class="divide-y divide-slate-100 bg-white"></tbody>
+            </table>
+          </div>
+          <button type="button" onclick="addInventoryRow()" class="text-indigo-600 hover:text-indigo-800 font-bold">
+            + Allocate Stock Item
+          </button>
+        </div>
+
+        <!-- Narration -->
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Narration (Being...)</label>
+          <input type="text" id="v-narration" placeholder="e.g. Being goods sold against PO number..." class="w-full border border-slate-300 rounded p-2 bg-white">
+        </div>
+
+        <!-- Submit Button / Actions -->
+        <div class="pt-4 border-t border-slate-200 flex justify-between items-center">
+          <button type="button" onclick="showGateway()" class="px-4 py-2 border border-slate-300 text-slate-700 rounded font-semibold hover:bg-slate-50">
+            Esc: Quit
+          </button>
+          <button type="submit" id="btn-save-voucher" class="px-6 py-2.5 bg-[#1f3a52] hover:bg-[#162a3b] text-white rounded font-bold shadow transition flex items-center space-x-2">
+            <span>Accept (Ctrl+A / Enter)</span>
+          </button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- VIEW 3: BALANCE SHEET                          -->
+    <!-- ============================================== -->
+    <section id="view-balance-sheet" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-lg overflow-hidden hidden fade-in">
+      <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
+        <div>
+          <h2 class="text-sm font-bold uppercase tracking-wider">Balance Sheet — Ramraj Enterprises</h2>
+          <p class="text-[10px] text-slate-300">As on 31-Mar-2027</p>
+        </div>
+        <div class="space-x-2">
+          <button onclick="window.print()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Print (Alt+P)</button>
+          <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
+        </div>
+      </div>
+
+      <div class="p-6 overflow-x-auto">
+        <div class="grid grid-cols-1 md:grid-cols-2 border border-slate-300 rounded text-xs">
+          <!-- LIABILITIES SIDE -->
+          <div class="border-b md:border-b-0 md:border-r border-slate-300">
+            <div class="bg-slate-800 text-white font-bold p-2.5 flex justify-between">
+              <span>Liabilities</span>
+              <span>Amount (₹)</span>
+            </div>
+            <div class="p-4 space-y-4" id="bs-liabilities-content">
+              <!-- Rendered via JS -->
+            </div>
+            <div class="p-3 bg-slate-100 font-bold border-t border-slate-300 flex justify-between text-sm">
+              <span>Total Liabilities:</span>
+              <span class="font-mono text-blue-700" id="bs-total-liabilities">₹0.00</span>
+            </div>
+          </div>
+
+          <!-- ASSETS SIDE -->
+          <div>
+            <div class="bg-slate-800 text-white font-bold p-2.5 flex justify-between">
+              <span>Assets</span>
+              <span>Amount (₹)</span>
+            </div>
+            <div class="p-4 space-y-4" id="bs-assets-content">
+              <!-- Rendered via JS -->
+            </div>
+            <div class="p-3 bg-slate-100 font-bold border-t border-slate-300 flex justify-between text-sm">
+              <span>Total Assets:</span>
+              <span class="font-mono text-emerald-700" id="bs-total-assets">₹0.00</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- VIEW 4: PROFIT & LOSS ACCOUNT                  -->
+    <!-- ============================================== -->
+    <section id="view-profit-loss" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-lg overflow-hidden hidden fade-in">
+      <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
+        <div>
+          <h2 class="text-sm font-bold uppercase tracking-wider">Profit &amp; Loss A/c — Ramraj Enterprises</h2>
+          <p class="text-[10px] text-slate-300">For the Period 1-Apr-2026 to 31-Mar-2027</p>
+        </div>
+        <div class="space-x-2">
+          <button onclick="window.print()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Print (Alt+P)</button>
+          <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
+        </div>
+      </div>
+
+      <div class="p-6 space-y-6">
+        <!-- Part 1: Trading Account (Gross Profit) -->
+        <div class="border border-slate-300 rounded overflow-hidden text-xs">
+          <div class="bg-slate-100 font-bold p-2 border-b border-slate-300 text-slate-800 uppercase tracking-wider">
+            Trading Account (Cost of Sales vs Gross Incomes)
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-300">
+            <!-- Expenses Side -->
+            <div class="p-3 space-y-2">
+              <div class="flex justify-between font-semibold border-b border-slate-100 pb-1">
+                <span>Opening Stock:</span>
+                <span class="font-mono" id="pl-opening-stock">₹0.00</span>
+              </div>
+              <div class="flex justify-between font-semibold border-b border-slate-100 pb-1">
+                <span>Purchase Accounts:</span>
+                <span class="font-mono" id="pl-purchases">₹0.00</span>
+              </div>
+              <div class="flex justify-between font-semibold border-b border-slate-100 pb-1">
+                <span>Direct Expenses:</span>
+                <span class="font-mono" id="pl-direct-expenses">₹0.00</span>
+              </div>
+              <div class="flex justify-between font-bold text-emerald-700 pt-2 border-t border-slate-200">
+                <span>Gross Profit c/o:</span>
+                <span class="font-mono" id="pl-gross-profit-left">₹0.00</span>
+              </div>
+            </div>
+
+            <!-- Incomes Side -->
+            <div class="p-3 space-y-2">
+              <div class="flex justify-between font-semibold border-b border-slate-100 pb-1">
+                <span>Sales Accounts:</span>
+                <span class="font-mono" id="pl-sales">₹0.00</span>
+              </div>
+              <div class="flex justify-between font-semibold border-b border-slate-100 pb-1">
+                <span>Closing Stock:</span>
+                <span class="font-mono text-blue-700" id="pl-closing-stock">₹0.00</span>
+              </div>
+              <div class="flex justify-between font-semibold border-b border-slate-100 pb-1">
+                <span>Direct Incomes:</span>
+                <span class="font-mono" id="pl-direct-incomes">₹0.00</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Part 2: Income Statement (Net Profit) -->
+        <div class="border border-slate-300 rounded overflow-hidden text-xs">
+          <div class="bg-slate-100 font-bold p-2 border-b border-slate-300 text-slate-800 uppercase tracking-wider">
+            Operating Expenses &amp; Net Profit
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-300">
+            <!-- Indirect Expenses -->
+            <div class="p-3 space-y-2">
+              <div class="font-bold text-slate-700 border-b border-slate-100 pb-1">Indirect Expenses:</div>
+              <div id="pl-indirect-expenses-list" class="space-y-1 text-slate-600"></div>
+              <div class="flex justify-between font-bold border-t border-slate-200 pt-1">
+                <span>Total Indirect Expenses:</span>
+                <span class="font-mono" id="pl-total-indirect-expenses">₹0.00</span>
+              </div>
+              <div class="flex justify-between font-black text-sm text-emerald-700 pt-3 border-t-2 border-slate-300">
+                <span>Nett Profit:</span>
+                <span class="font-mono" id="pl-net-profit">₹0.00</span>
+              </div>
+            </div>
+
+            <!-- Indirect Incomes -->
+            <div class="p-3 space-y-2">
+              <div class="flex justify-between font-bold text-slate-800 border-b border-slate-100 pb-1">
+                <span>Gross Profit b/f:</span>
+                <span class="font-mono text-emerald-700" id="pl-gross-profit-right">₹0.00</span>
+              </div>
+              <div class="font-bold text-slate-700 border-b border-slate-100 pb-1">Indirect Incomes:</div>
+              <div id="pl-indirect-incomes-list" class="space-y-1 text-slate-600"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- VIEW 5: TRIAL BALANCE                          -->
+    <!-- ============================================== -->
+    <section id="view-trial-balance" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-lg overflow-hidden hidden fade-in">
+      <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
+        <div>
+          <h2 class="text-sm font-bold uppercase tracking-wider">Trial Balance — Ramraj Enterprises</h2>
+          <p class="text-[10px] text-slate-300">1-Apr-2026 to 31-Mar-2027</p>
+        </div>
+        <div class="space-x-2">
+          <button onclick="window.print()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Print</button>
+          <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
+        </div>
+      </div>
+
+      <div class="p-6 overflow-x-auto">
+        <table class="tally-table">
+          <thead>
+            <tr>
+              <th>Particulars (Ledger Account)</th>
+              <th>Group Classification</th>
+              <th class="text-right w-40">Debit Amount (₹)</th>
+              <th class="text-right w-40">Credit Amount (₹)</th>
+            </tr>
+          </thead>
+          <tbody id="tb-tbody"></tbody>
+          <tfoot class="bg-slate-800 text-white font-bold text-xs">
+            <tr>
+              <td colspan="2" class="p-3 text-right uppercase">Total:</td>
+              <td class="p-3 text-right font-mono" id="tb-total-dr">₹0.00</td>
+              <td class="p-3 text-right font-mono" id="tb-total-cr">₹0.00</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- VIEW 6: DAY BOOK                               -->
+    <!-- ============================================== -->
+    <section id="view-daybook" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-lg overflow-hidden hidden fade-in">
+      <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
+        <div>
+          <h2 class="text-sm font-bold uppercase tracking-wider">Day Book (Journal Register)</h2>
+          <p class="text-[10px] text-slate-300">Chronological transaction vouchers</p>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button onclick="openVoucherScreen('Sales')" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 rounded text-xs font-semibold">+ New Voucher</button>
+          <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
+        </div>
+      </div>
+
+      <div class="p-6 overflow-x-auto">
+        <table class="tally-table">
+          <thead>
+            <tr>
+              <th class="w-24">Date</th>
+              <th>Particulars</th>
+              <th class="w-28 text-center">Vch Type</th>
+              <th class="w-36">Vch No</th>
+              <th class="text-right w-36">Debit Amount (₹)</th>
+              <th class="text-right w-36">Credit Amount (₹)</th>
+            </tr>
+          </thead>
+          <tbody id="daybook-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- VIEW 7: STOCK SUMMARY                          -->
+    <!-- ============================================== -->
+    <section id="view-stock-summary" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-lg overflow-hidden hidden fade-in">
+      <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
+        <div>
+          <h2 class="text-sm font-bold uppercase tracking-wider">Stock Summary — Ramraj Enterprises</h2>
+          <p class="text-[10px] text-slate-300">Inventory valuation & quantity on hand</p>
+        </div>
+        <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
+      </div>
+
+      <div class="p-6 overflow-x-auto">
+        <table class="tally-table">
+          <thead>
+            <tr>
+              <th>Stock Item Name</th>
+              <th>HSN Code</th>
+              <th class="text-center w-28">Closing Qty</th>
+              <th class="text-right w-36">Valuation Rate (₹)</th>
+              <th class="text-right w-40">Closing Value (₹)</th>
+            </tr>
+          </thead>
+          <tbody id="stock-tbody"></tbody>
+          <tfoot class="bg-slate-800 text-white font-bold text-xs">
+            <tr>
+              <td colspan="4" class="p-3 text-right uppercase">Total Inventory Valuation:</td>
+              <td class="p-3 text-right font-mono" id="stock-total-val">₹0.00</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- VIEW 8: ACCOUNT KHATA / LEDGER STATEMENT       -->
+    <!-- ============================================== -->
+    <section id="view-ledger-statement" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-lg overflow-hidden hidden fade-in">
+      <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
+        <div>
+          <h2 class="text-sm font-bold uppercase tracking-wider" id="khata-title">Ledger Account Statement</h2>
+          <p class="text-[10px] text-slate-300" id="khata-group">Group: -</p>
+        </div>
+        <div class="flex items-center space-x-2">
+          <select id="khata-ledger-select" onchange="loadLedgerStatement(this.value)" class="text-xs bg-slate-800 text-white border border-slate-600 rounded px-2 py-1"></select>
+          <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
+        </div>
+      </div>
+
+      <div class="p-6 overflow-x-auto space-y-4">
+        <div class="flex justify-between items-center bg-slate-50 p-3 rounded border border-slate-200 text-xs">
+          <div>Opening Balance: <strong class="font-mono text-slate-800" id="khata-opening-bal">₹0.00 Dr</strong></div>
+          <div>Closing Balance: <strong class="font-mono text-blue-700 text-sm" id="khata-closing-bal">₹0.00 Dr</strong></div>
+        </div>
+
+        <table class="tally-table">
+          <thead>
+            <tr>
+              <th class="w-24">Date</th>
+              <th>Particulars / Narration</th>
+              <th class="w-24 text-center">Vch Type</th>
+              <th class="w-32">Vch No</th>
+              <th class="text-right w-32">Debit (₹)</th>
+              <th class="text-right w-32">Credit (₹)</th>
+              <th class="text-right w-36">Balance (₹)</th>
+            </tr>
+          </thead>
+          <tbody id="khata-tbody"></tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==================== MODALS ==================== -->
+  <!-- CREATE LEDGER MODAL -->
+  <div id="createLedgerModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg shadow-2xl max-w-lg w-full overflow-hidden border border-slate-300">
+      <div class="bg-[#1f3a52] text-white px-5 py-3 flex justify-between items-center">
+        <h3 class="text-sm font-bold uppercase tracking-wider">Ledger Creation (Master)</h3>
+        <button onclick="closeModal('createLedgerModal')" class="text-slate-300 hover:text-white">✕</button>
+      </div>
+      <form id="form-create-ledger" onsubmit="handleCreateLedger(event)" class="p-6 space-y-4 text-xs">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Ledger Name *</label>
+          <input type="text" id="m-ledger-name" required placeholder="e.g. Kaeser Compressors India Ltd" class="w-full border border-slate-300 rounded p-2">
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Under (Account Group) *</label>
+          <select id="m-ledger-group" required class="w-full border border-slate-300 rounded p-2 bg-white"></select>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Opening Balance (₹)</label>
+            <input type="number" id="m-ledger-opbal" value="0" step="any" class="w-full border border-slate-300 rounded p-2">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">Balance Type</label>
+            <select id="m-ledger-optype" class="w-full border border-slate-300 rounded p-2 bg-white">
+              <option value="Dr">Dr (Debit)</option>
+              <option value="Cr">Cr (Credit)</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">GSTIN</label>
+            <input type="text" id="m-ledger-gstin" placeholder="33AAAAA0000A1Z5" class="w-full border border-slate-300 rounded p-2 font-mono">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-1">PAN Number</label>
+            <input type="text" id="m-ledger-pan" placeholder="AAAAA0000A" class="w-full border border-slate-300 rounded p-2 font-mono">
+          </div>
+        </div>
+        <div class="flex justify-end space-x-2 pt-3 border-t border-slate-200">
+          <button type="button" onclick="closeModal('createLedgerModal')" class="px-4 py-2 border border-slate-300 rounded font-semibold text-slate-700">Cancel</button>
+          <button type="submit" class="px-5 py-2 bg-[#1f3a52] text-white rounded font-bold hover:bg-[#162a3b]">Save Ledger</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Print Modal / Area -->
+  <div id="print-area" class="hidden"></div>
+
+  <!-- App Script -->
+  <script src="app.js"></script>
+</body>
+</html>

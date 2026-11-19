@@ -1,0 +1,28 @@
+{
+  "name": "rre-product",
+  "version": "1.0.0",
+  "description": "Clean workspace ready for fresh development.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Anand3643/RRE-Product.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Anand3643/RRE-Product/issues"
+  },
+  "homepage": "https://github.com/Anand3643/RRE-Product#readme",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "express": "^5.3.0",
+    "sqlite3": "^6.0.1"
+  }
+}
