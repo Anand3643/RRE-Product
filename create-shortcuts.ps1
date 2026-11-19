@@ -15,7 +15,7 @@ $Shortcut.TargetPath = "wscript.exe"
 $Shortcut.Arguments = "`"$VbsPath`""
 $Shortcut.WorkingDirectory = $AppDir
 $Shortcut.WindowStyle = 1
-$Shortcut.Description = "TallyPrime Gold (V5 Edition) — Enterprise ERP Suite"
+$Shortcut.Description = "TallyPrime Gold (V5 Edition) - Enterprise Suite"
 if (Test-Path $IconPath) {
     $Shortcut.IconLocation = "$IconPath, 0"
 }
@@ -29,7 +29,7 @@ $SmShortcut.TargetPath = "wscript.exe"
 $SmShortcut.Arguments = "`"$VbsPath`""
 $SmShortcut.WorkingDirectory = $AppDir
 $SmShortcut.WindowStyle = 1
-$SmShortcut.Description = "TallyPrime Gold (V5 Edition) — Enterprise ERP Suite"
+$SmShortcut.Description = "TallyPrime Gold (V5 Edition) - Enterprise Suite"
 if (Test-Path $IconPath) {
     $SmShortcut.IconLocation = "$IconPath, 0"
 }

@@ -5,12 +5,17 @@ Set fso = CreateObject("Scripting.FileSystemObject")
 ScriptDir = fso.GetParentFolderName(WScript.ScriptFullName)
 
 ' Paths
+DistExe = ScriptDir & "\dist\win-unpacked\TallyPrime Gold.exe"
 ElectronExe = ScriptDir & "\node_modules\electron\dist\electron.exe"
 EdgePath = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
 ChromePath = "C:\Program Files\Google\Chrome\Application\chrome.exe"
 
-If fso.FileExists(ElectronExe) Then
-    ' 1. Launch via Native Electron Desktop Shell
+If fso.FileExists(DistExe) Then
+    ' 1. Launch via Standalone Built Windows Executable
+    WshShell.CurrentDirectory = ScriptDir
+    WshShell.Run """" & DistExe & """", 1, False
+ElseIf fso.FileExists(ElectronExe) Then
+    ' 2. Launch via Native Electron Desktop Shell
     WshShell.CurrentDirectory = ScriptDir
     WshShell.Run """" & ElectronExe & """ .", 1, False
 Else
