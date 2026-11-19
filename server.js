@@ -2,6 +2,9 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const http = require('http');
+const { exec } = require('child_process');
+const util = require('util');
+const execPromise = util.promisify(exec);
 const {
   initDb,
   get,
@@ -249,6 +252,104 @@ app.get('/api/export/tally-xml', async (req, res) => {
     res.send(xml);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ========================================================
+// SYSTEM UPDATE & VERSION MANAGEMENT API
+// ========================================================
+app.get('/api/system/update-status', async (req, res) => {
+  const currentVersion = '1.0.0';
+  let currentCommit = '03810f9';
+  let hasGit = false;
+
+  try {
+    const { stdout } = await execPromise('git rev-parse --short HEAD', { timeout: 3000 });
+    if (stdout && stdout.trim()) {
+      currentCommit = stdout.trim();
+      hasGit = true;
+    }
+  } catch (e) {
+    // git CLI may not be available in packaged mode
+  }
+
+  // Check network connectivity and query GitHub commits API
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 4500);
+
+    const ghRes = await fetch('https://api.github.com/repos/Anand3643/RRE-Product/commits/main', {
+      headers: { 'User-Agent': 'TallyPrime-Gold-Desktop' },
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+
+    if (!ghRes.ok) {
+      return res.json({
+        success: true,
+        is_online: false,
+        current_version: currentVersion,
+        current_commit: currentCommit,
+        update_available: false,
+        message: 'Could not contact update server. 100% offline mode active.'
+      });
+    }
+
+    const commitData = await ghRes.json();
+    const remoteSha = (commitData.sha || '').slice(0, 7);
+    const remoteMessage = commitData.commit ? commitData.commit.message : '';
+    const remoteDate = commitData.commit && commitData.commit.author ? commitData.commit.author.date : '';
+
+    const updateAvailable = Boolean(remoteSha && remoteSha !== currentCommit);
+
+    return res.json({
+      success: true,
+      is_online: true,
+      current_version: currentVersion,
+      current_commit: currentCommit,
+      remote_commit: remoteSha,
+      remote_message: remoteMessage,
+      remote_date: remoteDate,
+      update_available: updateAvailable,
+      can_auto_update: hasGit,
+      message: updateAvailable
+        ? `New version available: ${remoteSha} - "${remoteMessage.split('\n')[0]}"`
+        : 'Your TallyPrime Gold installation is completely up to date!'
+    });
+  } catch (err) {
+    // Offline mode
+    return res.json({
+      success: true,
+      is_online: false,
+      current_version: currentVersion,
+      current_commit: currentCommit,
+      update_available: false,
+      message: 'PC is offline or unable to connect to update server. 100% offline mode active.'
+    });
+  }
+});
+
+app.post('/api/system/perform-update', async (req, res) => {
+  try {
+    const { stdout: pullOut } = await execPromise('git pull origin main', { timeout: 45000 });
+    console.log('[System Update] git pull result:', pullOut);
+
+    // Trigger silent rebuild and installation in background
+    exec('npm run build:win && powershell -Command "Start-Process dist\\\"TallyPrime Gold Setup 1.0.0.exe\\\" -ArgumentList \\\"/S\\\" -Wait"', (err) => {
+      if (err) console.warn('[System Update] Background installer warning:', err.message);
+      else console.log('[System Update] Successfully rebuilt and updated desktop app on PC!');
+    });
+
+    res.json({
+      success: true,
+      message: 'Successfully updated application files from GitHub! The PC installation is being refreshed.',
+      details: pullOut
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: `Update error: ${err.message}`
+    });
   }
 });
 

@@ -2530,6 +2530,53 @@
         <button type="button" onclick="closeModal('helpMenuModal')" class="text-slate-300 hover:text-white">✕</button>
       </div>
       <div class="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+        <!-- Live Product Update Card (Tally.NET / Direct PC Update) -->
+        <div class="bg-gradient-to-r from-blue-900/10 via-amber-500/10 to-emerald-500/10 border border-slate-300 rounded-lg p-4 space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <i data-lucide="refresh-cw" class="w-4 h-4 text-blue-600"></i>
+              <h4 class="font-bold text-slate-900 text-sm">TallyPrime Release &amp; Direct PC Update</h4>
+            </div>
+            <div id="update-online-badge" class="flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-300">
+              <span class="w-2 h-2 rounded-full bg-slate-400 inline-block"></span>
+              <span>Checking Status...</span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="p-2.5 bg-white rounded border border-slate-200">
+              <span class="text-slate-500 block text-[10px]">Current Installed Release</span>
+              <span class="font-bold text-slate-900 font-mono" id="update-current-ver">Release 5.0 (v1.0.0)</span>
+              <span class="text-slate-500 font-mono text-[10px] block" id="update-current-commit">Commit: 03810f9</span>
+            </div>
+            <div class="p-2.5 bg-white rounded border border-slate-200">
+              <span class="text-slate-500 block text-[10px]">Remote GitHub Repository</span>
+              <span class="font-bold text-blue-700 font-mono text-[11px] truncate block" id="update-remote-status">Checking remote...</span>
+              <span class="text-slate-500 font-mono text-[10px] block truncate" id="update-remote-commit">-</span>
+            </div>
+          </div>
+
+          <div id="update-status-msg" class="p-2.5 bg-blue-50/70 border border-blue-200 rounded text-[11px] text-blue-900 flex items-center space-x-2">
+            <i data-lucide="info" class="w-3.5 h-3.5 text-blue-600 shrink-0"></i>
+            <span id="update-status-text">Click "Check for Updates" to verify against the remote repository.</span>
+          </div>
+
+          <div class="flex items-center space-x-2 pt-0.5">
+            <button type="button" onclick="checkForUpdates()" id="btn-check-update" class="px-3 py-1.5 bg-[#1f3a52] hover:bg-[#162a3b] text-white rounded font-bold text-xs shadow-sm transition flex items-center space-x-1.5">
+              <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-amber-400"></i>
+              <span>Check for Updates</span>
+            </button>
+            <button type="button" onclick="performDirectUpdate()" id="btn-do-update" class="hidden px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-xs shadow-sm transition flex items-center space-x-1.5">
+              <i data-lucide="download-cloud" class="w-3.5 h-3.5 text-white"></i>
+              <span>Direct Update &amp; Install on PC</span>
+            </button>
+            <span id="update-spinner" class="hidden text-slate-500 font-mono text-[11px] flex items-center space-x-1">
+              <i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin text-blue-600"></i>
+              <span>Connecting...</span>
+            </span>
+          </div>
+        </div>
+
         <div>
           <h4 class="font-bold text-slate-900 text-sm mb-2">Canonical Function Keys</h4>
           <div class="grid grid-cols-2 gap-2 font-mono">

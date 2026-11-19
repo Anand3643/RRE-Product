@@ -164,6 +164,13 @@ async function createWindow() {
       label: 'Help',
       submenu: [
         {
+          label: 'Check for Updates...',
+          click: () => {
+            mainWindow.webContents.executeJavaScript('window.openHelpModal && window.openHelpModal(); setTimeout(() => window.checkForUpdates && window.checkForUpdates(), 300);');
+          }
+        },
+        { type: 'separator' },
+        {
           label: 'About TallyPrime Gold',
           click: () => {
             dialog.showMessageBox(mainWindow, {

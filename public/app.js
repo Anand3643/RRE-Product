@@ -1977,7 +1977,109 @@ function openOtherVouchersModal() { openModal('otherVouchersModal'); }
 function openStockJournalModal() { openVoucherScreen('Journal'); }
 function openDataMenuModal() { openModal('dataMenuModal'); }
 function openExchangeMenuModal() { openModal('exchangeMenuModal'); }
-function openHelpModal() { openModal('helpMenuModal'); }
+function openHelpModal() {
+  openModal('helpMenuModal');
+  setTimeout(() => checkForUpdates(), 200);
+}
+
+async function checkForUpdates() {
+  const spinner = document.getElementById('update-spinner');
+  const btnCheck = document.getElementById('btn-check-update');
+  const btnDoUpdate = document.getElementById('btn-do-update');
+  const badge = document.getElementById('update-online-badge');
+  const statusMsg = document.getElementById('update-status-msg');
+  const statusText = document.getElementById('update-status-text');
+  const remoteStatus = document.getElementById('update-remote-status');
+  const remoteCommit = document.getElementById('update-remote-commit');
+  const currentCommit = document.getElementById('update-current-commit');
+
+  if (spinner) spinner.classList.remove('hidden');
+  if (btnCheck) btnCheck.disabled = true;
+
+  try {
+    const res = await fetch(`${API_BASE}/system/update-status`);
+    const data = await res.json();
+
+    if (currentCommit) currentCommit.textContent = `Commit: ${data.current_commit || '03810f9'}`;
+
+    if (!data.is_online) {
+      if (badge) {
+        badge.className = 'flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300';
+        badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-500 inline-block"></span><span>Offline Mode</span>';
+      }
+      if (remoteStatus) remoteStatus.textContent = 'Offline (No Connection)';
+      if (remoteCommit) remoteCommit.textContent = 'Local SQLite Active';
+      if (statusMsg) statusMsg.className = 'p-2.5 bg-amber-50 border border-amber-200 rounded text-[11px] text-amber-900 flex items-center space-x-2';
+      if (statusText) statusText.textContent = 'PC is in 100% offline mode. Connect your PC to the internet to check for updates directly.';
+      if (btnDoUpdate) btnDoUpdate.classList.add('hidden');
+      return;
+    }
+
+    // Online
+    if (badge) {
+      badge.className = 'flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300';
+      badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500 inline-block animate-pulse"></span><span>Online Connected</span>';
+    }
+
+    if (remoteStatus) remoteStatus.textContent = `Latest: ${data.remote_commit}`;
+    if (remoteCommit) remoteCommit.textContent = data.remote_message ? `"${data.remote_message.slice(0, 32)}..."` : '-';
+
+    if (data.update_available) {
+      if (statusMsg) statusMsg.className = 'p-2.5 bg-emerald-50 border border-emerald-300 rounded text-[11px] text-emerald-950 flex items-center space-x-2';
+      if (statusText) statusText.innerHTML = `<strong>Update Available!</strong> Release <code>${data.remote_commit}</code> is available. Click below to install directly on your PC.`;
+      if (btnDoUpdate) btnDoUpdate.classList.remove('hidden');
+    } else {
+      if (statusMsg) statusMsg.className = 'p-2.5 bg-blue-50 border border-blue-200 rounded text-[11px] text-blue-900 flex items-center space-x-2';
+      if (statusText) statusText.textContent = 'Your TallyPrime Gold installation is completely up to date!';
+      if (btnDoUpdate) btnDoUpdate.classList.add('hidden');
+    }
+  } catch (err) {
+    if (badge) {
+      badge.className = 'flex items-center space-x-1 px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-300';
+      badge.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-500 inline-block"></span><span>Check Failed</span>';
+    }
+    if (statusText) statusText.textContent = `Unable to verify update status: ${err.message}`;
+  } finally {
+    if (spinner) spinner.classList.add('hidden');
+    if (btnCheck) btnCheck.disabled = false;
+    if (window.lucide) window.lucide.createIcons();
+  }
+}
+
+async function performDirectUpdate() {
+  const btnDoUpdate = document.getElementById('btn-do-update');
+  const statusText = document.getElementById('update-status-text');
+
+  if (!confirm('Download and install the latest TallyPrime update directly on this PC? All your company accounting data in company.db will remain 100% intact.')) {
+    return;
+  }
+
+  if (btnDoUpdate) {
+    btnDoUpdate.disabled = true;
+    btnDoUpdate.innerHTML = '<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Updating PC Application...</span>';
+    if (window.lucide) window.lucide.createIcons();
+  }
+  if (statusText) statusText.textContent = 'Pulling latest release from GitHub and applying updates to your PC installation...';
+
+  try {
+    const res = await fetch(`${API_BASE}/system/perform-update`, { method: 'POST' });
+    const data = await res.json();
+    if (data.success) {
+      alert('TallyPrime has been updated successfully to the latest version! The application will now reload.');
+      location.reload();
+    } else {
+      alert(`Update failed: ${data.error || 'Unknown error'}`);
+    }
+  } catch (err) {
+    alert(`Update request error: ${err.message}`);
+  } finally {
+    if (btnDoUpdate) {
+      btnDoUpdate.disabled = false;
+      btnDoUpdate.innerHTML = '<i data-lucide="download-cloud" class="w-3.5 h-3.5"></i><span>Direct Update &amp; Install on PC</span>';
+      if (window.lucide) window.lucide.createIcons();
+    }
+  }
+}
 function openF11FeaturesModal() { openModal('f11FeaturesModal'); }
 function openF12ConfigModal() { openModal('f12ConfigModal'); }
 
