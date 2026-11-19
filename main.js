@@ -78,10 +78,15 @@ async function createWindow() {
         {
           label: 'Alter Company Profile (F3)',
           accelerator: 'F3',
-          click: () => mainWindow.webContents.executeJavaScript('window.openModal && window.openModal("alterCompanyModal")')
+          click: () => mainWindow.webContents.executeJavaScript('window.openAlterCompany ? window.openAlterCompany() : window.openModal("alterCompanyModal")')
         },
         {
-          label: 'Shut Company / Login (Ctrl+F3)',
+          label: 'Users and Passwords (Alt+K)',
+          accelerator: 'Alt+K',
+          click: () => mainWindow.webContents.executeJavaScript('window.openUserManagement && window.openUserManagement()')
+        },
+        {
+          label: 'Shut Company / Switch User (Ctrl+F3)',
           accelerator: 'Ctrl+F3',
           click: () => mainWindow.webContents.executeJavaScript('window.showLoginView && window.showLoginView()')
         },

@@ -2,7 +2,21 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const http = require('http');
-const { initDb, get, all, resetCleanCompany, loadDemoCompany, updateCompanyInfo } = require('./core/db');
+const {
+  initDb,
+  get,
+  all,
+  resetCleanCompany,
+  loadDemoCompany,
+  updateCompanyInfo,
+  authenticateUser,
+  getAllUsers,
+  createUser,
+  updateUser,
+  deleteUser,
+  getLoginAuditTrail,
+  getRolePermissions
+} = require('./core/db');
 
 // Modular Routers
 const dashboardRouter = require('./modules/dashboard/dashboardApi');
@@ -91,21 +105,75 @@ app.post('/api/company/update', async (req, res) => {
   }
 });
 
+// ========================================================
+// TALLY SECURITY CONTROL & MULTI-USER API
+// ========================================================
+
 app.post('/api/auth/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    const user = username && username.trim() ? username.trim() : 'Administrator';
-    res.json({
-      success: true,
-      data: {
-        user,
-        role: 'Administrator',
-        token: 'tally_session_' + Date.now()
-      }
-    });
+    const clientMeta = {
+      ip: req.ip || req.connection?.remoteAddress || '127.0.0.1',
+      agent: req.headers['user-agent'] || 'TallyClient'
+    };
+    const result = await authenticateUser(username, password, clientMeta);
+    if (!result.success) {
+      return res.status(401).json(result);
+    }
+    res.json(result);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+app.get('/api/auth/users', async (req, res) => {
+  try {
+    const users = await getAllUsers();
+    res.json({ success: true, data: users });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/auth/users', async (req, res) => {
+  try {
+    const result = await createUser(req.body);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/api/auth/users/:id', async (req, res) => {
+  try {
+    const result = await updateUser(req.params.id, req.body);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+app.delete('/api/auth/users/:id', async (req, res) => {
+  try {
+    const result = await deleteUser(req.params.id);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/auth/audit-log', async (req, res) => {
+  try {
+    const logs = await getLoginAuditTrail(req.query.limit ? parseInt(req.query.limit) : 50);
+    res.json({ success: true, data: logs });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/auth/permissions', (req, res) => {
+  const role = req.query.role || 'Data Entry';
+  res.json({ success: true, data: getRolePermissions(role) });
 });
 
 // 2. Mount Modular Subsystems

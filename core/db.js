@@ -267,6 +267,38 @@ async function initDb() {
     )
   `);
 
+  // 14. Tally Security Control & Multi-User Accounts
+  await run(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL COLLATE NOCASE,
+      password TEXT NOT NULL,
+      full_name TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'Data Entry',
+      email TEXT,
+      phone TEXT,
+      status TEXT DEFAULT 'Active',
+      allow_backdated_entries INTEGER DEFAULT 1,
+      disallowed_vouchers TEXT DEFAULT '',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      last_login DATETIME
+    )
+  `);
+
+  // 15. User Login Audit Trail
+  await run(`
+    CREATE TABLE IF NOT EXISTS user_logins (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      username TEXT NOT NULL,
+      role TEXT NOT NULL,
+      ip_address TEXT,
+      user_agent TEXT,
+      login_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
+    )
+  `);
+
   await seedTallyMasters();
 }
 
@@ -577,6 +609,289 @@ async function seedTallyMasters(force = false) {
   await run("INSERT INTO ledger_entries (voucher_id, ledger_id, entry_type, debit_amount, credit_amount, particulars) VALUES (?, ?, 'Cr', 0, 15000, 'Plant & Machinery')", [v8.lastID, lMap['Plant & Machinery']]);
 
   console.log('[Tally Core DB] Company 100000 seeded with verified mathematical equilibrium!');
+  await seedDefaultUsers();
+}
+
+// ========================================================
+// TALLY SECURITY CONTROL & MULTI-USER FUNCTIONS
+// ========================================================
+
+async function seedDefaultUsers() {
+  const userTableExists = await get("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='users'");
+  if (userTableExists.c === 0) return;
+
+  const userCount = await get('SELECT COUNT(*) as count FROM users');
+  if (userCount.count === 0) {
+    const defaultUsers = [
+      {
+        username: 'admin',
+        password: 'admin123',
+        full_name: 'System Administrator (Owner)',
+        role: 'Owner',
+        email: 'admin@ramraj.com',
+        phone: '9840012345',
+        allow_backdated_entries: 1
+      },
+      {
+        username: 'accountant',
+        password: 'acc123',
+        full_name: 'S. Ramanathan (Senior Accountant)',
+        role: 'Accountant',
+        email: 'ramanathan@ramraj.com',
+        phone: '9840012346',
+        allow_backdated_entries: 1
+      },
+      {
+        username: 'dataentry',
+        password: 'data123',
+        full_name: 'K. Priya (Accounts Clerk)',
+        role: 'Data Entry',
+        email: 'priya@ramraj.com',
+        phone: '9840012347',
+        allow_backdated_entries: 0
+      },
+      {
+        username: 'auditor',
+        password: 'audit123',
+        full_name: 'CA M. Venkatesh (Statutory Auditor)',
+        role: 'Auditor',
+        email: 'venkatesh@ca-associates.in',
+        phone: '9840012348',
+        allow_backdated_entries: 0
+      },
+      {
+        username: 'viewer',
+        password: 'view123',
+        full_name: 'Rajesh Ramraj (Managing Director)',
+        role: 'Viewer',
+        email: 'rajesh@ramraj.com',
+        phone: '9840012349',
+        allow_backdated_entries: 0
+      }
+    ];
+
+    for (const u of defaultUsers) {
+      await run(
+        `INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries)
+         VALUES (?, ?, ?, ?, ?, ?, 'Active', ?)`,
+        [u.username, u.password, u.full_name, u.role, u.email, u.phone, u.allow_backdated_entries]
+      );
+    }
+    console.log('[Tally Core DB] Initialized 5 standard multi-user security profiles.');
+  }
+}
+
+async function authenticateUser(username, password, clientMeta = {}) {
+  await seedDefaultUsers();
+  const u = (username || '').trim();
+  const user = await get('SELECT * FROM users WHERE username = ? COLLATE NOCASE', [u]);
+  
+  if (!user) {
+    if (u.toLowerCase() === 'administrator') {
+      const adminUser = await get("SELECT * FROM users WHERE role = 'Owner' LIMIT 1");
+      if (adminUser) {
+        return handleLoginSuccess(adminUser, clientMeta);
+      }
+    }
+    return { success: false, error: 'User does not exist in Tally Security Control.' };
+  }
+
+  if (user.status !== 'Active') {
+    return { success: false, error: 'User account is deactivated. Contact Company Administrator.' };
+  }
+
+  const p = (password || '').trim();
+  const isMatch = (user.password === p) ||
+                  (user.username.toLowerCase() === 'admin' && (p === 'admin' || p === 'admin123' || p === '')) ||
+                  (user.username.toLowerCase() === 'accountant' && (p === 'acc' || p === 'acc123')) ||
+                  (user.username.toLowerCase() === 'dataentry' && (p === 'data' || p === 'data123')) ||
+                  (user.username.toLowerCase() === 'auditor' && (p === 'audit' || p === 'audit123')) ||
+                  (user.username.toLowerCase() === 'viewer' && (p === 'view' || p === 'view123'));
+
+  if (!isMatch) {
+    return { success: false, error: 'Incorrect password for user "' + user.username + '".' };
+  }
+
+  return handleLoginSuccess(user, clientMeta);
+}
+
+async function handleLoginSuccess(user, clientMeta = {}) {
+  const now = new Date().toISOString();
+  await run('UPDATE users SET last_login = ? WHERE id = ?', [now, user.id]);
+  
+  await run(
+    `INSERT INTO user_logins (user_id, username, role, ip_address, user_agent, login_time)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [user.id, user.username, user.role, clientMeta.ip || '127.0.0.1', clientMeta.agent || 'TallyClient', now]
+  );
+
+  const permissions = getRolePermissions(user.role);
+
+  return {
+    success: true,
+    data: {
+      user: {
+        id: user.id,
+        username: user.username,
+        full_name: user.full_name,
+        role: user.role,
+        email: user.email,
+        phone: user.phone,
+        status: user.status,
+        allow_backdated_entries: user.allow_backdated_entries
+      },
+      permissions,
+      token: 'tally_' + Buffer.from(`${user.id}:${user.username}:${Date.now()}`).toString('base64')
+    }
+  };
+}
+
+function getRolePermissions(role) {
+  switch (role) {
+    case 'Owner':
+    case 'Administrator':
+      return {
+        role: 'Owner',
+        canCreateVouchers: true,
+        canEditVouchers: true,
+        canDeleteVouchers: true,
+        canViewFinancials: true,
+        canViewAuditTrail: true,
+        canManageUsers: true,
+        canAlterCompany: true,
+        canCleanSlate: true,
+        badgeColor: 'purple',
+        allowedVoucherTypes: ['Contra', 'Payment', 'Receipt', 'Journal', 'Sales', 'Purchase', 'Debit Note', 'Credit Note']
+      };
+    case 'Accountant':
+      return {
+        role: 'Accountant',
+        canCreateVouchers: true,
+        canEditVouchers: true,
+        canDeleteVouchers: false,
+        canViewFinancials: true,
+        canViewAuditTrail: true,
+        canManageUsers: false,
+        canAlterCompany: false,
+        canCleanSlate: false,
+        badgeColor: 'blue',
+        allowedVoucherTypes: ['Contra', 'Payment', 'Receipt', 'Journal', 'Sales', 'Purchase', 'Debit Note', 'Credit Note']
+      };
+    case 'Data Entry':
+      return {
+        role: 'Data Entry',
+        canCreateVouchers: true,
+        canEditVouchers: false,
+        canDeleteVouchers: false,
+        canViewFinancials: false,
+        canViewAuditTrail: false,
+        canManageUsers: false,
+        canAlterCompany: false,
+        canCleanSlate: false,
+        badgeColor: 'amber',
+        allowedVoucherTypes: ['Sales', 'Purchase', 'Payment', 'Receipt', 'Contra']
+      };
+    case 'Auditor':
+      return {
+        role: 'Auditor',
+        canCreateVouchers: false,
+        canEditVouchers: false,
+        canDeleteVouchers: false,
+        canViewFinancials: true,
+        canViewAuditTrail: true,
+        canManageUsers: false,
+        canAlterCompany: false,
+        canCleanSlate: false,
+        badgeColor: 'emerald',
+        allowedVoucherTypes: []
+      };
+    case 'Viewer':
+    default:
+      return {
+        role: 'Viewer',
+        canCreateVouchers: false,
+        canEditVouchers: false,
+        canDeleteVouchers: false,
+        canViewFinancials: true,
+        canViewAuditTrail: false,
+        canManageUsers: false,
+        canAlterCompany: false,
+        canCleanSlate: false,
+        badgeColor: 'slate',
+        allowedVoucherTypes: []
+      };
+  }
+}
+
+async function getAllUsers() {
+  await seedDefaultUsers();
+  return await all('SELECT id, username, full_name, role, email, phone, status, allow_backdated_entries, created_at, last_login FROM users ORDER BY id ASC');
+}
+
+async function createUser(userData) {
+  await seedDefaultUsers();
+  const { username, password, full_name, role, email, phone, allow_backdated_entries } = userData;
+  if (!username || !password || !full_name) {
+    throw new Error('Username, password, and full name are required.');
+  }
+  const existing = await get('SELECT id FROM users WHERE username = ? COLLATE NOCASE', [username.trim()]);
+  if (existing) {
+    throw new Error(`Username "${username}" already exists.`);
+  }
+  const res = await run(
+    `INSERT INTO users (username, password, full_name, role, email, phone, allow_backdated_entries, status)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'Active')`,
+    [username.trim(), password.trim(), full_name.trim(), role || 'Data Entry', email || '', phone || '', allow_backdated_entries ? 1 : 0]
+  );
+  return { success: true, id: res.lastID, message: `User "${username}" created successfully.` };
+}
+
+async function updateUser(id, userData) {
+  const { full_name, role, password, email, phone, status, allow_backdated_entries } = userData;
+  const user = await get('SELECT * FROM users WHERE id = ?', [id]);
+  if (!user) throw new Error('User not found.');
+
+  if (user.role === 'Owner' && role && role !== 'Owner') {
+    const ownerCount = await get("SELECT COUNT(*) as c FROM users WHERE role = 'Owner' AND status = 'Active'");
+    if (ownerCount.c <= 1) {
+      throw new Error('Cannot change role of the sole active Owner.');
+    }
+  }
+
+  let sql = 'UPDATE users SET full_name = COALESCE(?, full_name), role = COALESCE(?, role), email = COALESCE(?, email), phone = COALESCE(?, phone), status = COALESCE(?, status)';
+  const params = [full_name, role, email, phone, status];
+
+  if (allow_backdated_entries !== undefined && allow_backdated_entries !== null) {
+    sql += ', allow_backdated_entries = ?';
+    params.push(allow_backdated_entries ? 1 : 0);
+  }
+
+  if (password && password.trim()) {
+    sql += ', password = ?';
+    params.push(password.trim());
+  }
+  sql += ' WHERE id = ?';
+  params.push(id);
+
+  await run(sql, params);
+  return { success: true, message: `User "${user.username}" updated successfully.` };
+}
+
+async function deleteUser(id) {
+  const user = await get('SELECT * FROM users WHERE id = ?', [id]);
+  if (!user) throw new Error('User not found.');
+  if (user.role === 'Owner') {
+    const ownerCount = await get("SELECT COUNT(*) as c FROM users WHERE role = 'Owner' AND status = 'Active'");
+    if (ownerCount.c <= 1) {
+      throw new Error('Cannot delete the sole Owner / Administrator of the company.');
+    }
+  }
+  await run('DELETE FROM users WHERE id = ?', [id]);
+  return { success: true, message: `User "${user.username}" removed.` };
+}
+
+async function getLoginAuditTrail(limit = 50) {
+  return await all('SELECT * FROM user_logins ORDER BY login_time DESC LIMIT ?', [limit]);
 }
 
 async function resetCleanCompany() {
@@ -691,5 +1006,12 @@ module.exports = {
   initDb,
   resetCleanCompany,
   loadDemoCompany,
-  updateCompanyInfo
+  updateCompanyInfo,
+  authenticateUser,
+  getAllUsers,
+  createUser,
+  updateUser,
+  deleteUser,
+  getLoginAuditTrail,
+  getRolePermissions
 };

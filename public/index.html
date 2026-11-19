@@ -36,10 +36,15 @@
       <div class="flex items-center space-x-3 text-slate-300">
         <div>Period: <strong class="text-white font-mono">1-Apr-26 to 31-Mar-27</strong></div>
         <div>Date: <strong class="text-amber-300 font-mono" id="top-current-date">1-Jun-2026</strong></div>
-        <div class="hidden sm:flex items-center space-x-1 bg-slate-800/60 px-2 py-0.5 rounded border border-slate-700">
-          <i data-lucide="user" class="w-3 h-3 text-amber-400"></i>
-          <span id="top-user-name" class="text-white font-semibold text-[11px]">Administrator</span>
+        <div id="top-user-badge" class="flex items-center space-x-1.5 bg-slate-800/90 px-2.5 py-0.5 rounded-full border border-slate-700 text-xs shadow-inner">
+          <i data-lucide="shield" class="w-3.5 h-3.5 text-amber-400"></i>
+          <span id="top-user-name" class="text-white font-bold text-[11px]">admin</span>
+          <span id="top-user-role" class="px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase bg-purple-500/30 text-purple-300 border border-purple-500/40">Owner</span>
         </div>
+        <button onclick="openUserManagement()" id="btn-top-users" title="Users & Passwords (Alt+K)" class="px-2 py-1 bg-purple-900/60 hover:bg-purple-800 text-purple-200 border border-purple-700/60 rounded text-[11px] font-bold flex items-center space-x-1 transition shadow-sm">
+          <i data-lucide="users" class="w-3 h-3 text-purple-400"></i>
+          <span>Alt+K: Users</span>
+        </button>
         <button onclick="toggleDashboard()" id="btn-top-dashboard" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-[11px] font-bold flex items-center space-x-1 transition shadow-sm">
           <i data-lucide="layout-dashboard" class="w-3.5 h-3.5"></i>
           <span>Dashboard</span>
@@ -47,9 +52,9 @@
         <a href="/api/export/tally-xml" download class="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded text-[11px] font-bold flex items-center space-x-1 transition shadow-sm">
           <span>Alt+E: XML</span>
         </a>
-        <button onclick="showLoginView()" title="Shut Company & Switch / Login (Ctrl+F3)" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-amber-300 rounded text-[11px] font-bold transition flex items-center space-x-1">
+        <button onclick="showLoginView()" title="Shut Company & Switch User (Ctrl+F3)" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-amber-300 rounded text-[11px] font-bold transition flex items-center space-x-1">
           <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
-          <span>F3: Shut / Switch</span>
+          <span>Ctrl+F3: Switch</span>
         </button>
         <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-white rounded text-[11px] font-semibold transition">
           Esc: Gateway
@@ -108,9 +113,9 @@
   <main class="flex-1 p-5 max-w-7xl w-full mx-auto flex flex-col justify-center items-center">
 
     <!-- ============================================== -->
-    <!-- VIEW -1: TALLYPRIME CLEAN LOGIN & COMPANY SELECT -->
+    <!-- VIEW -1: TALLYPRIME MULTI-USER LOGIN & SECURITY -->
     <!-- ============================================== -->
-    <section id="view-login" class="w-full max-w-lg bg-white border border-slate-300 rounded-xl shadow-2xl overflow-hidden fade-in hidden">
+    <section id="view-login" class="w-full max-w-xl bg-white border border-slate-300 rounded-xl shadow-2xl overflow-hidden fade-in hidden">
       <!-- Window Title Band -->
       <div class="bg-[#1f3a52] text-white px-6 py-4 flex items-center justify-between border-b border-slate-700">
         <div class="flex items-center space-x-3">
@@ -120,15 +125,16 @@
               <span>TallyPrime Gold</span>
               <span class="bg-amber-400 text-slate-900 text-[10px] px-1.5 py-0.2 rounded font-mono font-bold">5.0</span>
             </div>
-            <div class="text-[11px] text-slate-300">Company Selection &amp; Security Control</div>
+            <div class="text-[11px] text-slate-300">Multi-User Security Control &amp; Company Login</div>
           </div>
         </div>
-        <span class="text-[10px] bg-slate-800/80 text-amber-300 px-2 py-1 rounded border border-slate-600 font-mono">
-          Single User / Enterprise
+        <span class="text-[10px] bg-slate-800/80 text-amber-300 px-2.5 py-1 rounded border border-slate-600 font-mono flex items-center space-x-1">
+          <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i>
+          <span>Multi-User Gold</span>
         </span>
       </div>
 
-      <div class="p-6 space-y-5">
+      <div class="p-6 space-y-4">
         <!-- Active Loaded Company Summary Card -->
         <div class="bg-gradient-to-br from-slate-50 to-blue-50/40 p-4 rounded-lg border border-slate-200 space-y-2">
           <div class="flex items-start justify-between">
@@ -151,29 +157,73 @@
           </div>
         </div>
 
+        <!-- Quick Multi-User Role Selector -->
+        <div>
+          <div class="flex items-center justify-between mb-1.5">
+            <label class="text-[10px] font-black text-slate-500 uppercase tracking-wider">Select User Account (Tally Security Control)</label>
+            <span class="text-[10px] text-blue-600 font-semibold cursor-pointer hover:underline" onclick="selectQuickUser('admin')">Default: admin</span>
+          </div>
+          <div class="grid grid-cols-5 gap-1.5" id="quick-user-selector">
+            <button type="button" onclick="selectQuickUser('admin')" id="qu-admin" class="qu-btn active p-2 rounded-lg border border-purple-400 bg-purple-50 text-purple-900 text-center hover:bg-purple-100 transition shadow-sm">
+              <div class="text-xs font-black">👑 admin</div>
+              <div class="text-[9px] font-bold text-purple-700">Owner</div>
+            </button>
+            <button type="button" onclick="selectQuickUser('accountant')" id="qu-accountant" class="qu-btn p-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-center hover:bg-blue-50 hover:text-blue-900 hover:border-blue-300 transition">
+              <div class="text-xs font-black">💼 acc</div>
+              <div class="text-[9px] font-bold text-slate-500">Accountant</div>
+            </button>
+            <button type="button" onclick="selectQuickUser('dataentry')" id="qu-dataentry" class="qu-btn p-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-center hover:bg-amber-50 hover:text-amber-900 hover:border-amber-300 transition">
+              <div class="text-xs font-black">✍️ entry</div>
+              <div class="text-[9px] font-bold text-slate-500">Data Entry</div>
+            </button>
+            <button type="button" onclick="selectQuickUser('auditor')" id="qu-auditor" class="qu-btn p-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-center hover:bg-emerald-50 hover:text-emerald-900 hover:border-emerald-300 transition">
+              <div class="text-xs font-black">🔍 auditor</div>
+              <div class="text-[9px] font-bold text-slate-500">Auditor</div>
+            </button>
+            <button type="button" onclick="selectQuickUser('viewer')" id="qu-viewer" class="qu-btn p-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-center hover:bg-slate-100 hover:text-slate-900 hover:border-slate-400 transition">
+              <div class="text-xs font-black">👁️ viewer</div>
+              <div class="text-[9px] font-bold text-slate-500">Viewer</div>
+            </button>
+          </div>
+          <div id="role-desc-box" class="mt-2 px-3 py-1.5 bg-purple-50/70 border border-purple-200/80 rounded text-[11px] text-purple-900 flex items-center justify-between">
+            <span id="role-desc-text"><strong>Owner Permissions:</strong> Full Administrative access to all vouchers, financial reports, user security & company alteration.</span>
+          </div>
+        </div>
+
         <!-- Login Form -->
-        <form id="form-login" onsubmit="handleLogin(event)" class="space-y-4">
+        <form id="form-login" onsubmit="handleLogin(event)" class="space-y-3">
           <div class="space-y-1">
-            <label class="block text-xs font-bold text-slate-700">Name of User</label>
+            <label class="block text-xs font-bold text-slate-700">Username</label>
             <div class="relative">
-              <input type="text" id="login-username" value="Administrator" required
+              <input type="text" id="login-username" value="admin" required
                      class="w-full border border-slate-300 rounded-lg p-2.5 text-xs font-bold text-slate-800 pl-9 focus:ring-2 focus:ring-blue-500 focus:outline-none">
               <i data-lucide="user" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
             </div>
           </div>
 
           <div class="space-y-1">
-            <label class="block text-xs font-bold text-slate-700">Password</label>
+            <div class="flex items-center justify-between">
+              <label class="block text-xs font-bold text-slate-700">Password</label>
+              <span id="pwd-hint" class="text-[10px] text-slate-400 font-mono">Password: admin123</span>
+            </div>
             <div class="relative">
-              <input type="password" id="login-password" placeholder="Password (Optional for local access)"
-                     class="w-full border border-slate-300 rounded-lg p-2.5 text-xs text-slate-800 pl-9 focus:ring-2 focus:ring-blue-500 focus:outline-none">
+              <input type="password" id="login-password" value="admin123" placeholder="Enter password"
+                     class="w-full border border-slate-300 rounded-lg p-2.5 text-xs text-slate-800 pl-9 pr-9 focus:ring-2 focus:ring-blue-500 focus:outline-none">
               <i data-lucide="lock" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+              <button type="button" onclick="togglePasswordVisibility('login-password')" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600">
+                <i data-lucide="eye" class="w-4 h-4" id="eye-login-password"></i>
+              </button>
             </div>
           </div>
 
-          <div class="pt-2">
-            <button type="submit" class="w-full py-3 bg-[#1f3a52] hover:bg-[#162a3b] text-white rounded-lg font-bold text-xs uppercase tracking-wider shadow-md transition flex items-center justify-center space-x-2">
-              <span>Open Company &amp; Enter Gateway (Enter)</span>
+          <div id="login-error-msg" class="hidden p-2.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-lg font-semibold flex items-center space-x-2">
+            <i data-lucide="alert-circle" class="w-4 h-4 text-rose-600 flex-shrink-0"></i>
+            <span id="login-error-text">Incorrect credentials</span>
+          </div>
+
+          <div class="pt-1">
+            <button type="submit" id="btn-login-submit" class="w-full py-3 bg-[#1f3a52] hover:bg-[#162a3b] text-white rounded-lg font-bold text-xs uppercase tracking-wider shadow-md transition flex items-center justify-center space-x-2">
+              <span>Login &amp; Enter Gateway (Enter)</span>
               <i data-lucide="arrow-right" class="w-4 h-4 text-amber-400"></i>
             </button>
           </div>
@@ -493,18 +543,22 @@
 
           <!-- COMPANY & SYSTEM -->
           <div>
-            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Company &amp; System</div>
+            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Company &amp; Security</div>
             <div class="space-y-0.5">
-              <div onclick="openModal('alterCompanyModal')" class="gateway-item">
+              <div onclick="openUserManagement()" class="gateway-item text-purple-900" id="gw-user-security">
+                <span><span class="hotkey">U</span>sers &amp; Passwords (Alt+K)</span>
+                <span class="text-[10px] text-purple-600 font-mono">Security</span>
+              </div>
+              <div onclick="openAlterCompany()" class="gateway-item" id="gw-alter-company">
                 <span>Al<span class="hotkey">t</span>er Company (F3)</span>
                 <span class="text-[10px] text-slate-400 font-mono">Profile</span>
               </div>
-              <div onclick="startCleanSlate()" class="gateway-item text-emerald-800">
+              <div onclick="startCleanSlate()" class="gateway-item text-emerald-800" id="gw-clean-slate">
                 <span><span class="hotkey">W</span>ipe / Clean Slate (₹0)</span>
                 <span class="text-[10px] text-emerald-600 font-mono">Fresh</span>
               </div>
               <div onclick="showLoginView()" class="gateway-item text-rose-800">
-                <span><span class="hotkey">Q</span>uit / Shut Company</span>
+                <span><span class="hotkey">Q</span>uit / Switch User</span>
                 <span class="text-[10px] text-rose-500 font-mono">Ctrl+F3</span>
               </div>
             </div>
@@ -1374,6 +1428,238 @@
           <button type="submit" class="px-4 py-1.5 bg-[#1f3a52] text-white rounded font-bold hover:bg-[#162a3b]">Accept / Save</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: TALLY SECURITY CONTROL - USERS & PASSWORDS (ALT+K) -->
+  <!-- ============================================== -->
+  <div id="userManagementModal" class="modal-backdrop hidden">
+    <div class="bg-white rounded-lg shadow-2xl max-w-4xl w-full border border-slate-300 overflow-hidden text-xs max-h-[90vh] flex flex-col">
+      <!-- Header -->
+      <div class="bg-[#1f3a52] text-white px-5 py-3 font-bold flex justify-between items-center flex-shrink-0">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="shield-check" class="w-4 h-4 text-amber-400"></i>
+          <span class="text-sm">Tally Security Control &mdash; Users and Passwords (Alt+K)</span>
+        </div>
+        <button onclick="closeModal('userManagementModal')" class="text-slate-300 hover:text-white font-mono text-sm">✕</button>
+      </div>
+
+      <!-- Tab Navigation -->
+      <div class="bg-slate-100 px-5 py-2 border-b border-slate-300 flex items-center justify-between flex-shrink-0">
+        <div class="flex space-x-2">
+          <button type="button" onclick="switchUserTab('users')" id="tab-btn-users" class="px-3 py-1.5 rounded-t font-bold border-b-2 border-blue-600 bg-white text-blue-900 shadow-sm">
+            👥 User Accounts
+          </button>
+          <button type="button" onclick="switchUserTab('audit')" id="tab-btn-audit" class="px-3 py-1.5 rounded-t font-semibold text-slate-600 hover:text-slate-900">
+            📜 Login Audit Trail
+          </button>
+          <button type="button" onclick="switchUserTab('roles')" id="tab-btn-roles" class="px-3 py-1.5 rounded-t font-semibold text-slate-600 hover:text-slate-900">
+            🛡️ Security Levels / Roles
+          </button>
+        </div>
+        <button type="button" onclick="openCreateUserModal()" class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold flex items-center space-x-1 shadow-sm">
+          <i data-lucide="user-plus" class="w-3.5 h-3.5"></i>
+          <span>+ Create User</span>
+        </button>
+      </div>
+
+      <!-- Content Area -->
+      <div class="p-5 overflow-y-auto flex-1">
+        <!-- Tab 1: User Accounts Table -->
+        <div id="sec-tab-users" class="space-y-4">
+          <table class="w-full text-left border-collapse border border-slate-200">
+            <thead>
+              <tr class="bg-slate-100 text-slate-700 text-[11px] uppercase font-bold border-b border-slate-200">
+                <th class="p-2.5">User Name</th>
+                <th class="p-2.5">Full Name</th>
+                <th class="p-2.5">Security Level (Role)</th>
+                <th class="p-2.5">Status</th>
+                <th class="p-2.5">Backdated Entries</th>
+                <th class="p-2.5">Last Login</th>
+                <th class="p-2.5 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="user-accounts-tbody" class="divide-y divide-slate-100 font-mono text-xs">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Tab 2: Login Audit Trail -->
+        <div id="sec-tab-audit" class="space-y-4 hidden">
+          <div class="flex items-center justify-between text-xs text-slate-600 pb-2">
+            <span>Displaying recent login sessions recorded in SQLite <code>user_logins</code> audit trail.</span>
+            <button onclick="loadAuditTrail()" class="text-blue-600 hover:underline font-bold">↻ Refresh</button>
+          </div>
+          <table class="w-full text-left border-collapse border border-slate-200">
+            <thead>
+              <tr class="bg-slate-100 text-slate-700 text-[11px] uppercase font-bold border-b border-slate-200">
+                <th class="p-2.5">Login Timestamp</th>
+                <th class="p-2.5">Username</th>
+                <th class="p-2.5">Role</th>
+                <th class="p-2.5">IP Address</th>
+                <th class="p-2.5">Client User-Agent</th>
+              </tr>
+            </thead>
+            <tbody id="audit-trail-tbody" class="divide-y divide-slate-100 font-mono text-xs">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Tab 3: Security Levels / Roles Matrix -->
+        <div id="sec-tab-roles" class="space-y-4 hidden text-xs">
+          <div class="grid grid-cols-5 gap-3">
+            <div class="p-3 bg-purple-50 border border-purple-200 rounded-lg space-y-1.5">
+              <div class="font-black text-purple-900 flex items-center space-x-1">
+                <span>👑 Owner</span>
+              </div>
+              <p class="text-[11px] text-purple-800">Unrestricted administrative access. Full rights on Vouchers, Masters, Reports, Clean Slate, Alter Company, and User Security.</p>
+              <div class="text-[10px] text-purple-700 font-bold">Default: admin</div>
+            </div>
+
+            <div class="p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-1.5">
+              <div class="font-black text-blue-900 flex items-center space-x-1">
+                <span>💼 Accountant</span>
+              </div>
+              <p class="text-[11px] text-blue-800">Full voucher entry, ledger alterations, BRS, GST reports, Trial Balance, P&amp;L and Balance Sheet. Cannot alter company or manage users.</p>
+              <div class="text-[10px] text-blue-700 font-bold">Default: accountant</div>
+            </div>
+
+            <div class="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-1.5">
+              <div class="font-black text-amber-900 flex items-center space-x-1">
+                <span>✍️ Data Entry</span>
+              </div>
+              <p class="text-[11px] text-amber-800">Operational entry only: Sales, Purchases, Receipts, Payments, and Contra. Strictly blocked from Balance Sheet, P&amp;L, and Company alteration.</p>
+              <div class="text-[10px] text-amber-700 font-bold">Default: dataentry</div>
+            </div>
+
+            <div class="p-3 bg-emerald-50 border border-emerald-200 rounded-lg space-y-1.5">
+              <div class="font-black text-emerald-900 flex items-center space-x-1">
+                <span>🔍 Auditor</span>
+              </div>
+              <p class="text-[11px] text-emerald-800">Statutory inspection mode. Complete read-only view of all Ledgers, Day Book, Balance Sheet, GST and Audit Logs. Cannot create or edit vouchers.</p>
+              <div class="text-[10px] text-emerald-700 font-bold">Default: auditor</div>
+            </div>
+
+            <div class="p-3 bg-slate-50 border border-slate-200 rounded-lg space-y-1.5">
+              <div class="font-black text-slate-900 flex items-center space-x-1">
+                <span>👁️ Viewer</span>
+              </div>
+              <p class="text-[11px] text-slate-700">Executive executive viewing of dashboard, key ratios, and financial summaries. Read-only; cannot create or edit transactions.</p>
+              <div class="text-[10px] text-slate-600 font-bold">Default: viewer</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div class="bg-slate-50 px-5 py-2.5 border-t border-slate-200 flex justify-end space-x-2 flex-shrink-0">
+        <button type="button" onclick="closeModal('userManagementModal')" class="px-4 py-1.5 bg-slate-700 hover:bg-slate-800 text-white rounded font-bold">
+          Close (Esc)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: ADD / EDIT USER DIALOG                  -->
+  <!-- ============================================== -->
+  <div id="userEditModal" class="modal-backdrop hidden">
+    <div class="bg-white rounded-lg shadow-2xl max-w-md w-full border border-slate-300 overflow-hidden text-xs">
+      <div class="bg-[#1f3a52] text-white px-4 py-2.5 font-bold flex justify-between items-center">
+        <span id="user-edit-modal-title">Create New User</span>
+        <button type="button" onclick="closeModal('userEditModal')" class="text-slate-300 hover:text-white">✕</button>
+      </div>
+      <form id="form-user-edit" onsubmit="handleSaveUser(event)" class="p-5 space-y-3">
+        <input type="hidden" id="edit-user-id" value="">
+        <div>
+          <label class="block font-bold text-slate-700 mb-0.5">Username (Login ID) *</label>
+          <input type="text" id="edit-username" required class="w-full border border-slate-300 rounded p-2 font-bold text-slate-900">
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-0.5">Password *</label>
+          <input type="password" id="edit-password" placeholder="Enter password" class="w-full border border-slate-300 rounded p-2 font-mono">
+          <p id="edit-pwd-note" class="text-[10px] text-slate-500 mt-0.5">Leave blank when editing to keep current password.</p>
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-0.5">Full Name (Employee / Official) *</label>
+          <input type="text" id="edit-fullname" required class="w-full border border-slate-300 rounded p-2 text-slate-800">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-0.5">Security Level (Role) *</label>
+            <select id="edit-role" class="w-full border border-slate-300 rounded p-2 font-bold bg-white text-slate-800">
+              <option value="Owner">Owner / Administrator</option>
+              <option value="Accountant">Accountant</option>
+              <option value="Data Entry" selected>Data Entry</option>
+              <option value="Auditor">Auditor</option>
+              <option value="Viewer">Viewer</option>
+            </select>
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-0.5">Account Status</label>
+            <select id="edit-status" class="w-full border border-slate-300 rounded p-2 font-bold bg-white text-slate-800">
+              <option value="Active" selected>Active</option>
+              <option value="Inactive">Inactive / Suspended</option>
+            </select>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block font-bold text-slate-700 mb-0.5">Email (Optional)</label>
+            <input type="email" id="edit-email" class="w-full border border-slate-300 rounded p-2 text-slate-800">
+          </div>
+          <div>
+            <label class="block font-bold text-slate-700 mb-0.5">Phone (Optional)</label>
+            <input type="text" id="edit-phone" class="w-full border border-slate-300 rounded p-2 text-slate-800">
+          </div>
+        </div>
+        <div class="flex items-center space-x-2 pt-1">
+          <input type="checkbox" id="edit-backdated" class="rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+          <label for="edit-backdated" class="font-bold text-slate-700 cursor-pointer">Allow entering back-dated vouchers</label>
+        </div>
+        <div class="pt-3 border-t border-slate-200 flex justify-end space-x-2">
+          <button type="button" onclick="closeModal('userEditModal')" class="px-3 py-1.5 border border-slate-300 rounded font-semibold text-slate-600">Cancel</button>
+          <button type="submit" class="px-4 py-1.5 bg-[#1f3a52] text-white rounded font-bold hover:bg-[#162a3b]">Save User</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: ACCESS DENIED DIALOG (TALLY SECURITY)   -->
+  <!-- ============================================== -->
+  <div id="accessDeniedModal" class="modal-backdrop hidden">
+    <div class="bg-white rounded-lg shadow-2xl max-w-md w-full border border-rose-300 overflow-hidden text-xs">
+      <div class="bg-rose-700 text-white px-4 py-2.5 font-bold flex justify-between items-center">
+        <div class="flex items-center space-x-1.5">
+          <i data-lucide="shield-alert" class="w-4 h-4"></i>
+          <span>Tally Security Control &mdash; Access Restricted</span>
+        </div>
+        <button type="button" onclick="closeModal('accessDeniedModal')" class="text-rose-200 hover:text-white">✕</button>
+      </div>
+      <div class="p-5 space-y-3">
+        <div class="flex items-start space-x-3">
+          <div class="p-2 bg-rose-100 rounded-full text-rose-600 flex-shrink-0">
+            <i data-lucide="lock" class="w-6 h-6"></i>
+          </div>
+          <div>
+            <h4 class="font-bold text-slate-900 text-sm" id="denied-title">Authorization Required</h4>
+            <p class="text-slate-600 mt-1" id="denied-message">Your user account does not have permission to access this module.</p>
+          </div>
+        </div>
+        <div class="p-3 bg-slate-50 border border-slate-200 rounded font-mono text-[11px] text-slate-700 space-y-1">
+          <div>Current User: <strong id="denied-user">user</strong></div>
+          <div>Security Role: <strong id="denied-role">Data Entry</strong></div>
+        </div>
+        <div class="pt-2 flex justify-end">
+          <button type="button" onclick="closeModal('accessDeniedModal')" class="px-4 py-1.5 bg-slate-700 hover:bg-slate-800 text-white rounded font-bold">
+            Understood (Esc)
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 

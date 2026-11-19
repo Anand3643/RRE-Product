@@ -16,11 +16,98 @@ let appState = {
   voucherMode: 'invoice', // 'invoice' or 'manual'
   currentVoucherType: 'Sales',
   currentView: 'view-gateway',
-  activeBankLedgerId: null
+  activeBankLedgerId: null,
+  currentUser: null,
+  permissions: null
 };
 
 // ========================================================
-// 1. INITIALIZATION & DATA LOADING
+// 1. TALLY SECURITY CONTROL & MULTI-USER ENGINE
+// ========================================================
+
+const QUICK_USERS = {
+  admin: {
+    username: 'admin',
+    password: 'admin123',
+    role: 'Owner',
+    desc: '<strong>Owner Permissions:</strong> Full Administrative access to all vouchers, financial reports, user security & company alteration.'
+  },
+  accountant: {
+    username: 'accountant',
+    password: 'acc123',
+    role: 'Accountant',
+    desc: '<strong>Accountant Permissions:</strong> Create & edit all vouchers, view Balance Sheet, P&L, BRS, GST. Restricted from security and company alteration.'
+  },
+  dataentry: {
+    username: 'dataentry',
+    password: 'data123',
+    role: 'Data Entry',
+    desc: '<strong>Data Entry Permissions:</strong> Operational entry only (Sales, Purchases, Payments, Receipts, Contra). Financial statements restricted.'
+  },
+  auditor: {
+    username: 'auditor',
+    password: 'audit123',
+    role: 'Auditor',
+    desc: '<strong>Auditor Permissions:</strong> Statutory inspection mode. Complete read-only view of Ledgers, Day Book, Balance Sheet, GST. Cannot record vouchers.'
+  },
+  viewer: {
+    username: 'viewer',
+    password: 'view123',
+    role: 'Viewer',
+    desc: '<strong>Viewer Permissions:</strong> Executive summary of Dashboard, key ratios, and financial statements. Read-only; cannot record transactions.'
+  }
+};
+
+function selectQuickUser(roleKey) {
+  const profile = QUICK_USERS[roleKey];
+  if (!profile) return;
+
+  // Highlight selected button
+  document.querySelectorAll('#quick-user-selector .qu-btn').forEach(btn => {
+    btn.classList.remove('active', 'border-purple-400', 'bg-purple-50', 'border-blue-400', 'bg-blue-50', 'border-amber-400', 'bg-amber-50', 'border-emerald-400', 'bg-emerald-50', 'border-slate-400', 'bg-slate-100');
+    btn.classList.add('border-slate-200', 'bg-slate-50');
+  });
+
+  const activeBtn = document.getElementById(`qu-${roleKey}`);
+  if (activeBtn) {
+    activeBtn.classList.remove('border-slate-200', 'bg-slate-50');
+    if (roleKey === 'admin') activeBtn.classList.add('active', 'border-purple-400', 'bg-purple-50');
+    else if (roleKey === 'accountant') activeBtn.classList.add('active', 'border-blue-400', 'bg-blue-50');
+    else if (roleKey === 'dataentry') activeBtn.classList.add('active', 'border-amber-400', 'bg-amber-50');
+    else if (roleKey === 'auditor') activeBtn.classList.add('active', 'border-emerald-400', 'bg-emerald-50');
+    else if (roleKey === 'viewer') activeBtn.classList.add('active', 'border-slate-400', 'bg-slate-100');
+  }
+
+  // Populate inputs
+  const uInput = document.getElementById('login-username');
+  const pInput = document.getElementById('login-password');
+  const hintEl = document.getElementById('pwd-hint');
+  const descEl = document.getElementById('role-desc-text');
+  const errEl = document.getElementById('login-error-msg');
+
+  if (uInput) uInput.value = profile.username;
+  if (pInput) pInput.value = profile.password;
+  if (hintEl) hintEl.textContent = `Password: ${profile.password}`;
+  if (descEl) descEl.innerHTML = profile.desc;
+  if (errEl) errEl.classList.add('hidden');
+}
+
+function togglePasswordVisibility(inputId) {
+  const input = document.getElementById(inputId);
+  const icon = document.getElementById(`eye-${inputId}`);
+  if (!input) return;
+  if (input.type === 'password') {
+    input.type = 'text';
+    if (icon) icon.setAttribute('data-lucide', 'eye-off');
+  } else {
+    input.type = 'password';
+    if (icon) icon.setAttribute('data-lucide', 'eye');
+  }
+  if (window.lucide) window.lucide.createIcons();
+}
+
+// ========================================================
+// 2. INITIALIZATION & SESSION LOADING
 // ========================================================
 document.addEventListener('DOMContentLoaded', async () => {
   if (window.lucide) window.lucide.createIcons();
@@ -28,19 +115,134 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadGatewayInfo();
   setupKeyboardShortcuts();
 
-  // If user session exists, go to Gateway; else show clean login & company selection
-  const sessionUser = localStorage.getItem('tally_session_user');
-  if (sessionUser) {
-    updateUserDisplay(sessionUser);
-    showGateway();
-  } else {
-    showLoginView();
+  // Restore saved multi-user session if available
+  const savedSessionStr = localStorage.getItem('tally_user_session');
+  if (savedSessionStr) {
+    try {
+      const session = JSON.parse(savedSessionStr);
+      if (session && session.user && session.permissions) {
+        appState.currentUser = session.user;
+        appState.permissions = session.permissions;
+        updateUserDisplay();
+        applyRolePermissions();
+        showGateway();
+        return;
+      }
+    } catch (e) {
+      localStorage.removeItem('tally_user_session');
+    }
   }
+
+  showLoginView();
 });
 
-function updateUserDisplay(username) {
+function updateUserDisplay() {
+  const user = appState.currentUser || { username: 'admin', role: 'Owner' };
   const userEl = document.getElementById('top-user-name');
-  if (userEl) userEl.textContent = username || 'Administrator';
+  const roleEl = document.getElementById('top-user-role');
+
+  if (userEl) userEl.textContent = user.username;
+  if (roleEl) {
+    roleEl.textContent = user.role;
+    // Apply role-specific color classes
+    roleEl.className = 'px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase border ';
+    switch (user.role) {
+      case 'Owner':
+        roleEl.className += 'bg-purple-500/30 text-purple-300 border-purple-500/40';
+        break;
+      case 'Accountant':
+        roleEl.className += 'bg-blue-500/30 text-blue-300 border-blue-500/40';
+        break;
+      case 'Data Entry':
+        roleEl.className += 'bg-amber-500/30 text-amber-300 border-amber-500/40';
+        break;
+      case 'Auditor':
+        roleEl.className += 'bg-emerald-500/30 text-emerald-300 border-emerald-500/40';
+        break;
+      case 'Viewer':
+      default:
+        roleEl.className += 'bg-slate-500/30 text-slate-300 border-slate-500/40';
+        break;
+    }
+  }
+}
+
+function applyRolePermissions() {
+  const perms = appState.permissions || {};
+  const isOwner = (appState.currentUser?.role === 'Owner');
+
+  // Top header user security button
+  const topUsersBtn = document.getElementById('btn-top-users');
+  if (topUsersBtn) {
+    if (perms.canManageUsers || isOwner) topUsersBtn.classList.remove('hidden');
+    else topUsersBtn.classList.add('hidden');
+  }
+
+  // Gateway items
+  const gwSecurity = document.getElementById('gw-user-security');
+  if (gwSecurity) {
+    if (perms.canManageUsers || isOwner) gwSecurity.classList.remove('hidden');
+    else gwSecurity.classList.add('hidden');
+  }
+
+  const gwClean = document.getElementById('gw-clean-slate');
+  if (gwClean) {
+    if (perms.canCleanSlate || isOwner) gwClean.classList.remove('hidden');
+    else gwClean.classList.add('hidden');
+  }
+
+  const gwAlter = document.getElementById('gw-alter-company');
+  if (gwAlter) {
+    if (perms.canAlterCompany || isOwner) gwAlter.classList.remove('hidden');
+    else gwAlter.classList.add('hidden');
+  }
+
+  // Voucher submission button badge
+  const btnSaveVoucher = document.getElementById('btn-save-voucher');
+  if (btnSaveVoucher) {
+    if (perms.canCreateVouchers) {
+      btnSaveVoucher.disabled = false;
+      btnSaveVoucher.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-slate-600');
+      btnSaveVoucher.classList.add('bg-[#1f3a52]', 'hover:bg-[#162a3b]');
+      btnSaveVoucher.innerHTML = '<span>Accept / Save (Enter)</span><i data-lucide="check" class="w-4 h-4 text-emerald-400"></i>';
+    } else {
+      btnSaveVoucher.disabled = true;
+      btnSaveVoucher.classList.add('opacity-50', 'cursor-not-allowed', 'bg-slate-600');
+      btnSaveVoucher.classList.remove('bg-[#1f3a52]', 'hover:bg-[#162a3b]');
+      btnSaveVoucher.innerHTML = '<span>Read-Only Account</span><i data-lucide="lock" class="w-4 h-4 text-rose-300"></i>';
+    }
+    if (window.lucide) window.lucide.createIcons();
+  }
+}
+
+function checkPermission(permKey, actionName) {
+  const perms = appState.permissions || {};
+  if (perms[permKey] === true) {
+    return true;
+  }
+
+  // Access Denied
+  const titleEl = document.getElementById('denied-title');
+  const msgEl = document.getElementById('denied-message');
+  const userEl = document.getElementById('denied-user');
+  const roleEl = document.getElementById('denied-role');
+
+  if (titleEl) titleEl.textContent = `Access Restricted: ${actionName}`;
+  if (msgEl) {
+    const role = appState.currentUser?.role || 'Guest';
+    let detail = `Your assigned role "${role}" does not have authorization to access ${actionName}.`;
+    if (role === 'Data Entry') {
+      detail += ' Data Entry operators are restricted to accounting vouchers and cannot access Financial Statements or Alter Company.';
+    } else if (role === 'Auditor' || role === 'Viewer') {
+      detail += ' This account is configured for inspection/viewing only.';
+    }
+    msgEl.textContent = detail;
+  }
+  if (userEl) userEl.textContent = appState.currentUser?.username || 'user';
+  if (roleEl) roleEl.textContent = appState.currentUser?.role || 'Data Entry';
+
+  openModal('accessDeniedModal');
+  return false;
 }
 
 function showLoginView() {
@@ -55,20 +257,62 @@ function showLoginView() {
 
 async function handleLogin(e) {
   if (e) e.preventDefault();
-  const username = document.getElementById('login-username')?.value || 'Administrator';
-  localStorage.setItem('tally_session_user', username);
-  const ribbon = document.getElementById('header-ribbon');
-  if (ribbon) ribbon.classList.remove('opacity-40');
-  updateUserDisplay(username);
-  showGateway();
+  const username = document.getElementById('login-username')?.value?.trim() || 'admin';
+  const password = document.getElementById('login-password')?.value || '';
+  const errEl = document.getElementById('login-error-msg');
+  const errText = document.getElementById('login-error-text');
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      if (errEl) errEl.classList.remove('hidden');
+      if (errText) errText.textContent = data.error || 'Invalid credentials or inactive user account.';
+      return;
+    }
+
+    if (errEl) errEl.classList.add('hidden');
+
+    appState.currentUser = data.data.user;
+    appState.permissions = data.data.permissions;
+
+    localStorage.setItem('tally_user_session', JSON.stringify({
+      user: data.data.user,
+      permissions: data.data.permissions,
+      token: data.data.token
+    }));
+
+    const ribbon = document.getElementById('header-ribbon');
+    if (ribbon) ribbon.classList.remove('opacity-40');
+
+    updateUserDisplay();
+    applyRolePermissions();
+    showGateway();
+  } catch (err) {
+    if (errEl) errEl.classList.remove('hidden');
+    if (errText) errText.textContent = 'Connection error: ' + err.message;
+  }
 }
 
 function handleLogout() {
-  localStorage.removeItem('tally_session_user');
+  localStorage.removeItem('tally_user_session');
+  appState.currentUser = null;
+  appState.permissions = null;
   showLoginView();
 }
 
+function openAlterCompany() {
+  if (!checkPermission('canAlterCompany', 'Company Alteration Profile')) return;
+  openModal('alterCompanyModal');
+}
+
 async function startCleanSlate() {
+  if (!checkPermission('canCleanSlate', 'Clean Slate / Books Wipe')) return;
   if (!confirm("Wipe demo vouchers and start with Clean Production Slate? This gives you 0 vouchers and ₹0.00 balances, ready for entering your real business data.")) {
     return;
   }
@@ -93,6 +337,7 @@ async function startCleanSlate() {
 }
 
 async function loadDemoData() {
+  if (!checkPermission('canCleanSlate', 'Load Sample Demo Data')) return;
   if (!confirm("Load Sample Demo Data? This will populate the system with sample screw compressor transactions for demonstration and practice.")) {
     return;
   }
@@ -368,6 +613,9 @@ async function loadDashboard() {
 }
 
 function openReport(reportType) {
+  if (['balance-sheet', 'profit-loss', 'trial-balance', 'ratio-analysis'].includes(reportType)) {
+    if (!checkPermission('canViewFinancials', 'Financial Statements & Ratio Analysis')) return;
+  }
   if (reportType === 'balance-sheet') {
     showView('view-balance-sheet');
     loadBalanceSheet();
@@ -785,6 +1033,10 @@ function recalculateAccountingTotals() {
 // ----------------------------------------------------
 async function handleSaveVoucher(e) {
   e.preventDefault();
+
+  if (!checkPermission('canCreateVouchers', 'Accounting Voucher Entry')) {
+    return;
+  }
 
   const voucherType = document.getElementById('v-select-type').value;
   const voucherNo = document.getElementById('v-no').value;
@@ -1533,9 +1785,15 @@ function setupKeyboardShortcuts() {
       return;
     }
 
+    if (e.altKey && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      openUserManagement();
+      return;
+    }
+
     // Function keys (F3 to F9)
     if (e.ctrlKey && (e.key === 'F3')) { e.preventDefault(); showLoginView(); return; }
-    if (e.key === 'F3') { e.preventDefault(); openModal('alterCompanyModal'); return; }
+    if (e.key === 'F3') { e.preventDefault(); openAlterCompany(); return; }
     if (e.key === 'F4') { e.preventDefault(); openVoucherScreen('Contra'); }
     if (e.key === 'F5') { e.preventDefault(); openVoucherScreen('Payment'); }
     if (e.key === 'F6') { e.preventDefault(); openVoucherScreen('Receipt'); }
@@ -1559,6 +1817,7 @@ function setupKeyboardShortcuts() {
       if (k === 'A') openReport('chart-accounts');
       if (k === 'C') openModal('createLedgerModal');
       if (k === 'I') openModal('createStockModal');
+      if (k === 'U') openUserManagement();
       if (k === 'W') startCleanSlate();
       if (k === 'Q') showLoginView();
     }
@@ -1612,13 +1871,281 @@ function formatDateDisplay(dStr) {
   return `${d.getDate()}-${months[d.getMonth()]}-${d.getFullYear()}`;
 }
 
+// ========================================================
+// 9. TALLY USER MANAGEMENT & SECURITY CONTROL
+// ========================================================
+
+let cachedUsers = [];
+
+async function openUserManagement() {
+  if (!checkPermission('canManageUsers', 'Security Control & User Management')) return;
+  openModal('userManagementModal');
+  switchUserTab('users');
+  await loadUsersList();
+}
+
+function switchUserTab(tabName) {
+  const tabs = ['users', 'audit', 'roles'];
+  tabs.forEach(t => {
+    const btn = document.getElementById(`tab-btn-${t}`);
+    const sec = document.getElementById(`sec-tab-${t}`);
+    if (btn) {
+      if (t === tabName) {
+        btn.className = 'px-3 py-1.5 rounded-t font-bold border-b-2 border-blue-600 bg-white text-blue-900 shadow-sm';
+      } else {
+        btn.className = 'px-3 py-1.5 rounded-t font-semibold text-slate-600 hover:text-slate-900';
+      }
+    }
+    if (sec) {
+      if (t === tabName) sec.classList.remove('hidden');
+      else sec.classList.add('hidden');
+    }
+  });
+
+  if (tabName === 'audit') {
+    loadAuditTrail();
+  }
+}
+
+async function loadUsersList() {
+  const tbody = document.getElementById('user-accounts-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="7" class="p-4 text-center text-slate-400">Loading user accounts...</td></tr>';
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/users`);
+    const data = await res.json();
+    if (!data.success) {
+      tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-rose-500">${data.error || 'Failed to load users'}</td></tr>`;
+      return;
+    }
+
+    cachedUsers = data.data || [];
+    if (cachedUsers.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="p-4 text-center text-slate-400">No users configured.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = cachedUsers.map(u => {
+      let roleBadgeClass = 'bg-slate-100 text-slate-800';
+      if (u.role === 'Owner') roleBadgeClass = 'bg-purple-100 text-purple-900 font-black';
+      else if (u.role === 'Accountant') roleBadgeClass = 'bg-blue-100 text-blue-900 font-bold';
+      else if (u.role === 'Data Entry') roleBadgeClass = 'bg-amber-100 text-amber-900 font-bold';
+      else if (u.role === 'Auditor') roleBadgeClass = 'bg-emerald-100 text-emerald-900 font-bold';
+
+      const statusBadge = u.status === 'Active'
+        ? '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">Active</span>'
+        : '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">Inactive</span>';
+
+      const backdatedBadge = u.allow_backdated_entries
+        ? '<span class="text-emerald-700 font-bold">Yes</span>'
+        : '<span class="text-slate-400 font-bold">No</span>';
+
+      const lastLoginStr = u.last_login ? new Date(u.last_login).toLocaleString('en-IN') : 'Never';
+
+      return `
+        <tr class="hover:bg-slate-50 transition border-b border-slate-100">
+          <td class="p-2.5 font-bold text-slate-900">${u.username}</td>
+          <td class="p-2.5 text-slate-700">${u.full_name}</td>
+          <td class="p-2.5">
+            <span class="px-2 py-0.5 rounded text-[10px] ${roleBadgeClass}">${u.role}</span>
+          </td>
+          <td class="p-2.5">${statusBadge}</td>
+          <td class="p-2.5">${backdatedBadge}</td>
+          <td class="p-2.5 text-slate-500 text-[11px]">${lastLoginStr}</td>
+          <td class="p-2.5 text-right space-x-1.5">
+            <button onclick="openEditUserModal(${u.id})" class="text-blue-600 hover:text-blue-800 font-bold hover:underline">Edit</button>
+            <button onclick="toggleUserStatus(${u.id}, '${u.status}')" class="text-amber-600 hover:text-amber-800 font-bold hover:underline">${u.status === 'Active' ? 'Deactivate' : 'Activate'}</button>
+            ${u.role !== 'Owner' ? `<button onclick="handleDeleteUser(${u.id}, '${u.username}')" class="text-rose-600 hover:text-rose-800 font-bold hover:underline">Delete</button>` : ''}
+          </td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="7" class="p-4 text-center text-rose-500">Error: ${err.message}</td></tr>`;
+  }
+}
+
+function openCreateUserModal() {
+  document.getElementById('user-edit-modal-title').textContent = 'Create New User';
+  document.getElementById('edit-user-id').value = '';
+  document.getElementById('edit-username').value = '';
+  document.getElementById('edit-username').disabled = false;
+  document.getElementById('edit-password').value = '';
+  document.getElementById('edit-password').placeholder = 'Enter password';
+  document.getElementById('edit-pwd-note').classList.add('hidden');
+  document.getElementById('edit-fullname').value = '';
+  document.getElementById('edit-role').value = 'Data Entry';
+  document.getElementById('edit-status').value = 'Active';
+  document.getElementById('edit-email').value = '';
+  document.getElementById('edit-phone').value = '';
+  document.getElementById('edit-backdated').checked = true;
+  openModal('userEditModal');
+}
+
+function openEditUserModal(userId) {
+  const user = cachedUsers.find(u => u.id === userId);
+  if (!user) return;
+
+  document.getElementById('user-edit-modal-title').textContent = `Edit User: ${user.username}`;
+  document.getElementById('edit-user-id').value = user.id;
+  document.getElementById('edit-username').value = user.username;
+  document.getElementById('edit-username').disabled = true;
+  document.getElementById('edit-password').value = '';
+  document.getElementById('edit-password').placeholder = '•••••••• (unchanged)';
+  document.getElementById('edit-pwd-note').classList.remove('hidden');
+  document.getElementById('edit-fullname').value = user.full_name;
+  document.getElementById('edit-role').value = user.role;
+  document.getElementById('edit-status').value = user.status;
+  document.getElementById('edit-email').value = user.email || '';
+  document.getElementById('edit-phone').value = user.phone || '';
+  document.getElementById('edit-backdated').checked = !!user.allow_backdated_entries;
+  openModal('userEditModal');
+}
+
+async function handleSaveUser(e) {
+  e.preventDefault();
+  const id = document.getElementById('edit-user-id').value;
+  const username = document.getElementById('edit-username').value.trim();
+  const password = document.getElementById('edit-password').value.trim();
+  const full_name = document.getElementById('edit-fullname').value.trim();
+  const role = document.getElementById('edit-role').value;
+  const status = document.getElementById('edit-status').value;
+  const email = document.getElementById('edit-email').value.trim();
+  const phone = document.getElementById('edit-phone').value.trim();
+  const allow_backdated_entries = document.getElementById('edit-backdated').checked ? 1 : 0;
+
+  try {
+    let res, data;
+    if (id) {
+      res = await fetch(`${API_BASE}/auth/users/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ full_name, role, status, email, phone, allow_backdated_entries, password })
+      });
+      data = await res.json();
+    } else {
+      if (!password) {
+        alert('Password is required for new users.');
+        return;
+      }
+      res = await fetch(`${API_BASE}/auth/users`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password, full_name, role, status, email, phone, allow_backdated_entries })
+      });
+      data = await res.json();
+    }
+
+    if (!res.ok || !data.success) {
+      alert(`Error: ${data.error || 'Failed to save user'}`);
+      return;
+    }
+
+    alert(data.message || 'User saved successfully.');
+    closeModal('userEditModal');
+    await loadUsersList();
+  } catch (err) {
+    alert(`Request failed: ${err.message}`);
+  }
+}
+
+async function toggleUserStatus(userId, currentStatus) {
+  const newStatus = currentStatus === 'Active' ? 'Inactive' : 'Active';
+  if (!confirm(`Are you sure you want to change user status to "${newStatus}"?`)) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/users/${userId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status: newStatus })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      alert(`Error: ${data.error || 'Failed to update status'}`);
+      return;
+    }
+    await loadUsersList();
+  } catch (err) {
+    alert(`Failed: ${err.message}`);
+  }
+}
+
+async function handleDeleteUser(userId, username) {
+  if (!confirm(`Permanently delete user account "${username}"? This action cannot be undone.`)) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/users/${userId}`, {
+      method: 'DELETE'
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      alert(`Error: ${data.error || 'Failed to delete user'}`);
+      return;
+    }
+    alert(data.message || 'User deleted.');
+    await loadUsersList();
+  } catch (err) {
+    alert(`Failed: ${err.message}`);
+  }
+}
+
+async function loadAuditTrail() {
+  const tbody = document.getElementById('audit-trail-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-slate-400">Loading audit trail...</td></tr>';
+
+  try {
+    const res = await fetch(`${API_BASE}/auth/audit-log?limit=50`);
+    const data = await res.json();
+    if (!data.success || !data.data || data.data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-slate-400">No login events recorded yet.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = data.data.map(l => {
+      let roleBadge = 'bg-slate-100 text-slate-800';
+      if (l.role === 'Owner') roleBadge = 'bg-purple-100 text-purple-900 font-black';
+      else if (l.role === 'Accountant') roleBadge = 'bg-blue-100 text-blue-900 font-bold';
+      else if (l.role === 'Data Entry') roleBadge = 'bg-amber-100 text-amber-900 font-bold';
+      else if (l.role === 'Auditor') roleBadge = 'bg-emerald-100 text-emerald-900 font-bold';
+
+      const timeStr = new Date(l.login_time).toLocaleString('en-IN');
+
+      return `
+        <tr class="hover:bg-slate-50 border-b border-slate-100">
+          <td class="p-2.5 text-slate-800 font-mono text-[11px]">${timeStr}</td>
+          <td class="p-2.5 font-bold text-slate-900">${l.username}</td>
+          <td class="p-2.5"><span class="px-2 py-0.5 rounded text-[10px] ${roleBadge}">${l.role}</span></td>
+          <td class="p-2.5 text-slate-600 font-mono">${l.ip_address || '127.0.0.1'}</td>
+          <td class="p-2.5 text-slate-500 truncate max-w-xs text-[10px]">${l.user_agent || 'Desktop'}</td>
+        </tr>
+      `;
+    }).join('');
+  } catch (err) {
+    tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-rose-500">Error loading audit: ${err.message}</td></tr>`;
+  }
+}
+
 // Window Global Bindings
 window.showLoginView = showLoginView;
 window.handleLogin = handleLogin;
 window.handleLogout = handleLogout;
+window.selectQuickUser = selectQuickUser;
+window.togglePasswordVisibility = togglePasswordVisibility;
 window.startCleanSlate = startCleanSlate;
 window.loadDemoData = loadDemoData;
 window.handleUpdateCompany = handleUpdateCompany;
+window.openAlterCompany = openAlterCompany;
+window.openUserManagement = openUserManagement;
+window.switchUserTab = switchUserTab;
+window.loadUsersList = loadUsersList;
+window.openCreateUserModal = openCreateUserModal;
+window.openEditUserModal = openEditUserModal;
+window.handleSaveUser = handleSaveUser;
+window.toggleUserStatus = toggleUserStatus;
+window.handleDeleteUser = handleDeleteUser;
+window.loadAuditTrail = loadAuditTrail;
 window.showGateway = showGateway;
 window.toggleDashboard = toggleDashboard;
 window.openModal = openModal;
