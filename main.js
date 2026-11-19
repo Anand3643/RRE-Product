@@ -2,6 +2,13 @@ const { app, BrowserWindow, Menu, dialog, shell, globalShortcut } = require('ele
 const path = require('path');
 const fs = require('fs');
 
+// Hardware acceleration fallback - prevents blank screen on PCs without modern GPU/DirectX drivers
+try {
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch('disable-gpu');
+  app.commandLine.appendSwitch('disable-software-rasterizer');
+} catch (e) {}
+
 let mainWindow = null;
 let serverInfo = { port: 4000, host: '127.0.0.1' };
 
@@ -230,10 +237,21 @@ async function createWindow() {
     logDesktop('[Electron] UI loaded successfully!');
   });
 
+  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    if (level >= 2) {
+      logDesktop(`[Renderer Console] ${message} (${sourceId}:${line})`);
+    }
+  });
+
+  mainWindow.webContents.on('render-process-gone', (event, details) => {
+    logDesktop('[Electron] Renderer process terminated:', details);
+  });
+
   logDesktop(`[Electron] Loading target URL: ${targetUrl}`);
   mainWindow.loadURL(targetUrl);
 
   mainWindow.on('closed', () => {
+    logDesktop('[Electron] mainWindow closed.');
     mainWindow = null;
   });
 }
@@ -245,6 +263,7 @@ if (!gotTheLock) {
   app.quit();
 } else {
   app.on('second-instance', () => {
+    logDesktop('[Electron] Second instance requested. Focusing existing window.');
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
@@ -261,7 +280,12 @@ if (!gotTheLock) {
     });
   });
 
+  app.on('before-quit', () => {
+    logDesktop('[Electron] before-quit event fired.');
+  });
+
   app.on('window-all-closed', () => {
+    logDesktop('[Electron] window-all-closed event fired. Quitting application.');
     if (process.platform !== 'darwin') {
       app.quit();
     }
