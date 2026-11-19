@@ -358,43 +358,76 @@ app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Master Server Startup
-async function startServer() {
-  try {
-    await initDb();
+// Master Server Startup with Dynamic Port & Guaranteed Loopback Binding
+let startServerPromise = null;
 
-    // 1. Primary Web Application Server on Port 4000
-    const webServer = app.listen(WEB_PORT, '0.0.0.0', () => {
-      console.log(`=======================================================`);
-      console.log(`✨ TallyPrime Gold (V5 Edition) Running!`);
-      console.log(`👉 Web Interface: http://localhost:${WEB_PORT} (http://127.0.0.1:${WEB_PORT})`);
-      console.log(`📂 Data Storage: data/100000/company.db (Local PC SQLite)`);
-      console.log(`⚡ Offline Mode: 100% Standalone (No Internet Required)`);
-      console.log(`=======================================================`);
-    });
+function startServer(preferredPort = WEB_PORT, preferredHost = '127.0.0.1') {
+  if (startServerPromise) return startServerPromise;
 
-    webServer.on('error', (err) => {
-      if (err.code === 'EADDRINUSE') {
-        console.log(`[Tally Web Server] Port ${WEB_PORT} already running — connected to active local backend.`);
-      } else {
-        console.error('[Tally Web Server] Server error:', err.message);
-      }
-    });
+  startServerPromise = new Promise(async (resolve) => {
+    try {
+      await initDb();
+    } catch (err) {
+      console.error('[Tally Core DB] Database warning during startup:', err.message);
+    }
 
-    // 2. Secondary Tally XML/ODBC Protocol Server on Port 9000
-    const xmlServer = http.createServer((req, res) => {
-      app(req, res);
-    });
+    const host = process.env.HOST || preferredHost;
+    let basePort = parseInt(process.env.PORT || preferredPort, 10);
 
-    xmlServer.listen(TALLY_PORT, '0.0.0.0', () => {
-      console.log(`⚡ Tally Native XML Gateway Active on Port ${TALLY_PORT} (ServerPort=9000)`);
-    }).on('error', (err) => {
-      console.warn(`[Tally Native Gateway] Port ${TALLY_PORT} busy or restricted:`, err.message);
-    });
+    const tryBind = (portToTry) => {
+      const server = http.createServer(app);
 
-  } catch (err) {
-    console.error('Failed to initialize local Tally database:', err.message);
-  }
+      server.on('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+          console.log(`[Tally Web Server] Port ${portToTry} in use. Attempting next available port...`);
+          if (portToTry < basePort + 10) {
+            tryBind(portToTry + 1);
+          } else {
+            console.log(`[Tally Web Server] Assuming existing Tally instance active on port ${basePort}.`);
+            resolve({ port: basePort, host, existing: true });
+          }
+        } else {
+          console.error('[Tally Web Server] Server error:', err.message);
+          resolve({ port: portToTry, host, error: err.message });
+        }
+      });
+
+      server.listen(portToTry, host, () => {
+        console.log(`=======================================================`);
+        console.log(`✨ TallyPrime Gold (V5 Edition) Running!`);
+        console.log(`👉 Web Interface: http://${host}:${portToTry}`);
+        console.log(`📂 Data Storage: data/100000/company.db (Local PC SQLite)`);
+        console.log(`⚡ Offline Mode: 100% Standalone (No Internet Required)`);
+        console.log(`=======================================================`);
+
+        // Start secondary Tally XML / ODBC server on loopback
+        try {
+          const xmlServer = http.createServer((req, res) => app(req, res));
+          xmlServer.listen(TALLY_PORT, host, () => {
+            console.log(`⚡ Tally Native XML Gateway Active on ${host}:${TALLY_PORT}`);
+          }).on('error', (xErr) => {
+            console.warn(`[Tally Native Gateway] Port ${TALLY_PORT} notice:`, xErr.message);
+          });
+        } catch (xErr) {
+          console.warn('[Tally Native Gateway] Could not bind XML port:', xErr.message);
+        }
+
+        resolve({ port: portToTry, host, server });
+      });
+    };
+
+    tryBind(basePort);
+  });
+
+  return startServerPromise;
 }
 
-startServer();
+// Auto-start if invoked directly via `node server.js`
+if (require.main === module) {
+  startServer();
+}
+
+module.exports = {
+  app,
+  startServer
+};

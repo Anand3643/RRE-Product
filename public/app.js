@@ -4,9 +4,19 @@
 
 const API_BASE = '/api';
 
-// Application State
+// Application State with Resilient Offline Defaults
 let appState = {
-  company: {},
+  company: {
+    name: 'Ramraj Enterprises',
+    company_number: '100000',
+    formal_name: 'M/s. RAMRAJ ENTERPRISES',
+    financial_year_from: '2026-04-01',
+    books_beginning_from: '2026-04-01',
+    gstin: '33ANUPS7331M1Z8',
+    state: 'Tamil Nadu',
+    state_code: '33',
+    currency_symbol: '₹'
+  },
   ledgers: [],
   stockItems: [],
   stockGroups: [],
@@ -15,7 +25,7 @@ let appState = {
   uoms: [],
   voucherMode: 'invoice', // 'invoice' or 'manual'
   currentVoucherType: 'Sales',
-  currentView: 'view-gateway',
+  currentView: 'view-login',
   activeBankLedgerId: null,
   currentUser: null,
   permissions: null
@@ -158,32 +168,44 @@ function cycleNextTheme() {
 // ========================================================
 // 2. INITIALIZATION & SESSION LOADING
 // ========================================================
-document.addEventListener('DOMContentLoaded', async () => {
-  initTheme();
-  if (window.lucide) window.lucide.createIcons();
-  await loadMasters();
-  await loadGatewayInfo();
-  setupKeyboardShortcuts();
+document.addEventListener('DOMContentLoaded', () => {
+  try {
+    initTheme();
+    setupKeyboardShortcuts();
+    if (window.lucide) window.lucide.createIcons();
 
-  // Restore saved multi-user session if available
-  const savedSessionStr = localStorage.getItem('tally_user_session');
-  if (savedSessionStr) {
-    try {
-      const session = JSON.parse(savedSessionStr);
-      if (session && session.user && session.permissions) {
-        appState.currentUser = session.user;
-        appState.permissions = session.permissions;
-        updateUserDisplay();
-        applyRolePermissions();
-        showGateway();
-        return;
+    // Check saved session immediately to decide initial view
+    const savedSessionStr = localStorage.getItem('tally_user_session');
+    let hasValidSession = false;
+
+    if (savedSessionStr) {
+      try {
+        const session = JSON.parse(savedSessionStr);
+        if (session && session.user && session.permissions) {
+          appState.currentUser = session.user;
+          appState.permissions = session.permissions;
+          updateUserDisplay();
+          applyRolePermissions();
+          showGateway();
+          hasValidSession = true;
+        }
+      } catch (e) {
+        localStorage.removeItem('tally_user_session');
       }
-    } catch (e) {
-      localStorage.removeItem('tally_user_session');
     }
-  }
 
-  showLoginView();
+    if (!hasValidSession) {
+      showLoginView();
+    }
+  } catch (initErr) {
+    console.error('Initial mount error:', initErr);
+    showLoginView();
+  } finally {
+    // Asynchronously load backend data in background without blocking UI rendering
+    Promise.allSettled([loadGatewayInfo(), loadMasters()]).then(() => {
+      if (window.lucide) window.lucide.createIcons();
+    });
+  }
 });
 
 function updateUserDisplay() {
@@ -453,14 +475,16 @@ async function loadGatewayInfo() {
     const d = json.data;
     appState.company = d.company;
 
-    // Update Top & Gateway DOM
-    const companyTitle = d.company.name || 'Ramraj Enterprises';
-    document.getElementById('top-company-name').textContent = companyTitle;
-    document.getElementById('gw-company-name').textContent = companyTitle;
-    document.getElementById('login-company-name').textContent = companyTitle;
+    // Update Top & Gateway DOM safely
+    const companyTitle = d.company?.name || 'Ramraj Enterprises';
+    const setElText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
 
-    const detailsStr = `Company No: ${d.company.company_number || '100000'} | ${d.company.state || 'Tamil Nadu'} (${d.company.state_code || '33'})`;
-    document.getElementById('login-company-details').textContent = detailsStr;
+    setElText('top-company-name', companyTitle);
+    setElText('gw-company-name', companyTitle);
+    setElText('login-company-name', companyTitle);
+
+    const detailsStr = `Company No: ${d.company?.company_number || '100000'} | ${d.company?.state || 'Tamil Nadu'} (${d.company?.state_code || '33'})`;
+    setElText('login-company-details', detailsStr);
 
     // Status Badges
     const isClean = d.is_clean_slate;
@@ -483,19 +507,21 @@ async function loadGatewayInfo() {
         : 'px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800';
     }
 
-    document.getElementById('top-current-date').textContent = formatDateDisplay(d.current_date);
-    document.getElementById('gateway-date').textContent = formatDateDisplay(d.current_date);
-    document.getElementById('gateway-vouchers-count').textContent = d.total_vouchers;
-    document.getElementById('gateway-ledgers-count').textContent = d.total_ledgers;
+    if (d.current_date) {
+      setElText('top-current-date', formatDateDisplay(d.current_date));
+      setElText('gateway-date', formatDateDisplay(d.current_date));
+    }
+    setElText('gateway-vouchers-count', d.total_vouchers ?? 0);
+    setElText('gateway-ledgers-count', d.total_ledgers ?? 0);
 
-    if (d.company.gstin) {
-      document.getElementById('gw-company-gstin').textContent = `GSTIN: ${d.company.gstin}`;
+    if (d.company?.gstin) {
+      setElText('gw-company-gstin', `GSTIN: ${d.company.gstin}`);
     }
 
     if (d.last_voucher) {
-      document.getElementById('gateway-last-voucher').textContent = `${formatDateDisplay(d.last_voucher.date)} (${d.last_voucher.voucher_no})`;
+      setElText('gateway-last-voucher', `${formatDateDisplay(d.last_voucher.date)} (${d.last_voucher.voucher_no})`);
     } else {
-      document.getElementById('gateway-last-voucher').textContent = 'None';
+      setElText('gateway-last-voucher', 'None');
     }
 
     // Populate Alter Company inputs
@@ -516,22 +542,32 @@ async function loadGatewayInfo() {
 }
 
 async function loadMasters() {
+  const safeFetchJson = async (url) => {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) return { success: false };
+      return await r.json();
+    } catch (e) {
+      return { success: false };
+    }
+  };
+
   try {
     const [ledgersRes, itemsRes, groupsRes, godownsRes, uomRes, centresRes] = await Promise.all([
-      fetch(`${API_BASE}/masters/ledgers`).then(r => r.json()),
-      fetch(`${API_BASE}/masters/stock-items`).then(r => r.json()),
-      fetch(`${API_BASE}/masters/groups`).then(r => r.json()),
-      fetch(`${API_BASE}/masters/godowns`).then(r => r.json()),
-      fetch(`${API_BASE}/masters/uom`).then(r => r.json()),
-      fetch(`${API_BASE}/masters/cost-centres`).then(r => r.json())
+      safeFetchJson(`${API_BASE}/masters/ledgers`),
+      safeFetchJson(`${API_BASE}/masters/stock-items`),
+      safeFetchJson(`${API_BASE}/masters/groups`),
+      safeFetchJson(`${API_BASE}/masters/godowns`),
+      safeFetchJson(`${API_BASE}/masters/uom`),
+      safeFetchJson(`${API_BASE}/masters/cost-centres`)
     ]);
 
-    if (ledgersRes.success) appState.ledgers = ledgersRes.data;
-    if (itemsRes.success) appState.stockItems = itemsRes.data;
-    if (groupsRes.success) appState.groups = groupsRes.data;
-    if (godownsRes.success) appState.godowns = godownsRes.data;
-    if (uomRes.success) appState.uoms = uomRes.data;
-    if (centresRes.success) appState.costCentres = centresRes.data;
+    if (ledgersRes?.success && Array.isArray(ledgersRes.data)) appState.ledgers = ledgersRes.data;
+    if (itemsRes?.success && Array.isArray(itemsRes.data)) appState.stockItems = itemsRes.data;
+    if (groupsRes?.success && Array.isArray(groupsRes.data)) appState.groups = groupsRes.data;
+    if (godownsRes?.success && Array.isArray(godownsRes.data)) appState.godowns = godownsRes.data;
+    if (uomRes?.success && Array.isArray(uomRes.data)) appState.uoms = uomRes.data;
+    if (centresRes?.success && Array.isArray(centresRes.data)) appState.costCentres = centresRes.data;
 
     populateLedgerDropdowns();
     populateStockDropdowns();
@@ -622,6 +658,8 @@ function showView(viewId) {
 }
 
 function showGateway() {
+  const ribbon = document.getElementById('header-ribbon');
+  if (ribbon) ribbon.classList.remove('opacity-40');
   showView('view-gateway');
   loadGatewayInfo();
 }

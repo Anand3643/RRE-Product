@@ -13,22 +13,37 @@ if (isPackaged) {
   dataDir = path.resolve(__dirname, '..', 'data', '100000');
 }
 
-if (!fs.existsSync(dataDir)) {
-  fs.mkdirSync(dataDir, { recursive: true });
+try {
+  if (!fs.existsSync(dataDir)) {
+    fs.mkdirSync(dataDir, { recursive: true });
+  }
+} catch (mErr) {
+  console.warn('[Tally Core DB] Could not create dataDir, falling back to temp:', mErr.message);
+  dataDir = path.join(process.env.TEMP || '.', 'TallyPrimeGold', 'data', '100000');
+  if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 }
 
 const dbPath = path.resolve(dataDir, 'company.db');
 
-// If packaged and db doesn't exist or is empty, copy pre-seeded db from resources
-const needsSeed = isPackaged && (!fs.existsSync(dbPath) || (fs.existsSync(dbPath) && fs.statSync(dbPath).size < 1000));
-if (needsSeed && process.resourcesPath) {
-  const resourceDb = path.join(process.resourcesPath, 'data', '100000', 'company.db');
-  if (fs.existsSync(resourceDb)) {
-    try {
-      fs.copyFileSync(resourceDb, dbPath);
-      console.log(`[Tally Core DB] Pre-seeded company database copied from resources to: ${dbPath}`);
-    } catch (e) {
-      console.warn('[Tally Core DB] Could not copy pre-seeded database, will initialize fresh:', e.message);
+// If packaged and db doesn't exist or is empty, copy pre-seeded db from candidate resources
+const needsSeed = !fs.existsSync(dbPath) || (fs.existsSync(dbPath) && fs.statSync(dbPath).size < 1000);
+if (needsSeed) {
+  const candidateSeeds = [
+    process.resourcesPath ? path.join(process.resourcesPath, 'data', '100000', 'company.db') : null,
+    path.join(__dirname, '..', 'data', '100000', 'company.db'),
+    path.join(__dirname, 'data', '100000', 'company.db'),
+    path.resolve('data', '100000', 'company.db')
+  ].filter(Boolean);
+
+  for (const seedCandidate of candidateSeeds) {
+    if (fs.existsSync(seedCandidate)) {
+      try {
+        fs.copyFileSync(seedCandidate, dbPath);
+        console.log(`[Tally Core DB] Pre-seeded company database copied from ${seedCandidate} to: ${dbPath}`);
+        break;
+      } catch (e) {
+        console.warn(`[Tally Core DB] Could not copy from ${seedCandidate}:`, e.message);
+      }
     }
   }
 }
@@ -71,6 +86,11 @@ const all = (sql, params = []) => {
 
 async function initDb() {
   await run('PRAGMA foreign_keys = ON');
+  try {
+    await run('PRAGMA journal_mode = WAL');
+    await run('PRAGMA synchronous = NORMAL');
+    await run('PRAGMA busy_timeout = 5000');
+  } catch (pErr) {}
 
   // 1. Company Information Master
   await run(`

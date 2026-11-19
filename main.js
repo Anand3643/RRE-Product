@@ -1,49 +1,43 @@
-const { app, BrowserWindow, Menu, dialog, shell } = require('electron');
+const { app, BrowserWindow, Menu, dialog, shell, globalShortcut } = require('electron');
 const path = require('path');
-const http = require('http');
+const fs = require('fs');
 
 let mainWindow = null;
-let serverProcess = null;
+let serverInfo = { port: 4000, host: '127.0.0.1' };
 
-function waitForServer(port, timeoutMs = 25000) {
-  const startTime = Date.now();
-  return new Promise((resolve) => {
-    const check = () => {
-      const req = http.get(`http://127.0.0.1:${port}/api/gateway/info`, (res) => {
-        if (res.statusCode === 200) {
-          resolve();
-        } else {
-          retry();
-        }
-      });
-      req.on('error', () => retry());
-      req.setTimeout(1500, () => { req.destroy(); retry(); });
-      req.end();
-    };
+// Runtime File Logging in %APPDATA%\TallyPrimeGold\desktop_runtime.log
+const appDataRoot = process.env.APPDATA || (process.env.USERPROFILE ? path.join(process.env.USERPROFILE, 'AppData', 'Roaming') : '.');
+const logDir = path.join(appDataRoot, 'TallyPrimeGold');
+try { if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true }); } catch (e) {}
+const logFilePath = path.join(logDir, 'desktop_runtime.log');
 
-    const retry = () => {
-      if (Date.now() - startTime > timeoutMs) {
-        resolve();
-      } else {
-        setTimeout(check, 300);
-      }
-    };
-
-    check();
-  });
+function logDesktop(...args) {
+  const line = `[${new Date().toISOString()}] ${args.map(a => (typeof a === 'object' ? JSON.stringify(a) : a)).join(' ')}\n`;
+  try { fs.appendFileSync(logFilePath, line); } catch (e) {}
+  console.log(...args);
 }
 
-function startBackendServer() {
-  // If server is not already running externally, start in-process
+process.on('uncaughtException', (err) => {
+  logDesktop('[FATAL UNCAUGHT]', err.stack || err.message);
+});
+
+process.on('unhandledRejection', (reason) => {
+  logDesktop('[UNHANDLED REJECTION]', reason);
+});
+
+async function startBackendServer() {
+  logDesktop('[Electron] Initializing in-process backend server on loopback 127.0.0.1...');
   try {
-    require('./server.js');
-    console.log('[Electron] In-process Tally server started.');
+    const backend = require('./server.js');
+    serverInfo = await backend.startServer(4000, '127.0.0.1');
+    logDesktop(`[Electron] Backend server is active at http://${serverInfo.host}:${serverInfo.port}`);
   } catch (err) {
-    console.log('[Electron] Server might already be active:', err.message);
+    logDesktop('[Electron] Backend startup warning:', err.message);
   }
 }
 
 async function createWindow() {
+  logDesktop('[Electron] Creating application window...');
   mainWindow = new BrowserWindow({
     width: 1366,
     height: 820,
@@ -68,38 +62,38 @@ async function createWindow() {
         {
           label: 'Gateway of Tally (Esc)',
           accelerator: 'Esc',
-          click: () => mainWindow.webContents.executeJavaScript('window.showGateway && window.showGateway(); if(window.closeModal) window.closeModal();')
+          click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.showGateway && window.showGateway(); if(window.closeModal) window.closeModal();')
         },
         {
           label: 'Toggle Modern Dashboard (Alt+D)',
           accelerator: 'Alt+D',
-          click: () => mainWindow.webContents.executeJavaScript('window.toggleDashboard && window.toggleDashboard()')
+          click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.toggleDashboard && window.toggleDashboard()')
         },
         { type: 'separator' },
         {
           label: 'Alter Company Profile (F3)',
           accelerator: 'F3',
-          click: () => mainWindow.webContents.executeJavaScript('window.openAlterCompany ? window.openAlterCompany() : window.openModal("alterCompanyModal")')
+          click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openAlterCompany ? window.openAlterCompany() : window.openModal("alterCompanyModal")')
         },
         {
           label: 'Users and Passwords (Alt+K)',
           accelerator: 'Alt+K',
-          click: () => mainWindow.webContents.executeJavaScript('window.openUserManagement && window.openUserManagement()')
+          click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openUserManagement && window.openUserManagement()')
         },
         {
           label: 'Shut Company / Switch User (Ctrl+F3)',
           accelerator: 'Ctrl+F3',
-          click: () => mainWindow.webContents.executeJavaScript('window.showLoginView && window.showLoginView()')
+          click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.showLoginView && window.showLoginView()')
         },
         {
           label: 'Start Clean Slate (₹0 Books)',
-          click: () => mainWindow.webContents.executeJavaScript('window.startCleanSlate && window.startCleanSlate()')
+          click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.startCleanSlate && window.startCleanSlate()')
         },
         { type: 'separator' },
         {
           label: 'Export Tally XML (Alt+E)',
           accelerator: 'Alt+E',
-          click: () => mainWindow.webContents.executeJavaScript('window.exportTallyXml && window.exportTallyXml()')
+          click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.exportTallyXml && window.exportTallyXml()')
         },
         { type: 'separator' },
         {
@@ -112,29 +106,29 @@ async function createWindow() {
     {
       label: 'Vouchers',
       submenu: [
-        { label: 'Contra (F4)', accelerator: 'F4', click: () => mainWindow.webContents.executeJavaScript('window.openVoucher && window.openVoucher("Contra")') },
-        { label: 'Payment (F5)', accelerator: 'F5', click: () => mainWindow.webContents.executeJavaScript('window.openVoucher && window.openVoucher("Payment")') },
-        { label: 'Receipt (F6)', accelerator: 'F6', click: () => mainWindow.webContents.executeJavaScript('window.openVoucher && window.openVoucher("Receipt")') },
-        { label: 'Journal (F7)', accelerator: 'F7', click: () => mainWindow.webContents.executeJavaScript('window.openVoucher && window.openVoucher("Journal")') },
-        { label: 'Sales (F8)', accelerator: 'F8', click: () => mainWindow.webContents.executeJavaScript('window.openVoucher && window.openVoucher("Sales")') },
-        { label: 'Purchase (F9)', accelerator: 'F9', click: () => mainWindow.webContents.executeJavaScript('window.openVoucher && window.openVoucher("Purchase")') },
+        { label: 'Contra (F4)', accelerator: 'F4', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openVoucher && window.openVoucher("Contra")') },
+        { label: 'Payment (F5)', accelerator: 'F5', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openVoucher && window.openVoucher("Payment")') },
+        { label: 'Receipt (F6)', accelerator: 'F6', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openVoucher && window.openVoucher("Receipt")') },
+        { label: 'Journal (F7)', accelerator: 'F7', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openVoucher && window.openVoucher("Journal")') },
+        { label: 'Sales (F8)', accelerator: 'F8', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openVoucher && window.openVoucher("Sales")') },
+        { label: 'Purchase (F9)', accelerator: 'F9', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openVoucher && window.openVoucher("Purchase")') },
         { type: 'separator' },
-        { label: 'Debit Note (Alt+F5)', accelerator: 'Alt+F5', click: () => mainWindow.webContents.executeJavaScript('window.openVoucher && window.openVoucher("Debit Note")') },
-        { label: 'Credit Note (Alt+F6)', accelerator: 'Alt+F6', click: () => mainWindow.webContents.executeJavaScript('window.openVoucher && window.openVoucher("Credit Note")') }
+        { label: 'Debit Note (Alt+F5)', accelerator: 'Alt+F5', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openVoucher && window.openVoucher("Debit Note")') },
+        { label: 'Credit Note (Alt+F6)', accelerator: 'Alt+F6', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openVoucher && window.openVoucher("Credit Note")') }
       ]
     },
     {
       label: 'Reports',
       submenu: [
-        { label: 'Balance Sheet (B)', click: () => mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("balance-sheet")') },
-        { label: 'Profit & Loss (P)', click: () => mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("profit-loss")') },
-        { label: 'Trial Balance (T)', click: () => mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("trial-balance")') },
-        { label: 'Stock Summary (S)', click: () => mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("stock-summary")') },
-        { label: 'Day Book (D)', click: () => mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("day-book")') },
-        { label: 'Ratio Analysis (R)', click: () => mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("ratio-analysis")') },
-        { label: 'GST Portal (G)', click: () => mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("gst-portal")') },
-        { label: 'Outstandings (O)', click: () => mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("outstandings")') },
-        { label: 'Bank Reconciliation (K)', click: () => mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("brs")') }
+        { label: 'Balance Sheet (B)', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("balance-sheet")') },
+        { label: 'Profit & Loss (P)', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("profit-loss")') },
+        { label: 'Trial Balance (T)', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("trial-balance")') },
+        { label: 'Stock Summary (S)', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("stock-summary")') },
+        { label: 'Day Book (D)', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("day-book")') },
+        { label: 'Ratio Analysis (R)', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("ratio-analysis")') },
+        { label: 'GST Portal (G)', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("gst-portal")') },
+        { label: 'Outstandings (O)', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("outstandings")') },
+        { label: 'Bank Reconciliation (K)', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("brs")') }
       ]
     },
     {
@@ -143,16 +137,20 @@ async function createWindow() {
         {
           label: 'Theme & Appearance (Alt+T)',
           accelerator: 'Alt+T',
-          click: () => mainWindow.webContents.executeJavaScript('window.openThemeSelectorModal && window.openThemeSelectorModal()')
+          click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openThemeSelectorModal && window.openThemeSelectorModal()')
         },
         {
           label: 'Cycle Next Color Palette',
-          click: () => mainWindow.webContents.executeJavaScript('window.cycleNextTheme && window.cycleNextTheme()')
+          click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.cycleNextTheme && window.cycleNextTheme()')
         },
         { type: 'separator' },
         { role: 'reload' },
         { role: 'forceReload' },
-        { role: 'toggleDevTools' },
+        {
+          label: 'Toggle Developer Tools',
+          accelerator: 'F12',
+          click: () => mainWindow && mainWindow.webContents.toggleDevTools()
+        },
         { type: 'separator' },
         { role: 'resetZoom' },
         { role: 'zoomIn' },
@@ -167,7 +165,7 @@ async function createWindow() {
         {
           label: 'Check for Updates...',
           click: () => {
-            mainWindow.webContents.executeJavaScript('window.openHelpModal && window.openHelpModal(); setTimeout(() => window.checkForUpdates && window.checkForUpdates(), 300);');
+            mainWindow && mainWindow.webContents.executeJavaScript('window.openHelpModal && window.openHelpModal(); setTimeout(() => window.checkForUpdates && window.checkForUpdates(), 300);');
           }
         },
         { type: 'separator' },
@@ -191,6 +189,12 @@ async function createWindow() {
               : path.join(__dirname, 'data', '100000');
             shell.openPath(dataDir);
           }
+        },
+        {
+          label: 'View Desktop Runtime Log',
+          click: () => {
+            shell.openPath(logFilePath);
+          }
         }
       ]
     }
@@ -199,23 +203,35 @@ async function createWindow() {
   const menu = Menu.buildFromTemplate(menuTemplate);
   Menu.setApplicationMenu(menu);
 
-  // Auto-retry UI load on slow initial cold boot
+  const targetUrl = `http://${serverInfo.host}:${serverInfo.port}`;
+  let loadRetries = 0;
+
+  // Auto-retry UI load on slow initial cold boot (up to 4 retries, then fallback to local file)
   mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-    console.log(`[Electron] UI load retry (${errorCode}: ${errorDescription})`);
-    setTimeout(() => {
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.loadURL('http://127.0.0.1:4000');
-      }
-    }, 800);
+    logDesktop(`[Electron] UI load did-fail-load (${errorCode}: ${errorDescription}), attempt ${loadRetries + 1}`);
+    if (loadRetries < 4) {
+      loadRetries++;
+      setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          logDesktop(`[Electron] Retrying loadURL(${targetUrl})...`);
+          mainWindow.loadURL(targetUrl);
+        }
+      }, 1000);
+    } else {
+      logDesktop('[Electron] Max retries reached. Loading local file fallback...');
+      const localFile = path.join(__dirname, 'public', 'index.html');
+      mainWindow.loadFile(localFile).catch(fErr => {
+        logDesktop('[Electron] Fallback file load error:', fErr.message);
+      });
+    }
   });
 
-  try {
-    await waitForServer(4000, 25000);
-    mainWindow.loadURL('http://127.0.0.1:4000');
-  } catch (err) {
-    console.error('Failed to connect to local server:', err);
-    mainWindow.loadURL('http://127.0.0.1:4000');
-  }
+  mainWindow.webContents.on('did-finish-load', () => {
+    logDesktop('[Electron] UI loaded successfully!');
+  });
+
+  logDesktop(`[Electron] Loading target URL: ${targetUrl}`);
+  mainWindow.loadURL(targetUrl);
 
   mainWindow.on('closed', () => {
     mainWindow = null;
@@ -225,6 +241,7 @@ async function createWindow() {
 // Single instance lock
 const gotTheLock = app.requestSingleInstanceLock();
 if (!gotTheLock) {
+  logDesktop('[Electron] Another instance already running. Exiting secondary instance.');
   app.quit();
 } else {
   app.on('second-instance', () => {
@@ -234,8 +251,9 @@ if (!gotTheLock) {
     }
   });
 
-  app.whenReady().then(() => {
-    startBackendServer();
+  app.whenReady().then(async () => {
+    logDesktop('[Electron] App ready event fired.');
+    await startBackendServer();
     createWindow();
 
     app.on('activate', () => {
