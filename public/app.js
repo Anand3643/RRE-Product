@@ -27,7 +27,127 @@ document.addEventListener('DOMContentLoaded', async () => {
   await loadMasters();
   await loadGatewayInfo();
   setupKeyboardShortcuts();
+
+  // If user session exists, go to Gateway; else show clean login & company selection
+  const sessionUser = localStorage.getItem('tally_session_user');
+  if (sessionUser) {
+    updateUserDisplay(sessionUser);
+    showGateway();
+  } else {
+    showLoginView();
+  }
 });
+
+function updateUserDisplay(username) {
+  const userEl = document.getElementById('top-user-name');
+  if (userEl) userEl.textContent = username || 'Administrator';
+}
+
+function showLoginView() {
+  showView('view-login');
+  const ribbon = document.getElementById('header-ribbon');
+  if (ribbon) ribbon.classList.add('opacity-40');
+  setTimeout(() => {
+    const input = document.getElementById('login-username');
+    if (input) input.focus();
+  }, 100);
+}
+
+async function handleLogin(e) {
+  if (e) e.preventDefault();
+  const username = document.getElementById('login-username')?.value || 'Administrator';
+  localStorage.setItem('tally_session_user', username);
+  const ribbon = document.getElementById('header-ribbon');
+  if (ribbon) ribbon.classList.remove('opacity-40');
+  updateUserDisplay(username);
+  showGateway();
+}
+
+function handleLogout() {
+  localStorage.removeItem('tally_session_user');
+  showLoginView();
+}
+
+async function startCleanSlate() {
+  if (!confirm("Wipe demo vouchers and start with Clean Production Slate? This gives you 0 vouchers and ₹0.00 balances, ready for entering your real business data.")) {
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/company/clean-slate`, { method: 'POST' });
+    const json = await res.json();
+    if (json.success) {
+      alert("Clean slate ready! Your accounting book now has 0 vouchers and ₹0 balances.");
+      await loadMasters();
+      await loadGatewayInfo();
+      if (appState.currentView === 'view-login') {
+        handleLogin();
+      } else {
+        showGateway();
+      }
+    } else {
+      alert("Error: " + (json.error || 'Failed to clean slate'));
+    }
+  } catch (err) {
+    alert("Error resetting to clean slate: " + err.message);
+  }
+}
+
+async function loadDemoData() {
+  if (!confirm("Load Sample Demo Data? This will populate the system with sample screw compressor transactions for demonstration and practice.")) {
+    return;
+  }
+  try {
+    const res = await fetch(`${API_BASE}/company/load-demo`, { method: 'POST' });
+    const json = await res.json();
+    if (json.success) {
+      alert("Sample demo data loaded!");
+      await loadMasters();
+      await loadGatewayInfo();
+      if (appState.currentView === 'view-login') {
+        handleLogin();
+      } else {
+        showGateway();
+      }
+    } else {
+      alert("Error: " + (json.error || 'Failed to load demo data'));
+    }
+  } catch (err) {
+    alert("Error loading demo data: " + err.message);
+  }
+}
+
+async function handleUpdateCompany(e) {
+  e.preventDefault();
+  const form = document.getElementById('form-alter-company');
+  const payload = {
+    name: form['company_name'].value,
+    formal_name: form['formal_name'].value,
+    gstin: form['company_gstin'].value,
+    pan: form['company_pan'].value,
+    state: form['company_state'].value,
+    state_code: form['company_state_code'].value,
+    address: form['company_address'].value,
+    pin_code: form['company_pin'].value
+  };
+
+  try {
+    const res = await fetch(`${API_BASE}/company/update`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const json = await res.json();
+    if (json.success) {
+      closeModal('alterCompanyModal');
+      await loadGatewayInfo();
+      alert("Company profile updated successfully!");
+    } else {
+      alert("Error updating company: " + json.error);
+    }
+  } catch (err) {
+    alert("Error: " + err.message);
+  }
+}
 
 async function loadGatewayInfo() {
   try {
@@ -42,6 +162,32 @@ async function loadGatewayInfo() {
     const companyTitle = d.company.name || 'Ramraj Enterprises';
     document.getElementById('top-company-name').textContent = companyTitle;
     document.getElementById('gw-company-name').textContent = companyTitle;
+    document.getElementById('login-company-name').textContent = companyTitle;
+
+    const detailsStr = `Company No: ${d.company.company_number || '100000'} | ${d.company.state || 'Tamil Nadu'} (${d.company.state_code || '33'})`;
+    document.getElementById('login-company-details').textContent = detailsStr;
+
+    // Status Badges
+    const isClean = d.is_clean_slate;
+    const badgeText = isClean ? 'Clean Slate (₹0)' : 'Sample Demo Data';
+    const badgeClass = isClean
+      ? 'px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+      : 'px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30';
+
+    const topBadge = document.getElementById('top-company-badge');
+    if (topBadge) {
+      topBadge.textContent = badgeText;
+      topBadge.className = badgeClass;
+    }
+
+    const loginBadge = document.getElementById('login-status-badge');
+    if (loginBadge) {
+      loginBadge.textContent = isClean ? 'Clean Production Slate' : 'Sample Demo Data';
+      loginBadge.className = isClean
+        ? 'px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800'
+        : 'px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800';
+    }
+
     document.getElementById('top-current-date').textContent = formatDateDisplay(d.current_date);
     document.getElementById('gateway-date').textContent = formatDateDisplay(d.current_date);
     document.getElementById('gateway-vouchers-count').textContent = d.total_vouchers;
@@ -55,6 +201,19 @@ async function loadGatewayInfo() {
       document.getElementById('gateway-last-voucher').textContent = `${formatDateDisplay(d.last_voucher.date)} (${d.last_voucher.voucher_no})`;
     } else {
       document.getElementById('gateway-last-voucher').textContent = 'None';
+    }
+
+    // Populate Alter Company inputs
+    const altForm = document.getElementById('form-alter-company');
+    if (altForm && d.company) {
+      altForm['company_name'].value = d.company.name || '';
+      altForm['formal_name'].value = d.company.formal_name || '';
+      altForm['company_gstin'].value = d.company.gstin || '';
+      altForm['company_pan'].value = d.company.pan || '';
+      altForm['company_state'].value = d.company.state || 'Tamil Nadu';
+      altForm['company_state_code'].value = d.company.state_code || '33';
+      altForm['company_address'].value = d.company.address || '';
+      altForm['company_pin'].value = d.company.pin_code || '';
     }
   } catch (err) {
     console.error('Failed to load gateway info:', err);
@@ -110,6 +269,7 @@ function populateStockDropdowns() {
 // 2. VIEW MANAGEMENT (GATEWAY, DASHBOARD & REPORTS)
 // ========================================================
 const VIEWS = [
+  'view-login',
   'view-dashboard',
   'view-gateway',
   'view-voucher',
@@ -1373,7 +1533,9 @@ function setupKeyboardShortcuts() {
       return;
     }
 
-    // Function keys (F4 to F9)
+    // Function keys (F3 to F9)
+    if (e.ctrlKey && (e.key === 'F3')) { e.preventDefault(); showLoginView(); return; }
+    if (e.key === 'F3') { e.preventDefault(); openModal('alterCompanyModal'); return; }
     if (e.key === 'F4') { e.preventDefault(); openVoucherScreen('Contra'); }
     if (e.key === 'F5') { e.preventDefault(); openVoucherScreen('Payment'); }
     if (e.key === 'F6') { e.preventDefault(); openVoucherScreen('Receipt'); }
@@ -1397,6 +1559,8 @@ function setupKeyboardShortcuts() {
       if (k === 'A') openReport('chart-accounts');
       if (k === 'C') openModal('createLedgerModal');
       if (k === 'I') openModal('createStockModal');
+      if (k === 'W') startCleanSlate();
+      if (k === 'Q') showLoginView();
     }
   });
 }
@@ -1447,3 +1611,15 @@ function formatDateDisplay(dStr) {
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   return `${d.getDate()}-${months[d.getMonth()]}-${d.getFullYear()}`;
 }
+
+// Window Global Bindings
+window.showLoginView = showLoginView;
+window.handleLogin = handleLogin;
+window.handleLogout = handleLogout;
+window.startCleanSlate = startCleanSlate;
+window.loadDemoData = loadDemoData;
+window.handleUpdateCompany = handleUpdateCompany;
+window.showGateway = showGateway;
+window.toggleDashboard = toggleDashboard;
+window.openModal = openModal;
+window.closeModal = closeModal;

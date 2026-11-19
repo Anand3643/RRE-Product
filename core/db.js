@@ -270,103 +270,135 @@ async function initDb() {
   await seedTallyMasters();
 }
 
-async function seedTallyMasters() {
+async function seedTallyMasters(force = false) {
   const comp = await get('SELECT COUNT(*) as count FROM company_info');
-  if (comp.count > 0) return;
+  if (comp.count > 0 && !force) return;
 
-  console.log('[Tally Core DB] Seeding Statutory Indian Masters for Company 100000...');
-
-  // 1. Company Information
-  await run(`
-    INSERT INTO company_info (company_number, name, formal_name, financial_year_from, books_beginning_from, gstin, pan, address, state, state_code, pin_code)
-    VALUES ('100000', 'Ramraj Enterprises', 'M/s. RAMRAJ ENTERPRISES', '2026-04-01', '2026-04-01', '33ANUPS7331M1Z8', 'ANUPS7331M', '12/4 Industrial Estate, Ambattur', 'Tamil Nadu', '33', '600058')
-  `);
-
-  // 2. Standard Tally 28 Groups (15 Primary + 13 Secondary)
-  const primaryGroups = [
-    { id: 1, name: 'Capital Account', nature: 'Liabilities', aff: 0 },
-    { id: 2, name: 'Loans (Liability)', nature: 'Liabilities', aff: 0 },
-    { id: 3, name: 'Current Liabilities', nature: 'Liabilities', aff: 0 },
-    { id: 4, name: 'Fixed Assets', nature: 'Assets', aff: 0 },
-    { id: 5, name: 'Investments', nature: 'Assets', aff: 0 },
-    { id: 6, name: 'Current Assets', nature: 'Assets', aff: 0 },
-    { id: 7, name: 'Sales Accounts', nature: 'Income', aff: 1 },
-    { id: 8, name: 'Purchase Accounts', nature: 'Expenses', aff: 1 },
-    { id: 9, name: 'Direct Incomes', nature: 'Income', aff: 1 },
-    { id: 10, name: 'Direct Expenses', nature: 'Expenses', aff: 1 },
-    { id: 11, name: 'Indirect Incomes', nature: 'Income', aff: 0 },
-    { id: 12, name: 'Indirect Expenses', nature: 'Expenses', aff: 0 },
-    { id: 13, name: 'Suspense A/c', nature: 'Liabilities', aff: 0 },
-    { id: 14, name: 'Misc. Expenses (ASSET)', nature: 'Assets', aff: 0 },
-    { id: 15, name: 'Branch / Divisions', nature: 'Liabilities', aff: 0 }
-  ];
-
-  for (const g of primaryGroups) {
-    await run(
-      'INSERT INTO account_groups (id, name, nature, parent_id, affects_gross_profit, is_primary) VALUES (?, ?, ?, NULL, ?, 1)',
-      [g.id, g.name, g.nature, g.aff]
-    );
+  if (force) {
+    console.log('[Tally Core DB] Force re-seeding Statutory Indian Masters and Demo Vouchers...');
+  } else {
+    console.log('[Tally Core DB] Seeding Statutory Indian Masters for Company 100000...');
   }
 
-  const subGroups = [
-    { id: 16, name: 'Sundry Debtors', nature: 'Assets', parent: 6, aff: 0 },
-    { id: 17, name: 'Sundry Creditors', nature: 'Liabilities', parent: 3, aff: 0 },
-    { id: 18, name: 'Bank Accounts', nature: 'Assets', parent: 6, aff: 0 },
-    { id: 19, name: 'Cash-in-hand', nature: 'Assets', parent: 6, aff: 0 },
-    { id: 20, name: 'Duties & Taxes', nature: 'Liabilities', parent: 3, aff: 0 },
-    { id: 21, name: 'Stock-in-hand', nature: 'Assets', parent: 6, aff: 0 },
-    { id: 22, name: 'Bank OD A/c', nature: 'Liabilities', parent: 2, aff: 0 },
-    { id: 23, name: 'Secured Loans', nature: 'Liabilities', parent: 2, aff: 0 },
-    { id: 24, name: 'Unsecured Loans', nature: 'Liabilities', parent: 2, aff: 0 },
-    { id: 25, name: 'Deposits (Asset)', nature: 'Assets', parent: 6, aff: 0 },
-    { id: 26, name: 'Loans & Advances (Asset)', nature: 'Assets', parent: 6, aff: 0 },
-    { id: 27, name: 'Provisions', nature: 'Liabilities', parent: 3, aff: 0 },
-    { id: 28, name: 'Reserves & Surplus', nature: 'Liabilities', parent: 1, aff: 0 }
-  ];
+  // 1. Company Information
+  if (comp.count === 0) {
+    await run(`
+      INSERT INTO company_info (company_number, name, formal_name, financial_year_from, books_beginning_from, gstin, pan, address, state, state_code, pin_code)
+      VALUES ('100000', 'Ramraj Enterprises', 'M/s. RAMRAJ ENTERPRISES', '2026-04-01', '2026-04-01', '33ANUPS7331M1Z8', 'ANUPS7331M', '12/4 Industrial Estate, Ambattur', 'Tamil Nadu', '33', '600058')
+    `);
+  }
 
-  for (const g of subGroups) {
-    await run(
-      'INSERT INTO account_groups (id, name, nature, parent_id, affects_gross_profit, is_primary) VALUES (?, ?, ?, ?, ?, 0)',
-      [g.id, g.name, g.nature, g.parent, g.aff]
-    );
+  // 2. Standard Tally 28 Groups (15 Primary + 13 Secondary)
+  const grpCount = await get('SELECT COUNT(*) as count FROM account_groups');
+  if (grpCount.count === 0) {
+    const primaryGroups = [
+      { id: 1, name: 'Capital Account', nature: 'Liabilities', aff: 0 },
+      { id: 2, name: 'Loans (Liability)', nature: 'Liabilities', aff: 0 },
+      { id: 3, name: 'Current Liabilities', nature: 'Liabilities', aff: 0 },
+      { id: 4, name: 'Fixed Assets', nature: 'Assets', aff: 0 },
+      { id: 5, name: 'Investments', nature: 'Assets', aff: 0 },
+      { id: 6, name: 'Current Assets', nature: 'Assets', aff: 0 },
+      { id: 7, name: 'Sales Accounts', nature: 'Income', aff: 1 },
+      { id: 8, name: 'Purchase Accounts', nature: 'Expenses', aff: 1 },
+      { id: 9, name: 'Direct Incomes', nature: 'Income', aff: 1 },
+      { id: 10, name: 'Direct Expenses', nature: 'Expenses', aff: 1 },
+      { id: 11, name: 'Indirect Incomes', nature: 'Income', aff: 0 },
+      { id: 12, name: 'Indirect Expenses', nature: 'Expenses', aff: 0 },
+      { id: 13, name: 'Suspense A/c', nature: 'Liabilities', aff: 0 },
+      { id: 14, name: 'Misc. Expenses (ASSET)', nature: 'Assets', aff: 0 },
+      { id: 15, name: 'Branch / Divisions', nature: 'Liabilities', aff: 0 }
+    ];
+
+    for (const g of primaryGroups) {
+      await run(
+        'INSERT INTO account_groups (id, name, nature, parent_id, affects_gross_profit, is_primary) VALUES (?, ?, ?, NULL, ?, 1)',
+        [g.id, g.name, g.nature, g.aff]
+      );
+    }
+
+    const subGroups = [
+      { id: 16, name: 'Sundry Debtors', nature: 'Assets', parent: 6, aff: 0 },
+      { id: 17, name: 'Sundry Creditors', nature: 'Liabilities', parent: 3, aff: 0 },
+      { id: 18, name: 'Bank Accounts', nature: 'Assets', parent: 6, aff: 0 },
+      { id: 19, name: 'Cash-in-hand', nature: 'Assets', parent: 6, aff: 0 },
+      { id: 20, name: 'Duties & Taxes', nature: 'Liabilities', parent: 3, aff: 0 },
+      { id: 21, name: 'Stock-in-hand', nature: 'Assets', parent: 6, aff: 0 },
+      { id: 22, name: 'Bank OD A/c', nature: 'Liabilities', parent: 2, aff: 0 },
+      { id: 23, name: 'Secured Loans', nature: 'Liabilities', parent: 2, aff: 0 },
+      { id: 24, name: 'Unsecured Loans', nature: 'Liabilities', parent: 2, aff: 0 },
+      { id: 25, name: 'Deposits (Asset)', nature: 'Assets', parent: 6, aff: 0 },
+      { id: 26, name: 'Loans & Advances (Asset)', nature: 'Assets', parent: 6, aff: 0 },
+      { id: 27, name: 'Provisions', nature: 'Liabilities', parent: 3, aff: 0 },
+      { id: 28, name: 'Reserves & Surplus', nature: 'Liabilities', parent: 1, aff: 0 }
+    ];
+
+    for (const g of subGroups) {
+      await run(
+        'INSERT INTO account_groups (id, name, nature, parent_id, affects_gross_profit, is_primary) VALUES (?, ?, ?, ?, ?, 0)',
+        [g.id, g.name, g.nature, g.parent, g.aff]
+      );
+    }
   }
 
   // 3. Units of Measure
-  const units = [
-    { symbol: 'NOS', formal: 'Numbers', dec: 0 },
-    { symbol: 'SET', formal: 'Sets', dec: 0 },
-    { symbol: 'PCS', formal: 'Pieces', dec: 0 },
-    { symbol: 'DRUM', formal: 'Drums', dec: 0 },
-    { symbol: 'KGS', formal: 'Kilograms', dec: 2 },
-    { symbol: 'MTR', formal: 'Metres', dec: 2 }
-  ];
-  for (const u of units) {
-    await run('INSERT INTO units_of_measure (symbol, formal_name, decimal_places) VALUES (?, ?, ?)', [u.symbol, u.formal, u.dec]);
+  const uCount = await get('SELECT COUNT(*) as count FROM units_of_measure');
+  if (uCount.count === 0) {
+    const units = [
+      { symbol: 'NOS', formal: 'Numbers', dec: 0 },
+      { symbol: 'SET', formal: 'Sets', dec: 0 },
+      { symbol: 'PCS', formal: 'Pieces', dec: 0 },
+      { symbol: 'DRUM', formal: 'Drums', dec: 0 },
+      { symbol: 'KGS', formal: 'Kilograms', dec: 2 },
+      { symbol: 'MTR', formal: 'Metres', dec: 2 }
+    ];
+    for (const u of units) {
+      await run('INSERT INTO units_of_measure (symbol, formal_name, decimal_places) VALUES (?, ?, ?)', [u.symbol, u.formal, u.dec]);
+    }
   }
 
   // 4. Godowns / Locations
-  await run("INSERT INTO godowns (name, location) VALUES ('Main Godown (Ambattur)', 'Ambattur Industrial Estate')");
-  await run("INSERT INTO godowns (name, location) VALUES ('Warehouse Guindy', 'Guindy SIDCO, Chennai')");
-  await run("INSERT INTO godowns (name, location) VALUES ('Plant Assembly Floor', 'Shop Floor Unit 2')");
+  const gCount = await get('SELECT COUNT(*) as count FROM godowns');
+  if (gCount.count === 0) {
+    await run("INSERT INTO godowns (id, name, location) VALUES (1, 'Main Godown (Ambattur)', 'Ambattur Industrial Estate')");
+    await run("INSERT INTO godowns (id, name, location) VALUES (2, 'Warehouse Guindy', 'Guindy SIDCO, Chennai')");
+    await run("INSERT INTO godowns (id, name, location) VALUES (3, 'Plant Assembly Floor', 'Shop Floor Unit 2')");
+  }
 
   // 5. Cost Centres
-  await run("INSERT INTO cost_centres (name, category) VALUES ('Compressor Manufacturing Unit', 'Manufacturing')");
-  await run("INSERT INTO cost_centres (name, category) VALUES ('Customer Service & AMC Division', 'Service')");
-  await run("INSERT INTO cost_centres (name, category) VALUES ('General Administration', 'Admin')");
+  const ccCount = await get('SELECT COUNT(*) as count FROM cost_centres');
+  if (ccCount.count === 0) {
+    await run("INSERT INTO cost_centres (id, name, category) VALUES (1, 'Compressor Manufacturing Unit', 'Manufacturing')");
+    await run("INSERT INTO cost_centres (id, name, category) VALUES (2, 'Customer Service & AMC Division', 'Service')");
+    await run("INSERT INTO cost_centres (id, name, category) VALUES (3, 'General Administration', 'Admin')");
+  }
 
   // 6. Stock Groups
-  await run("INSERT INTO stock_groups (name) VALUES ('Screw Compressors')");
-  await run("INSERT INTO stock_groups (name) VALUES ('Spare Parts & Consumables')");
-  await run("INSERT INTO stock_groups (name) VALUES ('Service Kits & Lubes')");
+  const sgCount = await get('SELECT COUNT(*) as count FROM stock_groups');
+  if (sgCount.count === 0) {
+    await run("INSERT INTO stock_groups (id, name) VALUES (1, 'Screw Compressors')");
+    await run("INSERT INTO stock_groups (id, name) VALUES (2, 'Spare Parts & Consumables')");
+    await run("INSERT INTO stock_groups (id, name) VALUES (3, 'Service Kits & Lubes')");
+  }
 
   // 7. Stock Items Master
+  const sgRows = await all('SELECT id, name FROM stock_groups');
+  const sgMap = {};
+  sgRows.forEach(r => { sgMap[r.name] = r.id; });
+
+  const uomRows = await all('SELECT id, symbol FROM units_of_measure');
+  const uomMap = {};
+  uomRows.forEach(r => { uomMap[r.symbol] = r.id; });
+
+  const gRows = await all('SELECT id, name FROM godowns');
+  const defaultGodownId = gRows[0]?.id || 1;
+
   const stockItems = [
-    { name: 'RRE Screw Compressor 15 HP (Air-Cooled)', group: 1, uom: 2, hsn: '84148011', gst: 18, cost: 230000, price: 345000, oQty: 4, oRate: 230000 },
-    { name: 'RRE Screw Compressor 30 HP (VFD Speed)', group: 1, uom: 2, hsn: '84148011', gst: 18, cost: 395000, price: 580000, oQty: 2, oRate: 395000 },
-    { name: 'Airend Assembly Rotor 15HP', group: 2, uom: 1, hsn: '84149090', gst: 18, cost: 78000, price: 110000, oQty: 8, oRate: 78000 },
-    { name: 'Air-Oil Separator Element 15/30HP', group: 2, uom: 1, hsn: '84213920', gst: 18, cost: 2600, price: 4800, oQty: 25, oRate: 2600 },
-    { name: 'Screw Compressor Oil Filter Spin-On', group: 2, uom: 1, hsn: '84212900', gst: 18, cost: 850, price: 1650, oQty: 30, oRate: 850 },
-    { name: 'RRE Ultra-Lube Synthetic Compressor Oil 20L', group: 3, uom: 4, hsn: '27101990', gst: 18, cost: 6100, price: 9200, oQty: 18, oRate: 6100 }
+    { name: 'RRE Screw Compressor 15 HP (Air-Cooled)', group: sgMap['Screw Compressors'] || sgRows[0]?.id, uom: uomMap['SET'] || uomRows[0]?.id, hsn: '84148011', gst: 18, cost: 230000, price: 345000, oQty: 4, oRate: 230000 },
+    { name: 'RRE Screw Compressor 30 HP (VFD Speed)', group: sgMap['Screw Compressors'] || sgRows[0]?.id, uom: uomMap['SET'] || uomRows[0]?.id, hsn: '84148011', gst: 18, cost: 395000, price: 580000, oQty: 2, oRate: 395000 },
+    { name: 'Airend Assembly Rotor 15HP', group: sgMap['Spare Parts & Consumables'] || sgRows[1]?.id, uom: uomMap['NOS'] || uomRows[0]?.id, hsn: '84149090', gst: 18, cost: 78000, price: 110000, oQty: 8, oRate: 78000 },
+    { name: 'Air-Oil Separator Element 15/30HP', group: sgMap['Spare Parts & Consumables'] || sgRows[1]?.id, uom: uomMap['NOS'] || uomRows[0]?.id, hsn: '84213920', gst: 18, cost: 2600, price: 4800, oQty: 25, oRate: 2600 },
+    { name: 'Screw Compressor Oil Filter Spin-On', group: sgMap['Spare Parts & Consumables'] || sgRows[1]?.id, uom: uomMap['NOS'] || uomRows[0]?.id, hsn: '84212900', gst: 18, cost: 850, price: 1650, oQty: 30, oRate: 850 },
+    { name: 'RRE Ultra-Lube Synthetic Compressor Oil 20L', group: sgMap['Service Kits & Lubes'] || sgRows[2]?.id, uom: uomMap['DRUM'] || uomRows[3]?.id, hsn: '27101990', gst: 18, cost: 6100, price: 9200, oQty: 18, oRate: 6100 }
   ];
 
   for (const it of stockItems) {
@@ -379,6 +411,11 @@ async function seedTallyMasters() {
   }
 
   const totalStockVal = stockItems.reduce((acc, cur) => acc + (cur.oQty * cur.oRate), 0); // 25,34,300
+
+  // Stock items lookup map
+  const itemRows = await all('SELECT id, name FROM stock_items');
+  const itMap = {};
+  itemRows.forEach(r => { itMap[r.name] = r.id; });
 
   // 8. Standard Ledgers with Equilibrium Opening Balances:
   // Total Assets = Cash(75k) + Bank(1250k) + Fixed Assets(770k) + Debtors(250k) + Stock(2534300) = 48,79,300 Dr
@@ -461,7 +498,7 @@ async function seedTallyMasters() {
   await run("INSERT INTO ledger_entries (voucher_id, ledger_id, entry_type, debit_amount, credit_amount, particulars) VALUES (?, ?, 'Cr', 0, 345000, 'Sales Account - Compressors')", [v1.lastID, lMap['Sales Account - Compressors']]);
   await run("INSERT INTO ledger_entries (voucher_id, ledger_id, entry_type, debit_amount, credit_amount, particulars) VALUES (?, ?, 'Cr', 0, 31050, 'Output CGST 9%')", [v1.lastID, lMap['Output CGST 9%']]);
   await run("INSERT INTO ledger_entries (voucher_id, ledger_id, entry_type, debit_amount, credit_amount, particulars) VALUES (?, ?, 'Cr', 0, 31050, 'Output SGST 9%')", [v1.lastID, lMap['Output SGST 9%']]);
-  await run("INSERT INTO inventory_entries (voucher_id, stock_item_id, direction, quantity, rate, amount, godown_id) VALUES (?, 1, 'OUT', 1, 345000, 345000, 1)", [v1.lastID]);
+  await run("INSERT INTO inventory_entries (voucher_id, stock_item_id, direction, quantity, rate, amount, godown_id) VALUES (?, ?, 'OUT', 1, 345000, 345000, ?)", [v1.lastID, itMap['RRE Screw Compressor 15 HP (Air-Cooled)'], defaultGodownId]);
   await run("INSERT INTO bill_allocations (voucher_id, ledger_id, bill_type, bill_ref, amount, due_date) VALUES (?, ?, 'New Ref', 'RRE/SALES/001', 407100, '2026-06-10')", [v1.lastID, lMap['Chennai Auto Components Pvt Ltd']]);
 
   // V2: F8 Sales (Inter-State with IGST)
@@ -473,7 +510,7 @@ async function seedTallyMasters() {
   await run("INSERT INTO ledger_entries (voucher_id, ledger_id, entry_type, debit_amount, credit_amount, particulars) VALUES (?, ?, 'Dr', 129800, 0, 'Bangalore Machine Tools Ltd')", [v2.lastID, lMap['Bangalore Machine Tools Ltd']]);
   await run("INSERT INTO ledger_entries (voucher_id, ledger_id, entry_type, debit_amount, credit_amount, particulars) VALUES (?, ?, 'Cr', 0, 110000, 'Interstate Sales (IGST)')", [v2.lastID, lMap['Interstate Sales (IGST)']]);
   await run("INSERT INTO ledger_entries (voucher_id, ledger_id, entry_type, debit_amount, credit_amount, particulars) VALUES (?, ?, 'Cr', 0, 19800, 'Output IGST 18%')", [v2.lastID, lMap['Output IGST 18%']]);
-  await run("INSERT INTO inventory_entries (voucher_id, stock_item_id, direction, quantity, rate, amount, godown_id) VALUES (?, 3, 'OUT', 1, 110000, 110000, 1)", [v2.lastID]);
+  await run("INSERT INTO inventory_entries (voucher_id, stock_item_id, direction, quantity, rate, amount, godown_id) VALUES (?, ?, 'OUT', 1, 110000, 110000, ?)", [v2.lastID, itMap['Airend Assembly Rotor 15HP'], defaultGodownId]);
   await run("INSERT INTO bill_allocations (voucher_id, ledger_id, bill_type, bill_ref, amount, due_date) VALUES (?, ?, 'New Ref', 'RRE/SALES/002', 129800, '2026-06-12')", [v2.lastID, lMap['Bangalore Machine Tools Ltd']]);
 
   // V3: F9 Purchase (Inward Purchase with Input Tax Credit)
@@ -486,7 +523,7 @@ async function seedTallyMasters() {
   await run("INSERT INTO ledger_entries (voucher_id, ledger_id, entry_type, debit_amount, credit_amount, particulars) VALUES (?, ?, 'Dr', 14040, 0, 'Input CGST 9%')", [v3.lastID, lMap['Input CGST 9%']]);
   await run("INSERT INTO ledger_entries (voucher_id, ledger_id, entry_type, debit_amount, credit_amount, particulars) VALUES (?, ?, 'Dr', 14040, 0, 'Input SGST 9%')", [v3.lastID, lMap['Input SGST 9%']]);
   await run("INSERT INTO ledger_entries (voucher_id, ledger_id, entry_type, debit_amount, credit_amount, particulars) VALUES (?, ?, 'Cr', 0, 184080, 'Elgi Equipments Spares Ltd')", [v3.lastID, lMap['Elgi Equipments Spares Ltd']]);
-  await run("INSERT INTO inventory_entries (voucher_id, stock_item_id, direction, quantity, rate, amount, godown_id) VALUES (?, 3, 'IN', 2, 78000, 156000, 1)", [v3.lastID]);
+  await run("INSERT INTO inventory_entries (voucher_id, stock_item_id, direction, quantity, rate, amount, godown_id) VALUES (?, ?, 'IN', 2, 78000, 156000, ?)", [v3.lastID, itMap['Airend Assembly Rotor 15HP'], defaultGodownId]);
   await run("INSERT INTO bill_allocations (voucher_id, ledger_id, bill_type, bill_ref, amount, due_date) VALUES (?, ?, 'New Ref', 'INV-ELGI-9921', 184080, '2026-06-18')", [v3.lastID, lMap['Elgi Equipments Spares Ltd']]);
 
   // V4: F6 Receipt (Bank Collection)
@@ -542,10 +579,117 @@ async function seedTallyMasters() {
   console.log('[Tally Core DB] Company 100000 seeded with verified mathematical equilibrium!');
 }
 
+async function resetCleanCompany() {
+  console.log('[Tally Core DB] Resetting Company to Clean Production Slate...');
+  await run('PRAGMA foreign_keys = OFF');
+  await run('DELETE FROM bank_reconciliation');
+  await run('DELETE FROM bill_allocations');
+  await run('DELETE FROM inventory_entries');
+  await run('DELETE FROM ledger_entries');
+  await run('DELETE FROM vouchers');
+  await run('DELETE FROM stock_items');
+  await run('DELETE FROM ledgers');
+  await run('PRAGMA foreign_keys = ON');
+
+  // Insert standard units if missing
+  const unitCount = await get('SELECT COUNT(*) as c FROM units_of_measure');
+  if (unitCount.c === 0) {
+    const units = [
+      { symbol: 'NOS', formal: 'Numbers', dec: 0 },
+      { symbol: 'SET', formal: 'Sets', dec: 0 },
+      { symbol: 'PCS', formal: 'Pieces', dec: 0 },
+      { symbol: 'KGS', formal: 'Kilograms', dec: 2 },
+      { symbol: 'MTR', formal: 'Metres', dec: 2 }
+    ];
+    for (const u of units) {
+      await run('INSERT INTO units_of_measure (symbol, formal_name, decimal_places) VALUES (?, ?, ?)', [u.symbol, u.formal, u.dec]);
+    }
+  }
+
+  // Insert standard godown if missing
+  const godownCount = await get('SELECT COUNT(*) as c FROM godowns');
+  if (godownCount.c === 0) {
+    await run("INSERT INTO godowns (name, location) VALUES ('Main Location', 'Primary Godown')");
+  }
+
+  // Insert standard cost centre if missing
+  const ccCount = await get('SELECT COUNT(*) as c FROM cost_centres');
+  if (ccCount.c === 0) {
+    await run("INSERT INTO cost_centres (name, category) VALUES ('Primary Cost Centre', 'Default')");
+  }
+
+  // Create clean core statutory ledgers with 0 balances
+  const cleanLedgers = [
+    { name: 'Cash', group: 19, opBal: 0, opType: 'Dr' },
+    { name: 'Bank Account', group: 18, opBal: 0, opType: 'Dr' },
+    { name: 'Proprietor Capital A/c', group: 1, opBal: 0, opType: 'Cr' },
+    { name: 'Sales Account', group: 7, opBal: 0, opType: 'Cr' },
+    { name: 'Purchase Account', group: 8, opBal: 0, opType: 'Dr' },
+    { name: 'Input CGST', group: 20, opBal: 0, opType: 'Dr' },
+    { name: 'Input SGST', group: 20, opBal: 0, opType: 'Dr' },
+    { name: 'Input IGST', group: 20, opBal: 0, opType: 'Dr' },
+    { name: 'Output CGST', group: 20, opBal: 0, opType: 'Cr' },
+    { name: 'Output SGST', group: 20, opBal: 0, opType: 'Cr' },
+    { name: 'Output IGST', group: 20, opBal: 0, opType: 'Cr' },
+    { name: 'Round Off A/c', group: 12, opBal: 0, opType: 'Dr' },
+    { name: 'Office Expenses', group: 12, opBal: 0, opType: 'Dr' },
+    { name: 'Freight Charges', group: 10, opBal: 0, opType: 'Dr' }
+  ];
+
+  for (const l of cleanLedgers) {
+    await run(
+      `INSERT INTO ledgers (name, group_id, opening_balance, opening_balance_type, state, state_code)
+       VALUES (?, ?, ?, ?, 'Tamil Nadu', '33')`,
+      [l.name, l.group, l.opBal, l.opType]
+    );
+  }
+
+  console.log('[Tally Core DB] Clean Production Slate active (0 vouchers, 0 stock items, ₹0 Dr/Cr)!');
+  return { success: true, message: 'Company reset to clean production state successfully.' };
+}
+
+async function loadDemoCompany() {
+  console.log('[Tally Core DB] Reloading Demo Sample Data...');
+  await run('PRAGMA foreign_keys = OFF');
+  await run('DELETE FROM bank_reconciliation');
+  await run('DELETE FROM bill_allocations');
+  await run('DELETE FROM inventory_entries');
+  await run('DELETE FROM ledger_entries');
+  await run('DELETE FROM vouchers');
+  await run('DELETE FROM stock_items');
+  await run('DELETE FROM ledgers');
+  await run('PRAGMA foreign_keys = ON');
+  await seedTallyMasters(true);
+  return { success: true, message: 'Demo sample data reloaded successfully.' };
+}
+
+async function updateCompanyInfo(info) {
+  const { name, formal_name, gstin, pan, address, state, state_code, pin_code, financial_year_from, books_beginning_from } = info;
+  await run(
+    `UPDATE company_info SET
+       name = COALESCE(?, name),
+       formal_name = COALESCE(?, formal_name),
+       gstin = COALESCE(?, gstin),
+       pan = COALESCE(?, pan),
+       address = COALESCE(?, address),
+       state = COALESCE(?, state),
+       state_code = COALESCE(?, state_code),
+       pin_code = COALESCE(?, pin_code),
+       financial_year_from = COALESCE(?, financial_year_from),
+       books_beginning_from = COALESCE(?, books_beginning_from)
+     WHERE id = 1`,
+    [name, formal_name, gstin, pan, address, state, state_code, pin_code, financial_year_from, books_beginning_from]
+  );
+  return { success: true, message: 'Company profile updated successfully.' };
+}
+
 module.exports = {
   db,
   run,
   get,
   all,
-  initDb
+  initDb,
+  resetCleanCompany,
+  loadDemoCompany,
+  updateCompanyInfo
 };

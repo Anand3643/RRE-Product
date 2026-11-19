@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const http = require('http');
-const { initDb, get, all } = require('./core/db');
+const { initDb, get, all, resetCleanCompany, loadDemoCompany, updateCompanyInfo } = require('./core/db');
 
 // Modular Routers
 const dashboardRouter = require('./modules/dashboard/dashboardApi');
@@ -54,7 +54,53 @@ app.get('/api/gateway/info', async (req, res) => {
         last_voucher: lastVoucher || null,
         total_vouchers: totalVouchers.count || 0,
         total_ledgers: totalLedgers.count || 0,
-        total_items: totalItems.count || 0
+        total_items: totalItems.count || 0,
+        is_clean_slate: (totalVouchers.count === 0 && totalItems.count === 0)
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Company Management & Clean Slate Routes
+app.post('/api/company/clean-slate', async (req, res) => {
+  try {
+    const result = await resetCleanCompany();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/company/load-demo', async (req, res) => {
+  try {
+    const result = await loadDemoCompany();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/company/update', async (req, res) => {
+  try {
+    const result = await updateCompanyInfo(req.body);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    const user = username && username.trim() ? username.trim() : 'Administrator';
+    res.json({
+      success: true,
+      data: {
+        user,
+        role: 'Administrator',
+        token: 'tally_session_' + Date.now()
       }
     });
   } catch (err) {

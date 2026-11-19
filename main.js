@@ -67,12 +67,27 @@ async function createWindow() {
         {
           label: 'Gateway of Tally (Esc)',
           accelerator: 'Esc',
-          click: () => mainWindow.webContents.executeJavaScript('window.switchView && window.switchView("view-gateway"); if(window.closeModal) window.closeModal();')
+          click: () => mainWindow.webContents.executeJavaScript('window.showGateway && window.showGateway(); if(window.closeModal) window.closeModal();')
         },
         {
           label: 'Toggle Modern Dashboard (Alt+D)',
           accelerator: 'Alt+D',
           click: () => mainWindow.webContents.executeJavaScript('window.toggleDashboard && window.toggleDashboard()')
+        },
+        { type: 'separator' },
+        {
+          label: 'Alter Company Profile (F3)',
+          accelerator: 'F3',
+          click: () => mainWindow.webContents.executeJavaScript('window.openModal && window.openModal("alterCompanyModal")')
+        },
+        {
+          label: 'Shut Company / Login (Ctrl+F3)',
+          accelerator: 'Ctrl+F3',
+          click: () => mainWindow.webContents.executeJavaScript('window.showLoginView && window.showLoginView()')
+        },
+        {
+          label: 'Start Clean Slate (₹0 Books)',
+          click: () => mainWindow.webContents.executeJavaScript('window.startCleanSlate && window.startCleanSlate()')
         },
         { type: 'separator' },
         {
