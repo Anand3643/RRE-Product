@@ -1,29 +1,78 @@
 {
-  "name": "rre-product",
+  "name": "tallyprime-gold",
+  "productName": "TallyPrime Gold",
   "version": "1.0.0",
-  "description": "Clean workspace ready for fresh development.",
-  "main": "index.js",
+  "description": "TallyPrime Gold Enterprise Accounting & Inventory Suite",
+  "main": "main.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "desktop": "electron .",
+    "build:win": "electron-builder --win nsis",
+    "build:portable": "electron-builder --win portable",
+    "install:desktop": "powershell -ExecutionPolicy Bypass -File create-shortcuts.ps1"
   },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/Anand3643/RRE-Product.git"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "tally",
+    "accounting",
+    "erp",
+    "gst",
+    "inventory"
+  ],
+  "author": "Ramraj Enterprises",
   "license": "ISC",
   "type": "commonjs",
-  "bugs": {
-    "url": "https://github.com/Anand3643/RRE-Product/issues"
-  },
-  "homepage": "https://github.com/Anand3643/RRE-Product#readme",
   "dependencies": {
     "cors": "^2.8.6",
     "express": "^5.3.0",
     "sqlite3": "^6.0.1",
     "xml2js": "^0.6.2"
+  },
+  "devDependencies": {
+    "electron": "^45.4.1",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.ramraj.tallyprime",
+    "productName": "TallyPrime Gold",
+    "copyright": "Copyright © 2026 Ramraj Enterprises",
+    "npmRebuild": false,
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "server.js",
+      "tally.ini",
+      "tally_icon.ico",
+      "tally_icon.png",
+      "core/**/*",
+      "modules/**/*",
+      "public/**/*",
+      "data/**/*",
+      "node_modules/**/*"
+    ],
+    "extraResources": [
+      "data/**/*",
+      "tally.ini",
+      "tally_icon.ico"
+    ],
+    "win": {
+      "icon": "tally_icon.ico",
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "TallyPrime Gold"
+    }
   }
 }

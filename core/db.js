@@ -2,13 +2,36 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
 
-// Ensure data directory exists mirroring TallyPrime Data path (e.g. data/100000)
-const dataDir = path.resolve(__dirname, '..', 'data', '100000');
+// Determine writable data directory mirroring TallyPrime Data path (e.g. data/100000)
+const isPackaged = __dirname.includes('app.asar');
+let dataDir;
+
+if (isPackaged) {
+  const appDataRoot = process.env.APPDATA || (process.env.USERPROFILE ? path.join(process.env.USERPROFILE, 'AppData', 'Roaming') : '.');
+  dataDir = path.join(appDataRoot, 'TallyPrimeGold', 'data', '100000');
+} else {
+  dataDir = path.resolve(__dirname, '..', 'data', '100000');
+}
+
 if (!fs.existsSync(dataDir)) {
   fs.mkdirSync(dataDir, { recursive: true });
 }
 
 const dbPath = path.resolve(dataDir, 'company.db');
+
+// If packaged and db doesn't exist, check if pre-seeded db exists in resources
+if (isPackaged && !fs.existsSync(dbPath) && process.resourcesPath) {
+  const resourceDb = path.join(process.resourcesPath, 'data', '100000', 'company.db');
+  if (fs.existsSync(resourceDb)) {
+    try {
+      fs.copyFileSync(resourceDb, dbPath);
+      console.log(`[Tally Core DB] Pre-seeded company database copied from resources to: ${dbPath}`);
+    } catch (e) {
+      console.warn('[Tally Core DB] Could not copy pre-seeded database, will initialize fresh:', e.message);
+    }
+  }
+}
+
 const db = new sqlite3.Database(dbPath, (err) => {
   if (err) {
     console.error('Failed to open Tally company database:', err.message);

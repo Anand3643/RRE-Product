@@ -96,6 +96,23 @@ $$\text{Closing Stock Valuation} = \text{Closing Quantity} \times \text{Valuatio
 
 ---
 
+## 💻 Install and Run on PC
+
+### 1. Ready-to-Use Windows Desktop App
+A native desktop shortcut with the official Tally icon has been created on your Windows Desktop:
+- **Desktop Shortcut**: `C:\Users\Admin\Desktop\TallyPrime Gold.lnk`
+- **Start Menu**: Located in `Start Menu > Programs > TallyPrime Gold`
+- **Reinstall Shortcut Anytime**: Double-click [Install-Desktop-App.bat](file:///c:/Users/Admin/Desktop/RRE%20PRoduct/Install-Desktop-App.bat)
+
+### 2. Standalone Windows Setup Installer (.exe)
+You can distribute and install this on any Windows PC:
+- **Installer Executable**: `dist/TallyPrime Gold Setup 1.0.0.exe` (~127 MB)
+- Run the installer wizard to install TallyPrime Gold cleanly with automatic desktop & start menu shortcuts.
+- **Standalone Unpacked Executable**: `dist/win-unpacked/TallyPrime Gold.exe` (run directly without installing)
+- **Rebuild Installer**: Run [build-installer.bat](file:///c:/Users/Admin/Desktop/RRE%20PRoduct/build-installer.bat) or `npm run build:win`
+
+---
+
 ## 🚀 Quick Launch
 
 Run server:
