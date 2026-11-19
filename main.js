@@ -5,11 +5,11 @@ const http = require('http');
 let mainWindow = null;
 let serverProcess = null;
 
-function waitForServer(port, timeoutMs = 15000) {
+function waitForServer(port, timeoutMs = 25000) {
   const startTime = Date.now();
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     const check = () => {
-      const req = http.get(`http://localhost:${port}/api/gateway/info`, (res) => {
+      const req = http.get(`http://127.0.0.1:${port}/api/gateway/info`, (res) => {
         if (res.statusCode === 200) {
           resolve();
         } else {
@@ -17,12 +17,13 @@ function waitForServer(port, timeoutMs = 15000) {
         }
       });
       req.on('error', () => retry());
+      req.setTimeout(1500, () => { req.destroy(); retry(); });
       req.end();
     };
 
     const retry = () => {
       if (Date.now() - startTime > timeoutMs) {
-        reject(new Error(`Server failed to start on port ${port} within ${timeoutMs}ms`));
+        resolve();
       } else {
         setTimeout(check, 300);
       }
@@ -198,12 +199,22 @@ async function createWindow() {
   const menu = Menu.buildFromTemplate(menuTemplate);
   Menu.setApplicationMenu(menu);
 
+  // Auto-retry UI load on slow initial cold boot
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
+    console.log(`[Electron] UI load retry (${errorCode}: ${errorDescription})`);
+    setTimeout(() => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.loadURL('http://127.0.0.1:4000');
+      }
+    }, 800);
+  });
+
   try {
-    await waitForServer(4000, 10000);
-    mainWindow.loadURL('http://localhost:4000');
+    await waitForServer(4000, 25000);
+    mainWindow.loadURL('http://127.0.0.1:4000');
   } catch (err) {
     console.error('Failed to connect to local server:', err);
-    mainWindow.loadURL('http://localhost:4000');
+    mainWindow.loadURL('http://127.0.0.1:4000');
   }
 
   mainWindow.on('closed', () => {

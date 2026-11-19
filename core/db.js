@@ -19,8 +19,9 @@ if (!fs.existsSync(dataDir)) {
 
 const dbPath = path.resolve(dataDir, 'company.db');
 
-// If packaged and db doesn't exist, check if pre-seeded db exists in resources
-if (isPackaged && !fs.existsSync(dbPath) && process.resourcesPath) {
+// If packaged and db doesn't exist or is empty, copy pre-seeded db from resources
+const needsSeed = isPackaged && (!fs.existsSync(dbPath) || (fs.existsSync(dbPath) && fs.statSync(dbPath).size < 1000));
+if (needsSeed && process.resourcesPath) {
   const resourceDb = path.join(process.resourcesPath, 'data', '100000', 'company.db');
   if (fs.existsSync(resourceDb)) {
     try {

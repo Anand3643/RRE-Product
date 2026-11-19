@@ -364,10 +364,10 @@ async function startServer() {
     await initDb();
 
     // 1. Primary Web Application Server on Port 4000
-    const webServer = app.listen(WEB_PORT, () => {
+    const webServer = app.listen(WEB_PORT, '0.0.0.0', () => {
       console.log(`=======================================================`);
       console.log(`✨ TallyPrime Gold (V5 Edition) Running!`);
-      console.log(`👉 Web Interface: http://localhost:${WEB_PORT}`);
+      console.log(`👉 Web Interface: http://localhost:${WEB_PORT} (http://127.0.0.1:${WEB_PORT})`);
       console.log(`📂 Data Storage: data/100000/company.db (Local PC SQLite)`);
       console.log(`⚡ Offline Mode: 100% Standalone (No Internet Required)`);
       console.log(`=======================================================`);
@@ -386,7 +386,7 @@ async function startServer() {
       app(req, res);
     });
 
-    xmlServer.listen(TALLY_PORT, () => {
+    xmlServer.listen(TALLY_PORT, '0.0.0.0', () => {
       console.log(`⚡ Tally Native XML Gateway Active on Port ${TALLY_PORT} (ServerPort=9000)`);
     }).on('error', (err) => {
       console.warn(`[Tally Native Gateway] Port ${TALLY_PORT} busy or restricted:`, err.message);

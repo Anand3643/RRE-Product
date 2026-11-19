@@ -404,8 +404,12 @@ body {
   padding: 1rem;
 }
 
+.hidden {
+  display: none !important;
+}
+
 .modal-backdrop.hidden {
-  display: none;
+  display: none !important;
 }
 
 /* Tally Vertical Right-Hand Function Key Button Bar */
