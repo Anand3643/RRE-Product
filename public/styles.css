@@ -408,6 +408,125 @@ body {
   display: none;
 }
 
+/* Tally Vertical Right-Hand Function Key Button Bar */
+.tally-v-btn {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #1e293b;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+  width: 100%;
+  text-align: left;
+}
+
+.tally-v-btn:hover {
+  background-color: var(--gateway-hover-bg) !important;
+  color: #ffffff !important;
+  border-color: var(--gateway-hover-bg) !important;
+}
+
+.tally-v-btn:hover .fn-badge {
+  background-color: rgba(255,255,255,0.25) !important;
+  color: #ffffff !important;
+  border-color: rgba(255,255,255,0.4) !important;
+}
+
+[data-theme="midnight-dark"] .tally-v-btn {
+  background: #1e293b !important;
+  border-color: #334155 !important;
+  color: #f1f5f9 !important;
+}
+
+[data-theme="midnight-dark"] .tally-v-btn:hover {
+  background: #2563eb !important;
+  border-color: #2563eb !important;
+}
+
+/* Tally Top Golden Menu Ribbon */
+.tally-top-item {
+  cursor: pointer;
+  padding: 4px 9px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #f8fafc;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.tally-top-item:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+  color: #fef08a;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.tally-goto-pill {
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  padding: 3px 14px;
+  border-radius: 9999px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #fef08a;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.tally-goto-pill:hover {
+  background: rgba(255, 255, 255, 0.28);
+  border-color: #fef08a;
+  transform: translateY(-1px);
+}
+
+/* Tally Go To Search Items */
+.goto-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1e293b;
+  transition: all 0.1s ease;
+}
+
+.goto-item:hover, .goto-item.active {
+  background-color: var(--gateway-hover-bg) !important;
+  color: #ffffff !important;
+}
+
+.goto-item:hover .goto-category, .goto-item.active .goto-category {
+  background-color: rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+}
+
+[data-theme="midnight-dark"] .goto-item {
+  color: #f1f5f9;
+}
+
+[data-theme="midnight-dark"] #tally-right-sidebar {
+  background-color: #0f172a !important;
+  border-color: #1e293b !important;
+}
+
 .fade-in {
   animation: fadeIn 0.15s ease-in-out;
 }

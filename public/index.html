@@ -30,107 +30,105 @@
 <body class="bg-slate-100 text-slate-800 antialiased min-h-screen flex flex-col font-sans select-none">
 
   <!-- ============================================== -->
-  <!-- TOP TALLY STATUS & HOTKEY HEADER               -->
+  <!-- TOP TALLY STATUS & HOTKEY HEADER (TALLYPRIME)   -->
   <!-- ============================================== -->
   <header id="header-ribbon" class="bg-[#1f3a52] text-white border-b border-slate-700 shadow-md sticky top-0 z-40">
-    <!-- Top Band: Company & Period Metadata -->
-    <div class="px-5 py-2 flex items-center justify-between border-b border-slate-700/70 text-xs">
+    <!-- Tier 1: Canonical TallyPrime Top Ribbon (Company, Data, Go To, Exchange, Help) -->
+    <div class="px-4 py-1.5 flex items-center justify-between border-b border-slate-700/70 text-xs">
+      <!-- Left: Logo & Product Title -->
       <div class="flex items-center space-x-3">
         <img src="tally_icon.png" alt="Logo" class="w-6 h-6 object-contain rounded bg-white/10 p-0.5 shadow-sm">
-        <span class="bg-amber-400 text-slate-900 font-black px-2 py-0.5 rounded text-[11px] tracking-widest uppercase shadow-sm">
-          TallyPrime 5.0
-        </span>
-        <div class="h-4 w-[1px] bg-slate-600"></div>
-        <div class="font-bold tracking-wide flex items-center space-x-2">
-          <span class="text-white text-sm" id="top-company-name">Ramraj Enterprises</span>
-          <span id="top-company-badge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-            Clean Slate
-          </span>
+        <div class="flex items-center space-x-1.5">
+          <span class="font-black text-sm tracking-wide text-white uppercase">TallyPrime</span>
+          <span class="bg-amber-400 text-slate-900 font-mono font-bold text-[10px] px-1.5 py-0.2 rounded">5.0</span>
         </div>
       </div>
 
-      <div class="flex items-center space-x-3 text-slate-300">
-        <div>Period: <strong class="text-white font-mono">1-Apr-26 to 31-Mar-27</strong></div>
-        <div>Date: <strong class="text-amber-300 font-mono" id="top-current-date">1-Jun-2026</strong></div>
+      <!-- Center: Classic Tally Menu Bar with Alt Keys + Centered Go To -->
+      <div class="hidden md:flex items-center space-x-1">
+        <button onclick="openAlterCompany()" class="tally-top-item" title="Company (Alt+K)">
+          <span class="hotkey">K</span>: Company
+        </button>
+        <button onclick="openDataMenuModal()" class="tally-top-item" title="Data (Alt+Y)">
+          <span class="hotkey">Y</span>: Data
+        </button>
+        <button onclick="openExchangeMenuModal()" class="tally-top-item" title="Exchange (Alt+Z)">
+          <span class="hotkey">Z</span>: Exchange
+        </button>
+        <button onclick="openGoToModal()" class="tally-goto-pill mx-1" title="Universal Search & Jump (Alt+G)">
+          <i data-lucide="search" class="w-3.5 h-3.5 text-amber-300"></i>
+          <span>Go To (Alt+G)</span>
+        </button>
+        <button onclick="openImportModal()" class="tally-top-item" title="Import (Alt+O)">
+          <span class="hotkey">O</span>: Import
+        </button>
+        <a href="/api/export/tally-xml" download class="tally-top-item" title="Export (Alt+E)">
+          <span class="hotkey">E</span>: Export
+        </a>
+        <button onclick="window.print()" class="tally-top-item" title="Print (Alt+P)">
+          <span class="hotkey">P</span>: Print
+        </button>
+        <button onclick="openHelpModal()" class="tally-top-item" title="Help (F1)">
+          <span class="hotkey">F1</span>: Help
+        </button>
+      </div>
+
+      <!-- Right: User Session & Theme & Quit -->
+      <div class="flex items-center space-x-2">
         <div id="top-user-badge" class="flex items-center space-x-1.5 bg-slate-800/90 px-2.5 py-0.5 rounded-full border border-slate-700 text-xs shadow-inner">
           <i data-lucide="shield" class="w-3.5 h-3.5 text-amber-400"></i>
           <span id="top-user-name" class="text-white font-bold text-[11px]">admin</span>
           <span id="top-user-role" class="px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase bg-purple-500/30 text-purple-300 border border-purple-500/40">Owner</span>
         </div>
-        <button onclick="openUserManagement()" id="btn-top-users" title="Users & Passwords (Alt+K)" class="px-2 py-1 bg-purple-900/60 hover:bg-purple-800 text-purple-200 border border-purple-700/60 rounded text-[11px] font-bold flex items-center space-x-1 transition shadow-sm">
+        <button onclick="openUserManagement()" id="btn-top-users" title="Users & Passwords (Alt+K)" class="px-2 py-0.5 bg-purple-900/60 hover:bg-purple-800 text-purple-200 border border-purple-700/60 rounded text-[11px] font-bold flex items-center space-x-1 transition shadow-sm">
           <i data-lucide="users" class="w-3 h-3 text-purple-400"></i>
-          <span>Alt+K: Users</span>
+          <span>Alt+K</span>
         </button>
-        <button onclick="openThemeSelectorModal()" id="btn-top-theme" title="Change Theme Palette (Alt+T)" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-amber-300 border border-slate-600 rounded text-[11px] font-bold flex items-center space-x-1.5 transition shadow-sm">
-          <i data-lucide="palette" class="w-3.5 h-3.5 text-amber-400"></i>
-          <span>Alt+T: Theme</span>
+        <button onclick="openThemeSelectorModal()" id="btn-top-theme" title="Change Theme Palette (Alt+T)" class="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-amber-300 border border-slate-600 rounded text-[11px] font-bold flex items-center space-x-1 transition shadow-sm">
+          <i data-lucide="palette" class="w-3 h-3 text-amber-400"></i>
+          <span>Alt+T</span>
         </button>
-        <button onclick="toggleDashboard()" id="btn-top-dashboard" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-[11px] font-bold flex items-center space-x-1 transition shadow-sm">
-          <i data-lucide="layout-dashboard" class="w-3.5 h-3.5"></i>
-          <span>Dashboard</span>
-        </button>
-        <a href="/api/export/tally-xml" download class="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded text-[11px] font-bold flex items-center space-x-1 transition shadow-sm">
-          <span>Alt+E: XML</span>
-        </a>
-        <button onclick="showLoginView()" title="Shut Company & Switch User (Ctrl+F3)" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-amber-300 rounded text-[11px] font-bold transition flex items-center space-x-1">
-          <i data-lucide="log-out" class="w-3.5 h-3.5"></i>
-          <span>Ctrl+F3: Switch</span>
-        </button>
-        <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-white rounded text-[11px] font-semibold transition">
-          Esc: Gateway
+        <button onclick="showLoginView()" title="Shut Company & Switch User (Ctrl+F3)" class="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-rose-300 border border-slate-600 rounded text-[11px] font-bold transition flex items-center space-x-1">
+          <i data-lucide="log-out" class="w-3 h-3 text-rose-400"></i>
+          <span>Ctrl+F3</span>
         </button>
       </div>
     </div>
 
-    <!-- Second Band: Voucher Function Keys Ribbon (F4 to F9 + Alt Notes) -->
-    <div class="px-5 py-1.5 bg-[#162a3b] sub-header-band flex items-center justify-between overflow-x-auto text-xs border-b border-slate-700/50">
+    <!-- Tier 2: Company Details & Period Status Ribbon -->
+    <div class="px-4 py-1.5 bg-[#162a3b] sub-header-band flex items-center justify-between text-xs border-b border-slate-700/50">
       <div class="flex items-center space-x-2">
-        <button onclick="openVoucherScreen('Contra')" id="fn-contra" class="fn-btn">
-          <span class="fn-badge">F4</span>Contra
-        </button>
-        <button onclick="openVoucherScreen('Payment')" id="fn-payment" class="fn-btn">
-          <span class="fn-badge">F5</span>Payment
-        </button>
-        <button onclick="openVoucherScreen('Receipt')" id="fn-receipt" class="fn-btn">
-          <span class="fn-badge">F6</span>Receipt
-        </button>
-        <button onclick="openVoucherScreen('Journal')" id="fn-journal" class="fn-btn">
-          <span class="fn-badge">F7</span>Journal
-        </button>
-        <button onclick="openVoucherScreen('Sales')" id="fn-sales" class="fn-btn">
-          <span class="fn-badge">F8</span>Sales
-        </button>
-        <button onclick="openVoucherScreen('Purchase')" id="fn-purchase" class="fn-btn">
-          <span class="fn-badge">F9</span>Purchase
-        </button>
-        <button onclick="openVoucherScreen('Credit Note')" class="fn-btn">
-          <span class="fn-badge">Alt+F6</span>Cr Note
-        </button>
-        <button onclick="openVoucherScreen('Debit Note')" class="fn-btn">
-          <span class="fn-badge">Alt+F5</span>Dr Note
-        </button>
+        <span class="text-amber-400 font-bold" id="top-breadcrumb">Gateway of Tally</span>
+        <span class="text-slate-500">&gt;</span>
+        <span class="font-bold text-white tracking-wide" id="top-company-name">Ramraj Enterprises</span>
+        <span class="text-slate-400 font-mono text-[11px]">(No: 100000)</span>
+        <span id="top-company-badge" class="px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+          Clean Slate
+        </span>
       </div>
 
-      <div class="flex items-center space-x-3 text-[11px] text-slate-300">
-        <button onclick="openReport('trial-balance')" class="hover:text-amber-300 transition"><u>T</u>rial Balance</button>
-        <button onclick="openReport('balance-sheet')" class="hover:text-amber-300 transition"><u>B</u>alance Sheet</button>
-        <button onclick="openReport('profit-loss')" class="hover:text-amber-300 transition"><u>P</u>&amp;L A/c</button>
-        <button onclick="openReport('stock-summary')" class="hover:text-amber-300 transition"><u>S</u>tock Summary</button>
-        <button onclick="openReport('daybook')" class="hover:text-amber-300 transition"><u>D</u>ay Book</button>
-        <button onclick="openReport('ratio-analysis')" class="hover:text-amber-300 transition"><u>R</u>atio Analysis</button>
-        <button onclick="openReport('gst')" class="hover:text-amber-300 transition"><u>G</u>ST Portal</button>
-        <button onclick="openReport('outstandings')" class="hover:text-amber-300 transition"><u>O</u>utstandings</button>
+      <div class="flex items-center space-x-4 text-[11px] text-slate-300">
+        <div>Period: <strong class="text-white font-mono">1-Apr-26 to 31-Mar-27</strong></div>
+        <div>Date: <strong class="text-amber-300 font-mono cursor-pointer hover:underline" onclick="openChangeDateModal()" id="top-current-date">1-Jun-2026 (F2)</strong></div>
+        <button onclick="toggleDashboard()" id="btn-top-dashboard" class="px-2 py-0.5 bg-blue-600/80 hover:bg-blue-600 text-white rounded text-[10px] font-bold flex items-center space-x-1 transition shadow-sm">
+          <i data-lucide="layout-dashboard" class="w-3 h-3"></i>
+          <span>Alt+D: Dashboard</span>
+        </button>
         <button onclick="toggleCalculator()" class="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 rounded text-amber-300 font-mono text-[10px]">
           Ctrl+N: Calc
+        </button>
+        <button onclick="showGateway()" class="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-white rounded text-[10px] font-semibold transition">
+          Esc: Gateway
         </button>
       </div>
     </div>
   </header>
 
   <!-- ============================================== -->
-  <!-- MAIN WORKSPACE                                 -->
+  <!-- MAIN WORKSPACE CONTAINER + RIGHT VERTICAL BAR  -->
   <!-- ============================================== -->
-  <main class="flex-1 p-5 max-w-7xl w-full mx-auto flex flex-col justify-center items-center">
+  <div class="flex-1 w-full flex overflow-hidden relative">
+    <main class="flex-1 p-4 md:p-6 w-full overflow-y-auto flex flex-col items-center">
 
     <!-- ============================================== -->
     <!-- VIEW -1: TALLYPRIME MULTI-USER LOGIN & SECURITY -->
@@ -428,7 +426,7 @@
     </section>
 
     <!-- ============================================== -->
-    <!-- VIEW 1: GATEWAY OF TALLY (THE CLASSIC MENU)    -->
+    <!-- VIEW 1: GATEWAY OF TALLY (CANONICAL TALLYPRIME) -->
     <!-- ============================================== -->
     <section id="view-gateway" class="w-full max-w-4xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden fade-in">
       <div class="bg-[#1f3a52] text-white px-5 py-2.5 font-bold text-xs uppercase tracking-wider flex justify-between items-center border-b border-slate-600">
@@ -436,73 +434,74 @@
           <img src="tally_icon.png" alt="Logo" class="w-4 h-4 object-contain">
           <span>Gateway of Tally</span>
         </div>
-        <span class="text-[11px] text-amber-300 font-normal">Press underlined hotkey letters</span>
+        <span class="text-[11px] text-amber-300 font-normal">Press highlighted hotkey letters</span>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200">
-        <!-- Left Panel: Current Company Status & Quick Actions -->
-        <div class="p-6 bg-slate-50/70 space-y-5">
-          <div class="border-b border-slate-200 pb-4">
-            <h2 class="text-xl font-black text-slate-900 tracking-tight" id="gw-company-name">Ramraj Enterprises</h2>
-            <p class="text-xs text-slate-600 mt-0.5 font-medium">M/s. RAMRAJ ENTERPRISES (Screw Compressors)</p>
-            <div class="flex items-center space-x-2 mt-1.5">
-              <span class="px-2 py-0.5 bg-blue-100 text-blue-800 rounded font-mono text-[11px] font-bold" id="gw-company-gstin">GSTIN: 33ANUPS7331M1Z8</span>
-              <span class="px-2 py-0.5 bg-emerald-100 text-emerald-800 rounded font-mono text-[11px]">PAN: ANUPS7331M</span>
+        <!-- Left Panel: Current Company Status & Period Status -->
+        <div class="p-6 bg-slate-50/70 space-y-4">
+          <div class="border-b border-slate-200 pb-3">
+            <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">Current Period</span>
+            <div class="text-xs font-mono font-bold text-slate-800">1-Apr-2026 to 31-Mar-2027</div>
+          </div>
+
+          <div class="border-b border-slate-200 pb-3">
+            <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">Current Date</span>
+            <div class="text-xs font-mono font-bold text-amber-800 cursor-pointer hover:underline" onclick="openChangeDateModal()" id="gateway-date">1-Jun-2026 (F2)</div>
+          </div>
+
+          <div class="border-b border-slate-200 pb-3">
+            <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">Name of Company</span>
+            <h2 class="text-base font-black text-slate-900 tracking-tight" id="gw-company-name">Ramraj Enterprises</h2>
+            <div class="text-[11px] text-slate-600 font-mono mt-0.5">GSTIN: <span id="gw-company-gstin">33ANUPS7331M1Z8</span></div>
+            <div class="text-[10px] text-slate-500 font-mono">PAN: ANUPS7331M | No: 100000</div>
+          </div>
+
+          <div class="border-b border-slate-200 pb-3">
+            <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">Date of Last Entry</span>
+            <div class="text-xs font-mono font-bold text-slate-800" id="gateway-last-voucher">-</div>
+          </div>
+
+          <div class="pt-1 grid grid-cols-2 gap-2 text-xs">
+            <div class="bg-white p-2.5 rounded border border-slate-200">
+              <span class="text-slate-500 block text-[10px]">Total Vouchers</span>
+              <span id="gateway-vouchers-count" class="font-bold text-blue-700 font-mono text-sm">8</span>
+            </div>
+            <div class="bg-white p-2.5 rounded border border-slate-200">
+              <span class="text-slate-500 block text-[10px]">Active Ledgers</span>
+              <span id="gateway-ledgers-count" class="font-bold text-indigo-700 font-mono text-sm">24</span>
             </div>
           </div>
 
-          <div class="space-y-2.5 text-xs">
-            <div class="flex justify-between border-b border-slate-200 pb-1.5">
-              <span class="text-slate-500 font-medium">Current Period:</span>
-              <span class="font-bold text-slate-800 font-mono">1-Apr-2026 to 31-Mar-2027</span>
-            </div>
-            <div class="flex justify-between border-b border-slate-200 pb-1.5">
-              <span class="text-slate-500 font-medium">Current Date:</span>
-              <span class="font-bold text-amber-800 font-mono" id="gateway-date">1-Jun-2026</span>
-            </div>
-            <div class="flex justify-between border-b border-slate-200 pb-1.5">
-              <span class="text-slate-500 font-medium">Last Voucher Date:</span>
-              <span class="font-bold text-slate-800 font-mono" id="gateway-last-voucher">-</span>
-            </div>
-            <div class="flex justify-between border-b border-slate-200 pb-1.5">
-              <span class="text-slate-500 font-medium">Total Vouchers:</span>
-              <span class="font-bold text-blue-700 font-mono" id="gateway-vouchers-count">8</span>
-            </div>
-            <div class="flex justify-between border-b border-slate-200 pb-1.5">
-              <span class="text-slate-500 font-medium">Active Ledgers:</span>
-              <span class="font-bold text-indigo-700 font-mono" id="gateway-ledgers-count">24</span>
-            </div>
-          </div>
-
-          <div class="pt-2 grid grid-cols-2 gap-2">
-            <button onclick="openVoucherScreen('Sales')" class="py-2.5 bg-[#1f3a52] hover:bg-[#162a3b] text-white rounded font-bold text-xs shadow-sm transition flex items-center justify-center space-x-1.5">
+          <div class="pt-2 flex flex-col space-y-2">
+            <button onclick="openVoucherScreen('Sales')" class="w-full py-2.5 bg-[#1f3a52] hover:bg-[#162a3b] text-white rounded font-bold text-xs shadow-sm transition flex items-center justify-center space-x-1.5">
               <i data-lucide="plus-circle" class="w-4 h-4 text-amber-400"></i>
               <span>Voucher Entry (V)</span>
             </button>
-            <button onclick="toggleDashboard()" class="py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold text-xs shadow-sm transition flex items-center justify-center space-x-1.5">
-              <i data-lucide="layout-dashboard" class="w-4 h-4 text-white"></i>
-              <span>Dashboard</span>
+            <button onclick="openGoToModal()" class="w-full py-2 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 rounded font-bold text-xs transition flex items-center justify-center space-x-1.5">
+              <i data-lucide="search" class="w-4 h-4 text-amber-600"></i>
+              <span>Go To (Alt+G)</span>
             </button>
           </div>
         </div>
 
-        <!-- Right Panel: Gateway Menu List -->
-        <div class="p-5 space-y-4">
+        <!-- Right Panel: Gateway Menu List (Masters, Transactions, Utilities, Reports, Quit) -->
+        <div class="p-5 space-y-3.5">
           <!-- MASTERS -->
           <div>
             <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Masters</div>
             <div class="space-y-0.5">
-              <div onclick="openModal('createLedgerModal')" class="gateway-item">
-                <span><span class="hotkey">C</span>reate Ledger</span>
-                <span class="text-[10px] text-slate-400 font-mono">Alt+C</span>
+              <div onclick="openMasterCreateModal()" class="gateway-item">
+                <span><span class="hotkey">C</span>reate</span>
+                <span class="text-[10px] text-slate-400 font-mono">Masters</span>
               </div>
-              <div onclick="openModal('createStockModal')" class="gateway-item">
-                <span>Create <span class="hotkey">I</span>tem (Stock)</span>
-                <span class="text-[10px] text-slate-400">Inventory</span>
+              <div onclick="openMasterAlterModal()" class="gateway-item">
+                <span><span class="hotkey">A</span>lter</span>
+                <span class="text-[10px] text-slate-400 font-mono">Modify</span>
               </div>
               <div onclick="openReport('chart-accounts')" class="gateway-item">
-                <span><span class="hotkey">A</span>lter / Chart of Accounts</span>
-                <span class="text-[10px] text-slate-400">Hierarchy</span>
+                <span>C<span class="hotkey">h</span>art of Accounts</span>
+                <span class="text-[10px] text-slate-400 font-mono">Groups / Ledgers</span>
               </div>
             </div>
           </div>
@@ -516,75 +515,161 @@
                 <span class="text-[10px] text-slate-400 font-mono">F4 - F9</span>
               </div>
               <div onclick="openReport('daybook')" class="gateway-item">
-                <span><span class="hotkey">D</span>ay Book</span>
-                <span class="text-[10px] text-slate-400 font-mono">Daily Audit</span>
+                <span>Day Boo<span class="hotkey">k</span></span>
+                <span class="text-[10px] text-slate-400 font-mono">Entries</span>
               </div>
             </div>
           </div>
 
-          <!-- UTILITIES & STATUTORY REPORTS -->
+          <!-- UTILITIES -->
           <div>
-            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Reports &amp; Statutory</div>
+            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Utilities</div>
+            <div class="space-y-0.5">
+              <div onclick="openBankingUtilitiesModal()" class="gateway-item">
+                <span>Ba<span class="hotkey">n</span>king</span>
+                <span class="text-[10px] text-slate-400 font-mono">BRS / Cheques</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- REPORTS -->
+          <div>
+            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Reports</div>
             <div class="space-y-0.5">
               <div onclick="openReport('balance-sheet')" class="gateway-item">
                 <span><span class="hotkey">B</span>alance Sheet</span>
-                <span class="text-[10px] text-slate-400 font-mono">Liab / Asset</span>
+                <span class="text-[10px] text-slate-400 font-mono">Assets/Liab</span>
               </div>
               <div onclick="openReport('profit-loss')" class="gateway-item">
                 <span><span class="hotkey">P</span>rofit &amp; Loss A/c</span>
-                <span class="text-[10px] text-slate-400 font-mono">Trading / Net</span>
-              </div>
-              <div onclick="openReport('trial-balance')" class="gateway-item">
-                <span><span class="hotkey">T</span>rial Balance</span>
-                <span class="text-[10px] text-slate-400 font-mono">Sum Dr = Cr</span>
+                <span class="text-[10px] text-slate-400 font-mono">Gross/Net</span>
               </div>
               <div onclick="openReport('stock-summary')" class="gateway-item">
                 <span><span class="hotkey">S</span>tock Summary</span>
-                <span class="text-[10px] text-slate-400 font-mono">Weighted Avg</span>
+                <span class="text-[10px] text-slate-400 font-mono">Inventory</span>
               </div>
               <div onclick="openReport('ratio-analysis')" class="gateway-item">
                 <span><span class="hotkey">R</span>atio Analysis</span>
-                <span class="text-[10px] text-slate-400 font-mono">CR / QR / DE</span>
+                <span class="text-[10px] text-slate-400 font-mono">Ratios</span>
               </div>
-              <div onclick="openReport('gst')" class="gateway-item">
-                <span><span class="hotkey">G</span>ST Portal (GSTR-1 &amp; 3B)</span>
-                <span class="text-[10px] text-slate-400 font-mono">Tax / ITC</span>
+              <div onclick="showDisplayMoreMenu()" class="gateway-item font-bold text-blue-900 bg-blue-50/50 hover:bg-blue-600">
+                <span><span class="hotkey">D</span>isplay More Reports</span>
+                <span class="text-[10px] text-blue-600 font-mono font-bold">&gt;&gt;</span>
               </div>
-              <div onclick="openReport('outstandings')" class="gateway-item">
-                <span><span class="hotkey">O</span>utstandings (Ageing)</span>
-                <span class="text-[10px] text-slate-400 font-mono">Rec / Pay</span>
+            </div>
+          </div>
+
+          <!-- QUIT -->
+          <div class="pt-1 border-t border-slate-200">
+            <div onclick="showLoginView()" class="gateway-item text-rose-800">
+              <span><span class="hotkey">Q</span>uit</span>
+              <span class="text-[10px] text-rose-500 font-mono">Ctrl+F3</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- VIEW 1.5: DISPLAY MORE REPORTS MENU (D)         -->
+    <!-- ============================================== -->
+    <section id="view-display-more" class="w-full max-w-4xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden fade-in hidden">
+      <div class="bg-[#1f3a52] text-white px-5 py-2.5 font-bold text-xs uppercase tracking-wider flex justify-between items-center border-b border-slate-600">
+        <div class="flex items-center space-x-2">
+          <img src="tally_icon.png" alt="Logo" class="w-4 h-4 object-contain">
+          <span>Gateway of Tally &gt; Display More Reports</span>
+        </div>
+        <button onclick="showGateway()" class="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-white rounded text-xs font-semibold">
+          Esc: Back
+        </button>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-slate-200">
+        <!-- Left Column: Status info -->
+        <div class="p-6 bg-slate-50/70 space-y-4">
+          <div class="border-b border-slate-200 pb-3">
+            <span class="text-[10px] font-black uppercase tracking-widest text-slate-400">Company</span>
+            <h2 class="text-base font-black text-slate-900 tracking-tight">Ramraj Enterprises</h2>
+            <div class="text-[11px] text-slate-600 font-mono mt-0.5">Financial Year: 2026-2027</div>
+          </div>
+          <div class="p-4 bg-blue-50/80 border border-blue-200 rounded-lg text-xs text-blue-900 space-y-2">
+            <div class="font-bold flex items-center space-x-1.5">
+              <i data-lucide="info" class="w-4 h-4 text-blue-600"></i>
+              <span>Display Menu Navigation</span>
+            </div>
+            <p class="text-[11px] text-blue-800/80 leading-relaxed">
+              Press the highlighted hotkey or click any report to open immediately. Press <kbd class="px-1.5 py-0.5 bg-white border border-blue-300 rounded font-mono font-bold text-blue-900">Esc</kbd> to return to Gateway.
+            </p>
+          </div>
+          <button onclick="showGateway()" class="w-full py-2 bg-slate-700 hover:bg-slate-800 text-white rounded font-bold text-xs shadow-sm transition">
+            ← Return to Gateway of Tally (Esc)
+          </button>
+        </div>
+
+        <!-- Right Column: Sub-menu Items -->
+        <div class="p-5 space-y-3.5">
+          <!-- ACCOUNTING -->
+          <div>
+            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Accounting</div>
+            <div class="space-y-0.5">
+              <div onclick="openReport('trial-balance')" class="gateway-item">
+                <span><span class="hotkey">T</span>rial Balance</span>
+                <span class="text-[10px] text-slate-400 font-mono">Dr = Cr</span>
+              </div>
+              <div onclick="openReport('daybook')" class="gateway-item">
+                <span><span class="hotkey">D</span>ay Book</span>
+                <span class="text-[10px] text-slate-400 font-mono">Daily Audit</span>
               </div>
               <div onclick="openReport('bank-recon')" class="gateway-item">
-                <span>Ban<span class="hotkey">K</span> Reconciliation (BRS)</span>
+                <span><span class="hotkey">C</span>ash/Bank Book(s)</span>
+                <span class="text-[10px] text-slate-400 font-mono">Ledger</span>
+              </div>
+              <div onclick="openReport('chart-accounts')" class="gateway-item">
+                <span><span class="hotkey">A</span>ccount Books</span>
+                <span class="text-[10px] text-slate-400 font-mono">Ledgers</span>
+              </div>
+              <div onclick="openReport('outstandings')" class="gateway-item">
+                <span><span class="hotkey">S</span>tatements of Accounts (Outstandings)</span>
+                <span class="text-[10px] text-slate-400 font-mono">Ageing</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- INVENTORY & STATUTORY -->
+          <div>
+            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Inventory &amp; Statutory</div>
+            <div class="space-y-0.5">
+              <div onclick="openReport('stock-summary')" class="gateway-item">
+                <span><span class="hotkey">I</span>nventory Books (Stock Summary)</span>
+                <span class="text-[10px] text-slate-400 font-mono">Valuation</span>
+              </div>
+              <div onclick="openReport('gst')" class="gateway-item">
+                <span>Statut<span class="hotkey">o</span>ry Reports (GST Portal)</span>
+                <span class="text-[10px] text-slate-400 font-mono">GSTR-1 &amp; 3B</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- FINANCIAL UTILITIES -->
+          <div>
+            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Financial &amp; Banking</div>
+            <div class="space-y-0.5">
+              <div onclick="openReport('ratio-analysis')" class="gateway-item">
+                <span><span class="hotkey">R</span>atio Analysis</span>
+                <span class="text-[10px] text-slate-400 font-mono">Ratios</span>
+              </div>
+              <div onclick="openReport('bank-recon')" class="gateway-item">
+                <span><span class="hotkey">B</span>ank Reconciliation (BRS)</span>
                 <span class="text-[10px] text-slate-400 font-mono">Clearing</span>
               </div>
             </div>
           </div>
 
-          <!-- COMPANY & SYSTEM -->
-          <div>
-            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Company &amp; Security</div>
-            <div class="space-y-0.5">
-              <div onclick="openUserManagement()" class="gateway-item text-purple-900" id="gw-user-security">
-                <span><span class="hotkey">U</span>sers &amp; Passwords (Alt+K)</span>
-                <span class="text-[10px] text-purple-600 font-mono">Security</span>
-              </div>
-              <div onclick="openThemeSelectorModal()" class="gateway-item text-amber-900" id="gw-theme-switcher">
-                <span>Color <span class="hotkey">M</span>odes &amp; Themes (Alt+T)</span>
-                <span class="text-[10px] text-amber-600 font-mono">Palette</span>
-              </div>
-              <div onclick="openAlterCompany()" class="gateway-item" id="gw-alter-company">
-                <span>Al<span class="hotkey">t</span>er Company (F3)</span>
-                <span class="text-[10px] text-slate-400 font-mono">Profile</span>
-              </div>
-              <div onclick="startCleanSlate()" class="gateway-item text-emerald-800" id="gw-clean-slate">
-                <span><span class="hotkey">W</span>ipe / Clean Slate (₹0)</span>
-                <span class="text-[10px] text-emerald-600 font-mono">Fresh</span>
-              </div>
-              <div onclick="showLoginView()" class="gateway-item text-rose-800">
-                <span><span class="hotkey">Q</span>uit / Switch User</span>
-                <span class="text-[10px] text-rose-500 font-mono">Ctrl+F3</span>
-              </div>
+          <!-- QUIT / BACK -->
+          <div class="pt-1 border-t border-slate-200">
+            <div onclick="showGateway()" class="gateway-item text-slate-700">
+              <span><span class="hotkey">Q</span>uit (Back to Gateway)</span>
+              <span class="text-[10px] text-slate-400 font-mono">Esc</span>
             </div>
           </div>
         </div>
@@ -1264,6 +1349,86 @@
   </main>
 
   <!-- ============================================== -->
+  <!-- RIGHT TALLY FUNCTION KEY STRIP (F2 - F12)      -->
+  <!-- ============================================== -->
+  <aside id="tally-right-sidebar" class="w-36 md:w-44 bg-slate-200/90 border-l border-slate-300 p-1.5 flex flex-col space-y-1 select-none overflow-y-auto shrink-0 shadow-inner z-20">
+    <button onclick="openChangeDateModal()" class="tally-v-btn" title="Change Date (F2)">
+      <span class="fn-badge bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-300 shrink-0">F2</span>
+      <span class="truncate">Date</span>
+    </button>
+    <button onclick="openChangeDateModal()" class="tally-v-btn" title="Change Period (Alt+F2)">
+      <span class="fn-badge bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-300 shrink-0"><u>F2</u></span>
+      <span class="truncate">Period</span>
+    </button>
+    <button onclick="openAlterCompany()" class="tally-v-btn" title="Select / Alter Company (F3)">
+      <span class="fn-badge bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-300 shrink-0">F3</span>
+      <span class="truncate">Company</span>
+    </button>
+    <button onclick="showLoginView()" class="tally-v-btn" title="Shut Company (Ctrl+F3)">
+      <span class="fn-badge bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-300 shrink-0">^F3</span>
+      <span class="truncate">Shut Co.</span>
+    </button>
+
+    <div class="h-[1px] bg-slate-300 my-1"></div>
+
+    <button onclick="openVoucherScreen('Contra')" class="tally-v-btn" title="Contra Voucher (F4)">
+      <span class="fn-badge bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-300 shrink-0">F4</span>
+      <span class="truncate">Contra</span>
+    </button>
+    <button onclick="openVoucherScreen('Payment')" class="tally-v-btn" title="Payment Voucher (F5)">
+      <span class="fn-badge bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-300 shrink-0">F5</span>
+      <span class="truncate">Payment</span>
+    </button>
+    <button onclick="openVoucherScreen('Receipt')" class="tally-v-btn" title="Receipt Voucher (F6)">
+      <span class="fn-badge bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-300 shrink-0">F6</span>
+      <span class="truncate">Receipt</span>
+    </button>
+    <button onclick="openVoucherScreen('Journal')" class="tally-v-btn" title="Journal Voucher (F7)">
+      <span class="fn-badge bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-300 shrink-0">F7</span>
+      <span class="truncate">Journal</span>
+    </button>
+    <button onclick="openVoucherScreen('Sales')" class="tally-v-btn" title="Sales Voucher (F8)">
+      <span class="fn-badge bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-300 shrink-0">F8</span>
+      <span class="truncate">Sales</span>
+    </button>
+    <button onclick="openVoucherScreen('Purchase')" class="tally-v-btn" title="Purchase Voucher (F9)">
+      <span class="fn-badge bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-300 shrink-0">F9</span>
+      <span class="truncate">Purchase</span>
+    </button>
+    <button onclick="openOtherVouchersModal()" class="tally-v-btn" title="Other Vouchers (F10)">
+      <span class="fn-badge bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-300 shrink-0">F10</span>
+      <span class="truncate">Other Vouchers</span>
+    </button>
+
+    <div class="h-[1px] bg-slate-300 my-1"></div>
+
+    <button onclick="openVoucherScreen('Debit Note')" class="tally-v-btn" title="Debit Note (Alt+F5)">
+      <span class="fn-badge bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-300 shrink-0"><u>F5</u></span>
+      <span class="truncate">Debit Note</span>
+    </button>
+    <button onclick="openVoucherScreen('Credit Note')" class="tally-v-btn" title="Credit Note (Alt+F6)">
+      <span class="fn-badge bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-300 shrink-0"><u>F6</u></span>
+      <span class="truncate">Credit Note</span>
+    </button>
+    <button onclick="openStockJournalModal()" class="tally-v-btn" title="Stock Journal (Alt+F7)">
+      <span class="fn-badge bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-300 shrink-0"><u>F7</u></span>
+      <span class="truncate">Stock Journal</span>
+    </button>
+
+    <div class="h-[1px] bg-slate-300 my-1"></div>
+
+    <button onclick="openF11FeaturesModal()" class="tally-v-btn" title="Company Features (F11)">
+      <span class="fn-badge bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-300 shrink-0">F11</span>
+      <span class="truncate">Features</span>
+    </button>
+    <button onclick="openF12ConfigModal()" class="tally-v-btn" title="Configuration (F12)">
+      <span class="fn-badge bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-300 shrink-0">F12</span>
+      <span class="truncate">Configure</span>
+    </button>
+  </aside>
+</div>
+
+  <!-- ============================================== -->
   <!-- MODAL: CREATE LEDGER (ALT+C)                   -->
   <!-- ============================================== -->
   <div id="createLedgerModal" class="modal-backdrop hidden">
@@ -1814,6 +1979,613 @@
       </div>
     </div>
   </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: GO TO (ALT+G) UNIVERSAL SEARCH & JUMP   -->
+  <!-- ============================================== -->
+  <div id="goToModal" class="modal-backdrop hidden">
+    <div class="bg-white rounded-xl shadow-2xl max-w-xl w-full border border-slate-300 overflow-hidden text-xs">
+      <div class="bg-[#1f3a52] text-white px-5 py-3 font-bold flex justify-between items-center border-b border-slate-600">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="compass" class="w-4 h-4 text-amber-400"></i>
+          <span class="text-sm">Go To (Alt+G) &mdash; Universal Command &amp; Report Palette</span>
+        </div>
+        <button type="button" onclick="closeModal('goToModal')" class="text-slate-300 hover:text-white font-mono">✕</button>
+      </div>
+
+      <div class="p-4 space-y-3 bg-slate-50 border-b border-slate-200">
+        <div class="relative">
+          <input type="text" id="goto-search-input" oninput="handleGoToSearch()" onkeydown="handleGoToKey(event)"
+                 placeholder="Type to search: Balance Sheet, Sales, GST, Stock, Create Ledger..."
+                 class="w-full pl-9 pr-4 py-2.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:ring-2 focus:ring-amber-500 focus:outline-none shadow-inner"
+                 autocomplete="off">
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
+        </div>
+        <div class="flex items-center justify-between text-[11px] text-slate-500">
+          <span>Use <kbd class="px-1 py-0.5 bg-white border border-slate-300 rounded font-mono font-bold">↑</kbd> <kbd class="px-1 py-0.5 bg-white border border-slate-300 rounded font-mono font-bold">↓</kbd> to navigate, <kbd class="px-1 py-0.5 bg-white border border-slate-300 rounded font-mono font-bold">Enter</kbd> to open</span>
+          <span id="goto-results-count" class="font-mono text-slate-600 font-bold">24 items</span>
+        </div>
+      </div>
+
+      <div class="p-2 max-h-80 overflow-y-auto space-y-1" id="goto-results-list">
+        <!-- Dynamically rendered via JS -->
+      </div>
+
+      <div class="bg-slate-100 px-4 py-2 border-t border-slate-200 flex justify-between items-center text-[11px] text-slate-500">
+        <span>TallyPrime 5.0 Fast Navigation</span>
+        <button type="button" onclick="closeModal('goToModal')" class="px-3 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded font-bold">Close (Esc)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: MASTER CREATION (C)                     -->
+  <!-- ============================================== -->
+  <div id="masterCreateModal" class="modal-backdrop hidden">
+    <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-slate-300 overflow-hidden text-xs">
+      <div class="bg-[#1f3a52] text-white px-5 py-3 font-bold flex justify-between items-center">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="folder-plus" class="w-4 h-4 text-amber-400"></i>
+          <span>Gateway of Tally &gt; Master Creation</span>
+        </div>
+        <button type="button" onclick="closeModal('masterCreateModal')" class="text-slate-300 hover:text-white">✕</button>
+      </div>
+      <div class="p-5 space-y-4">
+        <!-- Accounting Masters -->
+        <div>
+          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Accounting Masters</div>
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="closeModal('masterCreateModal'); openModal('createLedgerModal');" class="p-2.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded text-left transition flex items-center space-x-2">
+              <i data-lucide="book-open" class="w-4 h-4 text-blue-600"></i>
+              <div>
+                <div class="font-bold text-slate-900">Ledger</div>
+                <div class="text-[10px] text-slate-500">Parties, Banks, Incomes, Exp</div>
+              </div>
+            </button>
+            <button onclick="closeModal('masterCreateModal'); openReport('chart-accounts');" class="p-2.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded text-left transition flex items-center space-x-2">
+              <i data-lucide="layers" class="w-4 h-4 text-indigo-600"></i>
+              <div>
+                <div class="font-bold text-slate-900">Group</div>
+                <div class="text-[10px] text-slate-500">Primary &amp; Sub-groups</div>
+              </div>
+            </button>
+            <button onclick="alert('Cost Centre master is enabled in F11 features'); closeModal('masterCreateModal');" class="p-2.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded text-left transition flex items-center space-x-2">
+              <i data-lucide="target" class="w-4 h-4 text-emerald-600"></i>
+              <div>
+                <div class="font-bold text-slate-900">Cost Centre</div>
+                <div class="text-[10px] text-slate-500">Departments &amp; Jobs</div>
+              </div>
+            </button>
+            <button onclick="alert('Multi-Currency active: Base Currency INR (₹)'); closeModal('masterCreateModal');" class="p-2.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded text-left transition flex items-center space-x-2">
+              <i data-lucide="coins" class="w-4 h-4 text-amber-600"></i>
+              <div>
+                <div class="font-bold text-slate-900">Currency</div>
+                <div class="text-[10px] text-slate-500">Forex &amp; Exchange rates</div>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Inventory Masters -->
+        <div>
+          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Inventory Masters</div>
+          <div class="grid grid-cols-2 gap-2">
+            <button onclick="closeModal('masterCreateModal'); openModal('createStockModal');" class="p-2.5 bg-slate-50 hover:bg-purple-50 border border-slate-200 hover:border-purple-300 rounded text-left transition flex items-center space-x-2">
+              <i data-lucide="package" class="w-4 h-4 text-purple-600"></i>
+              <div>
+                <div class="font-bold text-slate-900">Stock Item</div>
+                <div class="text-[10px] text-slate-500">Items, HSN, Tax rate, Units</div>
+              </div>
+            </button>
+            <button onclick="alert('Stock Groups: Screw Compressors, Spare Parts, Lubricants'); closeModal('masterCreateModal');" class="p-2.5 bg-slate-50 hover:bg-purple-50 border border-slate-200 hover:border-purple-300 rounded text-left transition flex items-center space-x-2">
+              <i data-lucide="folder" class="w-4 h-4 text-teal-600"></i>
+              <div>
+                <div class="font-bold text-slate-900">Stock Group</div>
+                <div class="text-[10px] text-slate-500">Product classifications</div>
+              </div>
+            </button>
+            <button onclick="alert('Units of Measure: NOS, KGS, SET, LTR, BOX'); closeModal('masterCreateModal');" class="p-2.5 bg-slate-50 hover:bg-purple-50 border border-slate-200 hover:border-purple-300 rounded text-left transition flex items-center space-x-2">
+              <i data-lucide="scale" class="w-4 h-4 text-sky-600"></i>
+              <div>
+                <div class="font-bold text-slate-900">Unit (UoM)</div>
+                <div class="text-[10px] text-slate-500">NOS, KGS, SET, LTR</div>
+              </div>
+            </button>
+            <button onclick="alert('Godowns: Main Location (Chennai Plant), Coimbatore Depot'); closeModal('masterCreateModal');" class="p-2.5 bg-slate-50 hover:bg-purple-50 border border-slate-200 hover:border-purple-300 rounded text-left transition flex items-center space-x-2">
+              <i data-lucide="warehouse" class="w-4 h-4 text-amber-700"></i>
+              <div>
+                <div class="font-bold text-slate-900">Godown / Location</div>
+                <div class="text-[10px] text-slate-500">Warehouses &amp; Stores</div>
+              </div>
+            </button>
+          </div>
+        </div>
+
+        <!-- Statutory Masters -->
+        <div>
+          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Statutory Details</div>
+          <div class="p-2.5 bg-emerald-50 border border-emerald-200 rounded flex items-center justify-between">
+            <div class="flex items-center space-x-2 text-emerald-950 font-bold">
+              <i data-lucide="file-check" class="w-4 h-4 text-emerald-600"></i>
+              <span>GST Registration &amp; Tax Classification</span>
+            </div>
+            <button onclick="closeModal('masterCreateModal'); openReport('gst');" class="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white rounded font-bold text-[10px]">
+              Open GST
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="bg-slate-50 px-5 py-2.5 border-t border-slate-200 flex justify-end">
+        <button type="button" onclick="closeModal('masterCreateModal')" class="px-4 py-1.5 bg-slate-700 hover:bg-slate-800 text-white rounded font-bold">Close (Esc)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: MASTER ALTERATION (A)                   -->
+  <!-- ============================================== -->
+  <div id="masterAlterModal" class="modal-backdrop hidden">
+    <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-slate-300 overflow-hidden text-xs">
+      <div class="bg-[#1f3a52] text-white px-5 py-3 font-bold flex justify-between items-center">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="edit" class="w-4 h-4 text-amber-400"></i>
+          <span>Gateway of Tally &gt; Master Alteration</span>
+        </div>
+        <button type="button" onclick="closeModal('masterAlterModal')" class="text-slate-300 hover:text-white">✕</button>
+      </div>
+      <div class="p-5 space-y-3">
+        <p class="text-slate-600 text-xs">Select the master category you want to alter or review:</p>
+        <div class="space-y-1.5">
+          <button onclick="closeModal('masterAlterModal'); openReport('chart-accounts');" class="w-full p-2.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded text-left transition flex items-center justify-between">
+            <span class="font-bold text-slate-800">Ledger Accounts &amp; Groups</span>
+            <span class="text-[11px] text-blue-600 font-bold">Chart of Accounts &gt;</span>
+          </button>
+          <button onclick="closeModal('masterAlterModal'); openReport('stock-summary');" class="w-full p-2.5 bg-slate-50 hover:bg-purple-50 border border-slate-200 hover:border-purple-300 rounded text-left transition flex items-center justify-between">
+            <span class="font-bold text-slate-800">Stock Items &amp; Inventory</span>
+            <span class="text-[11px] text-purple-600 font-bold">Stock Summary &gt;</span>
+          </button>
+          <button onclick="closeModal('masterAlterModal'); openAlterCompany();" class="w-full p-2.5 bg-slate-50 hover:bg-emerald-50 border border-slate-200 hover:border-emerald-300 rounded text-left transition flex items-center justify-between">
+            <span class="font-bold text-slate-800">Company Profile (F3)</span>
+            <span class="text-[11px] text-emerald-600 font-bold">Company Alter &gt;</span>
+          </button>
+          <button onclick="closeModal('masterAlterModal'); openUserManagement();" class="w-full p-2.5 bg-slate-50 hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded text-left transition flex items-center justify-between">
+            <span class="font-bold text-slate-800">Users &amp; Security Roles</span>
+            <span class="text-[11px] text-amber-600 font-bold">Security Control &gt;</span>
+          </button>
+        </div>
+      </div>
+      <div class="bg-slate-50 px-5 py-2.5 border-t border-slate-200 flex justify-end">
+        <button type="button" onclick="closeModal('masterAlterModal')" class="px-4 py-1.5 bg-slate-700 hover:bg-slate-800 text-white rounded font-bold">Close (Esc)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: F11 COMPANY FEATURES                    -->
+  <!-- ============================================== -->
+  <div id="f11FeaturesModal" class="modal-backdrop hidden">
+    <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-300 overflow-hidden text-xs">
+      <div class="bg-[#1f3a52] text-white px-5 py-3 font-bold flex justify-between items-center">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="sliders" class="w-4 h-4 text-amber-400"></i>
+          <span>Company Features (F11) &mdash; Ramraj Enterprises</span>
+        </div>
+        <button type="button" onclick="closeModal('f11FeaturesModal')" class="text-slate-300 hover:text-white">✕</button>
+      </div>
+      <div class="p-6 space-y-4">
+        <!-- Accounting Features -->
+        <div class="space-y-2 border-b border-slate-200 pb-3">
+          <div class="text-[10px] font-black uppercase tracking-widest text-blue-700">Accounting Features</div>
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-200">
+              <span class="font-semibold text-slate-700">Maintain Accounts</span>
+              <span class="font-bold text-emerald-700 font-mono">Yes</span>
+            </div>
+            <div class="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-200">
+              <span class="font-semibold text-slate-700">Enable Bill-wise entry</span>
+              <span class="font-bold text-emerald-700 font-mono">Yes</span>
+            </div>
+            <div class="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-200">
+              <span class="font-semibold text-slate-700">Maintain Cost Centres</span>
+              <span class="font-bold text-emerald-700 font-mono">Yes</span>
+            </div>
+            <div class="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-200">
+              <span class="font-semibold text-slate-700">Enable Multi-Currency</span>
+              <span class="font-bold text-emerald-700 font-mono">Yes</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Inventory Features -->
+        <div class="space-y-2 border-b border-slate-200 pb-3">
+          <div class="text-[10px] font-black uppercase tracking-widest text-purple-700">Inventory Features</div>
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-200">
+              <span class="font-semibold text-slate-700">Maintain Inventory</span>
+              <span class="font-bold text-emerald-700 font-mono">Yes</span>
+            </div>
+            <div class="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-200">
+              <span class="font-semibold text-slate-700">Integrate Accounts with Inventory</span>
+              <span class="font-bold text-emerald-700 font-mono">Yes</span>
+            </div>
+            <div class="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-200">
+              <span class="font-semibold text-slate-700">Enable Multiple Godowns</span>
+              <span class="font-bold text-emerald-700 font-mono">Yes</span>
+            </div>
+            <div class="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-200">
+              <span class="font-semibold text-slate-700">Enable Batches &amp; Expiry</span>
+              <span class="font-bold text-emerald-700 font-mono">Yes</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Statutory & Taxation -->
+        <div class="space-y-2">
+          <div class="text-[10px] font-black uppercase tracking-widest text-emerald-700">Taxation &amp; Statutory Features</div>
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div class="flex items-center justify-between p-2 bg-emerald-50 rounded border border-emerald-200">
+              <span class="font-semibold text-emerald-950">Enable Goods &amp; Services Tax (GST)</span>
+              <span class="font-bold text-emerald-800 font-mono">Yes</span>
+            </div>
+            <div class="flex items-center justify-between p-2 bg-emerald-50 rounded border border-emerald-200">
+              <span class="font-semibold text-emerald-950">State &amp; Code</span>
+              <span class="font-bold text-emerald-800 font-mono">Tamil Nadu (33)</span>
+            </div>
+            <div class="flex items-center justify-between p-2 bg-emerald-50 rounded border border-emerald-200">
+              <span class="font-semibold text-emerald-950">GSTIN / UIN</span>
+              <span class="font-bold text-emerald-800 font-mono">33ANUPS7331M1Z8</span>
+            </div>
+            <div class="flex items-center justify-between p-2 bg-emerald-50 rounded border border-emerald-200">
+              <span class="font-semibold text-emerald-950">Periodicity of Return</span>
+              <span class="font-bold text-emerald-800 font-mono">Monthly</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="bg-slate-50 px-5 py-3 border-t border-slate-200 flex justify-between items-center">
+        <span class="text-slate-500 text-[11px]">All statutory compliance flags conform to Indian Accounting Standards</span>
+        <button type="button" onclick="closeModal('f11FeaturesModal')" class="px-4 py-1.5 bg-[#1f3a52] hover:bg-[#162a3b] text-white rounded font-bold">
+          Accept (Enter)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: F12 CONFIGURATION                       -->
+  <!-- ============================================== -->
+  <div id="f12ConfigModal" class="modal-backdrop hidden">
+    <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-slate-300 overflow-hidden text-xs">
+      <div class="bg-[#1f3a52] text-white px-5 py-3 font-bold flex justify-between items-center">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="settings" class="w-4 h-4 text-amber-400"></i>
+          <span>Configuration (F12) &mdash; General System Preferences</span>
+        </div>
+        <button type="button" onclick="closeModal('f12ConfigModal')" class="text-slate-300 hover:text-white">✕</button>
+      </div>
+      <div class="p-5 space-y-3">
+        <div class="space-y-2">
+          <div class="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-200">
+            <span class="font-semibold text-slate-700">Skip Date field during voucher creation</span>
+            <span class="font-bold text-slate-600 font-mono">No</span>
+          </div>
+          <div class="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-200">
+            <span class="font-semibold text-slate-700">Warn on negative cash / bank balance</span>
+            <span class="font-bold text-emerald-700 font-mono">Yes</span>
+          </div>
+          <div class="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-200">
+            <span class="font-semibold text-slate-700">Show Bill-wise details in Ledger Master</span>
+            <span class="font-bold text-emerald-700 font-mono">Yes</span>
+          </div>
+          <div class="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-200">
+            <span class="font-semibold text-slate-700">Number of decimal places for currency</span>
+            <span class="font-bold text-blue-700 font-mono">2</span>
+          </div>
+          <div class="flex items-center justify-between p-2 bg-slate-50 rounded border border-slate-200">
+            <span class="font-semibold text-slate-700">Default Print Format</span>
+            <span class="font-bold text-slate-800 font-mono">Neat Standard</span>
+          </div>
+        </div>
+      </div>
+      <div class="bg-slate-50 px-5 py-2.5 border-t border-slate-200 flex justify-end">
+        <button type="button" onclick="closeModal('f12ConfigModal')" class="px-4 py-1.5 bg-[#1f3a52] hover:bg-[#162a3b] text-white rounded font-bold">
+          Accept (Esc)
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: CHANGE DATE & PERIOD (F2 / ALT+F2)      -->
+  <!-- ============================================== -->
+  <div id="changeDateModal" class="modal-backdrop hidden">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-300 overflow-hidden text-xs">
+      <div class="bg-[#1f3a52] text-white px-5 py-3 font-bold flex justify-between items-center">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="calendar" class="w-4 h-4 text-amber-400"></i>
+          <span>Change Current Date &amp; Financial Period (F2)</span>
+        </div>
+        <button type="button" onclick="closeModal('changeDateModal')" class="text-slate-300 hover:text-white">✕</button>
+      </div>
+      <form onsubmit="handleChangeDate(event)" class="p-5 space-y-4">
+        <div>
+          <label class="block font-bold text-slate-700 mb-1">Current Voucher Date (F2)</label>
+          <input type="date" id="input-change-date" value="2026-06-01" required
+                 class="w-full border border-slate-300 rounded p-2 text-xs font-mono font-bold text-slate-900 focus:ring-2 focus:ring-blue-500">
+        </div>
+
+        <div class="pt-2 border-t border-slate-200">
+          <label class="block font-bold text-slate-700 mb-1">Financial Period (Alt+F2)</label>
+          <div class="grid grid-cols-2 gap-2">
+            <div>
+              <span class="text-[10px] text-slate-500">From:</span>
+              <input type="date" id="input-period-from" value="2026-04-01" required
+                     class="w-full border border-slate-300 rounded p-1.5 text-xs font-mono text-slate-900">
+            </div>
+            <div>
+              <span class="text-[10px] text-slate-500">To:</span>
+              <input type="date" id="input-period-to" value="2027-03-31" required
+                     class="w-full border border-slate-300 rounded p-1.5 text-xs font-mono text-slate-900">
+            </div>
+          </div>
+        </div>
+
+        <div class="pt-3 border-t border-slate-200 flex justify-end space-x-2">
+          <button type="button" onclick="closeModal('changeDateModal')" class="px-3 py-1.5 border border-slate-300 rounded font-semibold text-slate-600">Cancel</button>
+          <button type="submit" class="px-4 py-1.5 bg-[#1f3a52] text-white rounded font-bold hover:bg-[#162a3b]">Update Date (Enter)</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: BANKING UTILITIES (N)                   -->
+  <!-- ============================================== -->
+  <div id="bankingUtilitiesModal" class="modal-backdrop hidden">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-300 overflow-hidden text-xs">
+      <div class="bg-[#1f3a52] text-white px-5 py-3 font-bold flex justify-between items-center">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="landmark" class="w-4 h-4 text-amber-400"></i>
+          <span>Gateway of Tally &gt; Banking</span>
+        </div>
+        <button type="button" onclick="closeModal('bankingUtilitiesModal')" class="text-slate-300 hover:text-white">✕</button>
+      </div>
+      <div class="p-5 space-y-2">
+        <button onclick="closeModal('bankingUtilitiesModal'); openReport('bank-recon');" class="w-full p-2.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded text-left transition flex items-center justify-between">
+          <div>
+            <div class="font-bold text-slate-900">Bank Reconciliation (BRS)</div>
+            <div class="text-[10px] text-slate-500">Match statement clearing dates with book ledger</div>
+          </div>
+          <span class="text-blue-600 font-bold">&gt;</span>
+        </button>
+        <button onclick="alert('Cheque Register: All issued and received cheques are tracked under HDFC Current A/c');" class="w-full p-2.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded text-left transition flex items-center justify-between">
+          <div>
+            <div class="font-bold text-slate-900">Cheque Register</div>
+            <div class="text-[10px] text-slate-500">Available, Issued, Blank, and Cancelled cheques</div>
+          </div>
+          <span class="text-slate-400 font-bold">&gt;</span>
+        </button>
+        <button onclick="alert('Deposit Slip: Cash and Cheque deposit vouchers available in Day Book');" class="w-full p-2.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded text-left transition flex items-center justify-between">
+          <div>
+            <div class="font-bold text-slate-900">Deposit Slip</div>
+            <div class="text-[10px] text-slate-500">Cash and Cheque counterfoil slip generation</div>
+          </div>
+          <span class="text-slate-400 font-bold">&gt;</span>
+        </button>
+        <button onclick="alert('Payment Advice: Generated for vendor remittances and NEFT payments');" class="w-full p-2.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded text-left transition flex items-center justify-between">
+          <div>
+            <div class="font-bold text-slate-900">Payment Advice</div>
+            <div class="text-[10px] text-slate-500">Advice letters for vendor disbursements</div>
+          </div>
+          <span class="text-slate-400 font-bold">&gt;</span>
+        </button>
+      </div>
+      <div class="bg-slate-50 px-5 py-2.5 border-t border-slate-200 flex justify-end">
+        <button type="button" onclick="closeModal('bankingUtilitiesModal')" class="px-4 py-1.5 bg-slate-700 hover:bg-slate-800 text-white rounded font-bold">Close (Esc)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: OTHER VOUCHERS (F10)                    -->
+  <!-- ============================================== -->
+  <div id="otherVouchersModal" class="modal-backdrop hidden">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-300 overflow-hidden text-xs">
+      <div class="bg-[#1f3a52] text-white px-5 py-3 font-bold flex justify-between items-center">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="layers" class="w-4 h-4 text-amber-400"></i>
+          <span>Change Voucher Type (F10: Other Vouchers)</span>
+        </div>
+        <button type="button" onclick="closeModal('otherVouchersModal')" class="text-slate-300 hover:text-white">✕</button>
+      </div>
+      <div class="p-5 space-y-2">
+        <button onclick="closeModal('otherVouchersModal'); openVoucherScreen('Contra');" class="w-full p-2 bg-slate-50 hover:bg-blue-50 border border-slate-200 rounded flex justify-between items-center">
+          <span class="font-bold">F4: Contra</span>
+          <span class="text-slate-500 font-mono">Bank/Cash transfer</span>
+        </button>
+        <button onclick="closeModal('otherVouchersModal'); openVoucherScreen('Payment');" class="w-full p-2 bg-slate-50 hover:bg-blue-50 border border-slate-200 rounded flex justify-between items-center">
+          <span class="font-bold">F5: Payment</span>
+          <span class="text-slate-500 font-mono">Disbursements</span>
+        </button>
+        <button onclick="closeModal('otherVouchersModal'); openVoucherScreen('Receipt');" class="w-full p-2 bg-slate-50 hover:bg-blue-50 border border-slate-200 rounded flex justify-between items-center">
+          <span class="font-bold">F6: Receipt</span>
+          <span class="text-slate-500 font-mono">Collections</span>
+        </button>
+        <button onclick="closeModal('otherVouchersModal'); openVoucherScreen('Journal');" class="w-full p-2 bg-slate-50 hover:bg-blue-50 border border-slate-200 rounded flex justify-between items-center">
+          <span class="font-bold">F7: Journal</span>
+          <span class="text-slate-500 font-mono">Adjustments</span>
+        </button>
+        <button onclick="closeModal('otherVouchersModal'); openVoucherScreen('Sales');" class="w-full p-2 bg-slate-50 hover:bg-blue-50 border border-slate-200 rounded flex justify-between items-center">
+          <span class="font-bold">F8: Sales</span>
+          <span class="text-slate-500 font-mono">Tax Invoices</span>
+        </button>
+        <button onclick="closeModal('otherVouchersModal'); openVoucherScreen('Purchase');" class="w-full p-2 bg-slate-50 hover:bg-blue-50 border border-slate-200 rounded flex justify-between items-center">
+          <span class="font-bold">F9: Purchase</span>
+          <span class="text-slate-500 font-mono">Inward Bills</span>
+        </button>
+        <button onclick="closeModal('otherVouchersModal'); openVoucherScreen('Debit Note');" class="w-full p-2 bg-slate-50 hover:bg-blue-50 border border-slate-200 rounded flex justify-between items-center">
+          <span class="font-bold">Alt+F5: Debit Note</span>
+          <span class="text-slate-500 font-mono">Purchase Returns</span>
+        </button>
+        <button onclick="closeModal('otherVouchersModal'); openVoucherScreen('Credit Note');" class="w-full p-2 bg-slate-50 hover:bg-blue-50 border border-slate-200 rounded flex justify-between items-center">
+          <span class="font-bold">Alt+F6: Credit Note</span>
+          <span class="text-slate-500 font-mono">Sales Returns</span>
+        </button>
+      </div>
+      <div class="bg-slate-50 px-5 py-2.5 border-t border-slate-200 flex justify-end">
+        <button type="button" onclick="closeModal('otherVouchersModal')" class="px-4 py-1.5 bg-slate-700 hover:bg-slate-800 text-white rounded font-bold">Close (Esc)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: DATA (ALT+Y)                            -->
+  <!-- ============================================== -->
+  <div id="dataMenuModal" class="modal-backdrop hidden">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-300 overflow-hidden text-xs">
+      <div class="bg-[#1f3a52] text-white px-5 py-3 font-bold flex justify-between items-center">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="database" class="w-4 h-4 text-amber-400"></i>
+          <span>Data (Alt+Y) &mdash; Company Data Management</span>
+        </div>
+        <button type="button" onclick="closeModal('dataMenuModal')" class="text-slate-300 hover:text-white">✕</button>
+      </div>
+      <div class="p-5 space-y-2">
+        <a href="/api/export/tally-xml" download class="w-full p-2.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 rounded flex justify-between items-center">
+          <div>
+            <div class="font-bold text-slate-900">Backup (Export XML)</div>
+            <div class="text-[10px] text-slate-500">Download complete company ledger &amp; voucher database</div>
+          </div>
+          <span class="text-blue-600 font-bold">&gt;</span>
+        </a>
+        <button onclick="closeModal('dataMenuModal'); openImportModal();" class="w-full p-2.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 rounded flex justify-between items-center text-left">
+          <div>
+            <div class="font-bold text-slate-900">Restore (Import XML / JSON)</div>
+            <div class="text-[10px] text-slate-500">Restore masters and vouchers from file backup</div>
+          </div>
+          <span class="text-slate-400 font-bold">&gt;</span>
+        </button>
+        <button onclick="startCleanSlate(); closeModal('dataMenuModal');" class="w-full p-2.5 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded flex justify-between items-center text-left text-rose-900">
+          <div>
+            <div class="font-bold">Clean Slate / Reset (₹0)</div>
+            <div class="text-[10px] text-rose-700">Clear all transactions for fresh production accounting</div>
+          </div>
+          <span class="text-rose-600 font-bold">&gt;</span>
+        </button>
+      </div>
+      <div class="bg-slate-50 px-5 py-2.5 border-t border-slate-200 flex justify-end">
+        <button type="button" onclick="closeModal('dataMenuModal')" class="px-4 py-1.5 bg-slate-700 hover:bg-slate-800 text-white rounded font-bold">Close (Esc)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: EXCHANGE (ALT+Z)                        -->
+  <!-- ============================================== -->
+  <div id="exchangeMenuModal" class="modal-backdrop hidden">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full border border-slate-300 overflow-hidden text-xs">
+      <div class="bg-[#1f3a52] text-white px-5 py-3 font-bold flex justify-between items-center">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="refresh-cw" class="w-4 h-4 text-amber-400"></i>
+          <span>Exchange (Alt+Z) &mdash; Data Synchronization</span>
+        </div>
+        <button type="button" onclick="closeModal('exchangeMenuModal')" class="text-slate-300 hover:text-white">✕</button>
+      </div>
+      <div class="p-5 space-y-2">
+        <div class="p-3 bg-emerald-50 border border-emerald-200 rounded space-y-1">
+          <div class="font-bold text-emerald-950 flex items-center space-x-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 inline-block"></span>
+            <span>Online Connected Sync: Active</span>
+          </div>
+          <p class="text-[11px] text-emerald-800">Local SQLite database synchronizes in real time with the REST API backend on port 4000/9000.</p>
+        </div>
+        <button onclick="closeModal('exchangeMenuModal'); openReport('gst');" class="w-full p-2.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 rounded flex justify-between items-center text-left">
+          <div>
+            <div class="font-bold text-slate-900">E-Way Bill &amp; E-Invoice Portal</div>
+            <div class="text-[10px] text-slate-500">NIC GST portal JSON payloads and reconciliation</div>
+          </div>
+          <span class="text-blue-600 font-bold">&gt;</span>
+        </button>
+      </div>
+      <div class="bg-slate-50 px-5 py-2.5 border-t border-slate-200 flex justify-end">
+        <button type="button" onclick="closeModal('exchangeMenuModal')" class="px-4 py-1.5 bg-slate-700 hover:bg-slate-800 text-white rounded font-bold">Close (Esc)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: HELP & SHORTCUTS (F1)                   -->
+  <!-- ============================================== -->
+  <div id="helpMenuModal" class="modal-backdrop hidden">
+    <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-300 overflow-hidden text-xs">
+      <div class="bg-[#1f3a52] text-white px-5 py-3 font-bold flex justify-between items-center">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="help-circle" class="w-4 h-4 text-amber-400"></i>
+          <span>Help (F1) &mdash; TallyPrime Keyboard Shortcuts &amp; Reference</span>
+        </div>
+        <button type="button" onclick="closeModal('helpMenuModal')" class="text-slate-300 hover:text-white">✕</button>
+      </div>
+      <div class="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+        <div>
+          <h4 class="font-bold text-slate-900 text-sm mb-2">Canonical Function Keys</h4>
+          <div class="grid grid-cols-2 gap-2 font-mono">
+            <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>F2: Date</span><span class="font-sans text-slate-500">Change voucher date</span></div>
+            <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>Alt+F2: Period</span><span class="font-sans text-slate-500">Change financial period</span></div>
+            <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>F3: Company</span><span class="font-sans text-slate-500">Alter loaded company</span></div>
+            <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>Ctrl+F3: Shut Co</span><span class="font-sans text-slate-500">Logout to company list</span></div>
+            <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>F4: Contra</span><span class="font-sans text-slate-500">Bank / Cash deposit/withdrawal</span></div>
+            <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>F5: Payment</span><span class="font-sans text-slate-500">Vendor / Expense payment</span></div>
+            <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>F6: Receipt</span><span class="font-sans text-slate-500">Customer collection</span></div>
+            <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>F7: Journal</span><span class="font-sans text-slate-500">Adjustment entry</span></div>
+            <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>F8: Sales</span><span class="font-sans text-slate-500">Tax invoice creation</span></div>
+            <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>F9: Purchase</span><span class="font-sans text-slate-500">Inward vendor bill</span></div>
+            <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>F10: Other Vouchers</span><span class="font-sans text-slate-500">Change voucher mode</span></div>
+            <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>Alt+F5: Dr Note</span><span class="font-sans text-slate-500">Purchase return</span></div>
+            <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>Alt+F6: Cr Note</span><span class="font-sans text-slate-500">Sales return</span></div>
+            <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>F11: Features</span><span class="font-sans text-slate-500">Accounting &amp; Tax settings</span></div>
+            <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>F12: Configure</span><span class="font-sans text-slate-500">Voucher / display config</span></div>
+          </div>
+        </div>
+
+        <div>
+          <h4 class="font-bold text-slate-900 text-sm mb-2">Universal Hotkeys</h4>
+          <div class="grid grid-cols-2 gap-2 font-mono">
+            <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>Alt+G: Go To</span><span class="font-sans text-slate-500">Universal search &amp; jump</span></div>
+            <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>Ctrl+N: Calculator</span><span class="font-sans text-slate-500">Show/hide bottom calculator</span></div>
+            <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>Alt+T: Themes</span><span class="font-sans text-slate-500">Cycle 6 color modes</span></div>
+            <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>Alt+C: Create Master</span><span class="font-sans text-slate-500">New ledger or stock item</span></div>
+            <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>Ctrl+A: Accept</span><span class="font-sans text-slate-500">Save active voucher/form</span></div>
+            <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>Esc: Back / Quit</span><span class="font-sans text-slate-500">Return to Gateway / Exit</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="bg-slate-50 px-5 py-2.5 border-t border-slate-200 flex justify-end">
+        <button type="button" onclick="closeModal('helpMenuModal')" class="px-4 py-1.5 bg-[#1f3a52] text-white rounded font-bold hover:bg-[#162a3b]">Understood (Esc)</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- TALLY BOTTOM STATUS BAR                        -->
+  <!-- ============================================== -->
+  <footer id="tally-status-bar" class="bg-[#162a3b] text-slate-300 border-t border-slate-700 px-4 py-1.5 flex items-center justify-between text-xs select-none">
+    <div class="flex items-center space-x-3">
+      <span class="font-bold text-white flex items-center space-x-1.5">
+        <span class="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse"></span>
+        <span>TallyPrime Gold Release 5.0</span>
+      </span>
+      <span class="text-slate-500">|</span>
+      <span class="text-slate-400 font-mono text-[11px]" id="status-bar-context">Gateway of Tally</span>
+    </div>
+    <div class="hidden sm:flex items-center space-x-3 text-[11px] text-slate-400 font-mono">
+      <span><strong class="text-amber-300 font-sans">Alt+G:</strong> Go To</span>
+      <span><strong class="text-amber-300 font-sans">F2:</strong> Date</span>
+      <span><strong class="text-amber-300 font-sans">F11:</strong> Features</span>
+      <span><strong class="text-amber-300 font-sans">F12:</strong> Configure</span>
+      <span><strong class="text-amber-300 font-sans">Ctrl+N:</strong> Calculator</span>
+      <span><strong class="text-amber-300 font-sans">Esc:</strong> Gateway</span>
+    </div>
+  </footer>
 
   <script src="app.js"></script>
 </body>

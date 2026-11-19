@@ -567,6 +567,7 @@ const VIEWS = [
   'view-login',
   'view-dashboard',
   'view-gateway',
+  'view-display-more',
   'view-voucher',
   'view-balance-sheet',
   'view-profit-loss',
@@ -580,6 +581,24 @@ const VIEWS = [
   'view-chart-accounts'
 ];
 
+const VIEW_BREADCRUMBS = {
+  'view-login': 'Security & Company Login',
+  'view-dashboard': 'TallyPrime Dashboard',
+  'view-gateway': 'Gateway of Tally',
+  'view-display-more': 'Gateway of Tally > Display More Reports',
+  'view-voucher': 'Gateway of Tally > Accounting Voucher Creation',
+  'view-balance-sheet': 'Gateway of Tally > Balance Sheet',
+  'view-profit-loss': 'Gateway of Tally > Profit & Loss A/c',
+  'view-trial-balance': 'Gateway of Tally > Trial Balance',
+  'view-stock-summary': 'Gateway of Tally > Stock Summary',
+  'view-daybook': 'Gateway of Tally > Day Book',
+  'view-ratio-analysis': 'Gateway of Tally > Ratio Analysis',
+  'view-gst': 'Gateway of Tally > GST Portal (GSTR-1 & 3B)',
+  'view-outstandings': 'Gateway of Tally > Outstandings (Ageing)',
+  'view-bank-recon': 'Gateway of Tally > Bank Reconciliation (BRS)',
+  'view-chart-accounts': 'Gateway of Tally > Chart of Accounts'
+};
+
 function showView(viewId) {
   VIEWS.forEach(id => {
     const el = document.getElementById(id);
@@ -591,12 +610,24 @@ function showView(viewId) {
     target.classList.remove('hidden');
     appState.currentView = viewId;
   }
+
+  // Update Breadcrumb and Bottom Status Bar Context
+  const label = VIEW_BREADCRUMBS[viewId] || 'Gateway of Tally';
+  const topCrumb = document.getElementById('top-breadcrumb');
+  if (topCrumb) topCrumb.textContent = label;
+  const statusCtx = document.getElementById('status-bar-context');
+  if (statusCtx) statusCtx.textContent = label;
+
   if (window.lucide) window.lucide.createIcons();
 }
 
 function showGateway() {
   showView('view-gateway');
   loadGatewayInfo();
+}
+
+function showDisplayMoreMenu() {
+  showView('view-display-more');
 }
 
 function toggleDashboard() {
@@ -1796,87 +1827,359 @@ async function handleSaveStockItem(e) {
 }
 
 // ========================================================
+// 5.5 TALLY CANONICAL MODALS, GO TO (ALT+G) & SUBMENUS
+// ========================================================
+const GOTO_REGISTRY = [
+  // Financial & Accounting Reports
+  { title: 'Balance Sheet', category: 'Reports', action: () => openReport('balance-sheet'), hotkey: 'B' },
+  { title: 'Profit & Loss A/c', category: 'Reports', action: () => openReport('profit-loss'), hotkey: 'P' },
+  { title: 'Trial Balance', category: 'Reports', action: () => openReport('trial-balance'), hotkey: 'T' },
+  { title: 'Day Book', category: 'Reports', action: () => openReport('daybook'), hotkey: 'K' },
+  { title: 'Stock Summary', category: 'Inventory', action: () => openReport('stock-summary'), hotkey: 'S' },
+  { title: 'Ratio Analysis', category: 'Reports', action: () => openReport('ratio-analysis'), hotkey: 'R' },
+  { title: 'GST Portal (GSTR-1 & 3B)', category: 'Statutory', action: () => openReport('gst'), hotkey: 'G' },
+  { title: 'Bills Outstandings (Ageing)', category: 'Reports', action: () => openReport('outstandings'), hotkey: 'O' },
+  { title: 'Bank Reconciliation (BRS)', category: 'Banking', action: () => openReport('bank-recon'), hotkey: 'N' },
+  { title: 'Chart of Accounts', category: 'Masters', action: () => openReport('chart-accounts'), hotkey: 'H' },
+  { title: 'Live Business Dashboard', category: 'Overview', action: () => toggleDashboard(), hotkey: 'Alt+D' },
+
+  // Transactions (Vouchers)
+  { title: 'Create Sales Voucher (Tax Invoice)', category: 'Vouchers', action: () => openVoucherScreen('Sales'), hotkey: 'F8' },
+  { title: 'Create Purchase Voucher', category: 'Vouchers', action: () => openVoucherScreen('Purchase'), hotkey: 'F9' },
+  { title: 'Create Payment Voucher', category: 'Vouchers', action: () => openVoucherScreen('Payment'), hotkey: 'F5' },
+  { title: 'Create Receipt Voucher', category: 'Vouchers', action: () => openVoucherScreen('Receipt'), hotkey: 'F6' },
+  { title: 'Create Contra Voucher', category: 'Vouchers', action: () => openVoucherScreen('Contra'), hotkey: 'F4' },
+  { title: 'Create Journal Voucher', category: 'Vouchers', action: () => openVoucherScreen('Journal'), hotkey: 'F7' },
+  { title: 'Create Debit Note (Purchase Return)', category: 'Vouchers', action: () => openVoucherScreen('Debit Note'), hotkey: 'Alt+F5' },
+  { title: 'Create Credit Note (Sales Return)', category: 'Vouchers', action: () => openVoucherScreen('Credit Note'), hotkey: 'Alt+F6' },
+
+  // Masters
+  { title: 'Create Ledger Account', category: 'Masters', action: () => openModal('createLedgerModal'), hotkey: 'Alt+C' },
+  { title: 'Create Stock Item', category: 'Masters', action: () => openModal('createStockModal'), hotkey: 'Alt+I' },
+  { title: 'Master Creation Hub', category: 'Masters', action: () => openMasterCreateModal(), hotkey: 'C' },
+  { title: 'Master Alteration Hub', category: 'Masters', action: () => openMasterAlterModal(), hotkey: 'A' },
+
+  // Utilities & Settings
+  { title: 'Change Current Date', category: 'Utilities', action: () => openChangeDateModal(), hotkey: 'F2' },
+  { title: 'Company Features (F11)', category: 'Configure', action: () => openF11FeaturesModal(), hotkey: 'F11' },
+  { title: 'System Configuration (F12)', category: 'Configure', action: () => openF12ConfigModal(), hotkey: 'F12' },
+  { title: 'Banking Utilities', category: 'Banking', action: () => openBankingUtilitiesModal(), hotkey: 'N' },
+  { title: 'Users & Passwords (Security)', category: 'Security', action: () => openUserManagement(), hotkey: 'Alt+K' },
+  { title: 'Display Color Themes', category: 'Display', action: () => openThemeSelectorModal(), hotkey: 'Alt+T' },
+  { title: 'Calculator', category: 'Utilities', action: () => toggleCalculator(), hotkey: 'Ctrl+N' }
+];
+
+let goToSelectedIndex = 0;
+let filteredGoToList = [];
+
+function openGoToModal() {
+  openModal('goToModal');
+  const input = document.getElementById('goto-search-input');
+  if (input) {
+    input.value = '';
+    setTimeout(() => input.focus(), 60);
+  }
+  handleGoToSearch();
+}
+
+function handleGoToSearch() {
+  const query = (document.getElementById('goto-search-input')?.value || '').trim().toLowerCase();
+  if (!query) {
+    filteredGoToList = [...GOTO_REGISTRY];
+  } else {
+    filteredGoToList = GOTO_REGISTRY.filter(item =>
+      item.title.toLowerCase().includes(query) ||
+      item.category.toLowerCase().includes(query) ||
+      (item.hotkey && item.hotkey.toLowerCase().includes(query))
+    );
+  }
+  goToSelectedIndex = 0;
+  renderGoToResults();
+}
+
+function renderGoToResults() {
+  const listEl = document.getElementById('goto-results-list');
+  const countEl = document.getElementById('goto-results-count');
+  if (!listEl) return;
+
+  if (countEl) countEl.textContent = `${filteredGoToList.length} item${filteredGoToList.length === 1 ? '' : 's'}`;
+
+  if (filteredGoToList.length === 0) {
+    listEl.innerHTML = `
+      <div class="p-6 text-center text-slate-400">
+        <i data-lucide="search-x" class="w-8 h-8 mx-auto mb-2 opacity-50"></i>
+        <div class="font-bold">No matching reports or vouchers found</div>
+        <div class="text-[11px] mt-1">Try searching "Balance Sheet", "Sales", "GST", or "Ledger"</div>
+      </div>
+    `;
+    if (window.lucide) window.lucide.createIcons();
+    return;
+  }
+
+  listEl.innerHTML = filteredGoToList.map((item, idx) => `
+    <div onclick="handleGoToSelect(${idx})"
+         class="goto-item ${idx === goToSelectedIndex ? 'active' : ''}">
+      <div class="flex items-center space-x-2">
+        <span class="w-2 h-2 rounded-full ${idx === goToSelectedIndex ? 'bg-amber-300' : 'bg-slate-300'}"></span>
+        <span class="font-bold">${item.title}</span>
+        <span class="goto-category text-[10px] px-1.5 py-0.2 rounded font-mono bg-slate-100 text-slate-600 border border-slate-200">${item.category}</span>
+      </div>
+      <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100/80 text-slate-700 font-bold border border-slate-300/80">${item.hotkey || 'Enter'}</span>
+    </div>
+  `).join('');
+}
+
+function handleGoToKey(e) {
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    if (filteredGoToList.length > 0) {
+      goToSelectedIndex = (goToSelectedIndex + 1) % filteredGoToList.length;
+      renderGoToResults();
+      scrollActiveGoToIntoView();
+    }
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    if (filteredGoToList.length > 0) {
+      goToSelectedIndex = (goToSelectedIndex - 1 + filteredGoToList.length) % filteredGoToList.length;
+      renderGoToResults();
+      scrollActiveGoToIntoView();
+    }
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (filteredGoToList[goToSelectedIndex]) {
+      handleGoToSelect(goToSelectedIndex);
+    }
+  } else if (e.key === 'Escape') {
+    e.preventDefault();
+    closeModal('goToModal');
+  }
+}
+
+function scrollActiveGoToIntoView() {
+  const activeEl = document.querySelector('.goto-item.active');
+  if (activeEl) {
+    activeEl.scrollIntoView({ block: 'nearest' });
+  }
+}
+
+function handleGoToSelect(index) {
+  const item = filteredGoToList[index];
+  closeModal('goToModal');
+  if (item && typeof item.action === 'function') {
+    item.action();
+  }
+}
+
+function openMasterCreateModal() { openModal('masterCreateModal'); }
+function openMasterAlterModal() { openModal('masterAlterModal'); }
+function openBankingUtilitiesModal() { openModal('bankingUtilitiesModal'); }
+function openOtherVouchersModal() { openModal('otherVouchersModal'); }
+function openStockJournalModal() { openVoucherScreen('Journal'); }
+function openDataMenuModal() { openModal('dataMenuModal'); }
+function openExchangeMenuModal() { openModal('exchangeMenuModal'); }
+function openHelpModal() { openModal('helpMenuModal'); }
+function openF11FeaturesModal() { openModal('f11FeaturesModal'); }
+function openF12ConfigModal() { openModal('f12ConfigModal'); }
+
+function openChangeDateModal() {
+  openModal('changeDateModal');
+  const dInput = document.getElementById('input-change-date');
+  if (dInput) {
+    setTimeout(() => dInput.focus(), 50);
+  }
+}
+
+async function handleChangeDate(e) {
+  e.preventDefault();
+  const newDate = document.getElementById('input-change-date')?.value;
+  if (!newDate) return;
+
+  const formattedDate = formatDateDisplay(newDate);
+  const topDateEl = document.getElementById('top-current-date');
+  const gwDateEl = document.getElementById('gateway-date');
+  if (topDateEl) topDateEl.textContent = `${formattedDate} (F2)`;
+  if (gwDateEl) gwDateEl.textContent = `${formattedDate} (F2)`;
+
+  closeModal('changeDateModal');
+  alert(`Current voucher date successfully changed to ${formattedDate}`);
+}
+
+// Helper to close modals on Esc
+function closeAnyOpenModal() {
+  const openModals = Array.from(document.querySelectorAll('.modal-backdrop:not(.hidden)'));
+  if (openModals.length > 0) {
+    openModals.forEach(m => m.classList.add('hidden'));
+    return true;
+  }
+  return false;
+}
+
+// ========================================================
 // 6. KEYBOARD SHORTCUTS & INTERACTIVE ASSISTANT
 // ========================================================
 function setupKeyboardShortcuts() {
   window.addEventListener('keydown', (e) => {
-    // If typing inside an input or select, skip hotkeys except Esc & Enter
     const isInput = ['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName);
 
+    // Escape handling
     if (e.key === 'Escape') {
       e.preventDefault();
-      closeModal('createLedgerModal');
-      closeModal('createStockModal');
-      showGateway();
+      // If any modal is open, close modal only
+      if (closeAnyOpenModal()) return;
+
+      // If in sub-view or report, return to Gateway
+      if (appState.currentView === 'view-display-more') {
+        showGateway();
+        return;
+      }
+      if (appState.currentView !== 'view-gateway' && appState.currentView !== 'view-login') {
+        showGateway();
+        return;
+      }
+      // If already in Gateway, offer quit/logout
+      if (appState.currentView === 'view-gateway') {
+        showLoginView();
+        return;
+      }
       return;
     }
 
+    // Ctrl+N: Calculator
     if (e.ctrlKey && (e.key === 'n' || e.key === 'N')) {
       e.preventDefault();
       toggleCalculator();
       return;
     }
 
+    // Alt+G: Universal Go To Search & Jump
+    if (e.altKey && (e.key === 'g' || e.key === 'G')) {
+      e.preventDefault();
+      openGoToModal();
+      return;
+    }
+
+    // Alt+D: Dashboard
     if (e.altKey && (e.key === 'd' || e.key === 'D')) {
       e.preventDefault();
       toggleDashboard();
       return;
     }
 
+    // Alt+C: Create Ledger
     if (e.altKey && (e.key === 'c' || e.key === 'C')) {
       e.preventDefault();
       openModal('createLedgerModal');
       return;
     }
 
-    if (e.ctrlKey && (e.key === 'a' || e.key === 'A') && appState.currentView === 'view-voucher') {
-      e.preventDefault();
-      document.getElementById('form-voucher').dispatchEvent(new Event('submit'));
-      return;
-    }
-
+    // Alt+K: User Security & Passwords
     if (e.altKey && (e.key === 'k' || e.key === 'K')) {
       e.preventDefault();
       openUserManagement();
       return;
     }
 
+    // Alt+T: Themes
     if (e.altKey && (e.key === 't' || e.key === 'T')) {
       e.preventDefault();
       openThemeSelectorModal();
       return;
     }
 
-    // Function keys (F3 to F9)
+    // Alt+Y: Data Menu
+    if (e.altKey && (e.key === 'y' || e.key === 'Y')) {
+      e.preventDefault();
+      openDataMenuModal();
+      return;
+    }
+
+    // Alt+Z: Exchange Menu
+    if (e.altKey && (e.key === 'z' || e.key === 'Z')) {
+      e.preventDefault();
+      openExchangeMenuModal();
+      return;
+    }
+
+    // Ctrl+A: Accept Form in Voucher
+    if (e.ctrlKey && (e.key === 'a' || e.key === 'A') && appState.currentView === 'view-voucher') {
+      e.preventDefault();
+      document.getElementById('form-voucher')?.dispatchEvent(new Event('submit'));
+      return;
+    }
+
+    // Alt+F2: Change Period
+    if (e.altKey && (e.key === 'F2')) {
+      e.preventDefault();
+      openChangeDateModal();
+      return;
+    }
+
+    // Alt+F5: Debit Note
+    if (e.altKey && (e.key === 'F5')) {
+      e.preventDefault();
+      openVoucherScreen('Debit Note');
+      return;
+    }
+
+    // Alt+F6: Credit Note
+    if (e.altKey && (e.key === 'F6')) {
+      e.preventDefault();
+      openVoucherScreen('Credit Note');
+      return;
+    }
+
+    // Alt+F7: Stock Journal
+    if (e.altKey && (e.key === 'F7')) {
+      e.preventDefault();
+      openStockJournalModal();
+      return;
+    }
+
+    // Function keys (F1 to F12)
+    if (e.key === 'F1') { e.preventDefault(); openHelpModal(); return; }
+    if (e.key === 'F2') { e.preventDefault(); openChangeDateModal(); return; }
     if (e.ctrlKey && (e.key === 'F3')) { e.preventDefault(); showLoginView(); return; }
     if (e.key === 'F3') { e.preventDefault(); openAlterCompany(); return; }
-    if (e.key === 'F4') { e.preventDefault(); openVoucherScreen('Contra'); }
-    if (e.key === 'F5') { e.preventDefault(); openVoucherScreen('Payment'); }
-    if (e.key === 'F6') { e.preventDefault(); openVoucherScreen('Receipt'); }
-    if (e.key === 'F7') { e.preventDefault(); openVoucherScreen('Journal'); }
-    if (e.key === 'F8') { e.preventDefault(); openVoucherScreen('Sales'); }
-    if (e.key === 'F9') { e.preventDefault(); openVoucherScreen('Purchase'); }
+    if (e.key === 'F4') { e.preventDefault(); openVoucherScreen('Contra'); return; }
+    if (e.key === 'F5') { e.preventDefault(); openVoucherScreen('Payment'); return; }
+    if (e.key === 'F6') { e.preventDefault(); openVoucherScreen('Receipt'); return; }
+    if (e.key === 'F7') { e.preventDefault(); openVoucherScreen('Journal'); return; }
+    if (e.key === 'F8') { e.preventDefault(); openVoucherScreen('Sales'); return; }
+    if (e.key === 'F9') { e.preventDefault(); openVoucherScreen('Purchase'); return; }
+    if (e.key === 'F10') { e.preventDefault(); openOtherVouchersModal(); return; }
+    if (e.key === 'F11') { e.preventDefault(); openF11FeaturesModal(); return; }
+    if (e.key === 'F12') { e.preventDefault(); openF12ConfigModal(); return; }
 
     // Gateway Single-Key Shortcuts (when on Gateway screen and not typing)
     if (!isInput && appState.currentView === 'view-gateway') {
       const k = e.key.toUpperCase();
-      if (k === 'V') openVoucherScreen('Sales');
-      if (k === 'B') openReport('balance-sheet');
-      if (k === 'P') openReport('profit-loss');
-      if (k === 'T') openReport('trial-balance');
-      if (k === 'S') openReport('stock-summary');
-      if (k === 'D') openReport('daybook');
-      if (k === 'R') openReport('ratio-analysis');
-      if (k === 'G') openReport('gst');
-      if (k === 'O') openReport('outstandings');
-      if (k === 'K') openReport('bank-recon');
-      if (k === 'A') openReport('chart-accounts');
-      if (k === 'C') openModal('createLedgerModal');
-      if (k === 'I') openModal('createStockModal');
-      if (k === 'U') openUserManagement();
-      if (k === 'M') openThemeSelectorModal();
-      if (k === 'W') startCleanSlate();
-      if (k === 'Q') showLoginView();
+      if (k === 'C') { e.preventDefault(); openMasterCreateModal(); return; }
+      if (k === 'A') { e.preventDefault(); openMasterAlterModal(); return; }
+      if (k === 'H') { e.preventDefault(); openReport('chart-accounts'); return; }
+      if (k === 'V') { e.preventDefault(); openVoucherScreen('Sales'); return; }
+      if (k === 'K') { e.preventDefault(); openReport('daybook'); return; }
+      if (k === 'N') { e.preventDefault(); openBankingUtilitiesModal(); return; }
+      if (k === 'B') { e.preventDefault(); openReport('balance-sheet'); return; }
+      if (k === 'P') { e.preventDefault(); openReport('profit-loss'); return; }
+      if (k === 'S') { e.preventDefault(); openReport('stock-summary'); return; }
+      if (k === 'R') { e.preventDefault(); openReport('ratio-analysis'); return; }
+      if (k === 'D') { e.preventDefault(); showDisplayMoreMenu(); return; }
+      if (k === 'Q') { e.preventDefault(); showLoginView(); return; }
+    }
+
+    // Display More Reports Single-Key Shortcuts
+    if (!isInput && appState.currentView === 'view-display-more') {
+      const k = e.key.toUpperCase();
+      if (k === 'T') { e.preventDefault(); openReport('trial-balance'); return; }
+      if (k === 'D') { e.preventDefault(); openReport('daybook'); return; }
+      if (k === 'C') { e.preventDefault(); openReport('bank-recon'); return; }
+      if (k === 'A') { e.preventDefault(); openReport('chart-accounts'); return; }
+      if (k === 'S') { e.preventDefault(); openReport('outstandings'); return; }
+      if (k === 'I') { e.preventDefault(); openReport('stock-summary'); return; }
+      if (k === 'O') { e.preventDefault(); openReport('gst'); return; }
+      if (k === 'R') { e.preventDefault(); openReport('ratio-analysis'); return; }
+      if (k === 'B') { e.preventDefault(); openReport('bank-recon'); return; }
+      if (k === 'Q') { e.preventDefault(); showGateway(); return; }
     }
   });
 }
