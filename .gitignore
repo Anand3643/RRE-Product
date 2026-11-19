@@ -4,6 +4,8 @@ node_modules/
 *.db
 *.sqlite
 *.sqlite3
+data/
+tally model/
 dist/
 build/
 *.log

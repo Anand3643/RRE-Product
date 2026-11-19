@@ -107,9 +107,10 @@ function populateStockDropdowns() {
 }
 
 // ========================================================
-// 2. VIEW MANAGEMENT (GATEWAY & REPORTS)
+// 2. VIEW MANAGEMENT (GATEWAY, DASHBOARD & REPORTS)
 // ========================================================
 const VIEWS = [
+  'view-dashboard',
   'view-gateway',
   'view-voucher',
   'view-balance-sheet',
@@ -141,6 +142,69 @@ function showView(viewId) {
 function showGateway() {
   showView('view-gateway');
   loadGatewayInfo();
+}
+
+function toggleDashboard() {
+  if (appState.currentView === 'view-dashboard') {
+    showGateway();
+  } else {
+    showView('view-dashboard');
+    loadDashboard();
+  }
+}
+
+async function loadDashboard() {
+  try {
+    const res = await fetch(`${API_BASE}/dashboard/tiles`);
+    const json = await res.json();
+    if (!json.success) return;
+
+    const d = json.data;
+    // Balance Sheet
+    document.getElementById('dash-bs-assets').textContent = formatCurrency(d.balance_sheet_tile.total_assets);
+    document.getElementById('dash-bs-liab').textContent = formatCurrency(d.balance_sheet_tile.total_liabilities);
+    document.getElementById('dash-bs-wc').textContent = formatCurrency(d.balance_sheet_tile.working_capital);
+
+    // P&L
+    document.getElementById('dash-pl-sales').textContent = formatCurrency(d.profit_loss_tile.sales);
+    document.getElementById('dash-pl-gp').textContent = formatCurrency(d.profit_loss_tile.gross_profit);
+    document.getElementById('dash-pl-np').textContent = formatCurrency(d.profit_loss_tile.net_profit);
+
+    // Debtors
+    document.getElementById('dash-debtors-total').textContent = formatCurrency(d.debtors_tile.total);
+    document.getElementById('dash-debtors-list').innerHTML = (d.debtors_tile.top_debtors || []).map(deb => `
+      <div class="flex justify-between border-b border-slate-100 py-0.5">
+        <span class="truncate max-w-[170px] text-slate-700">${deb.name}</span>
+        <span class="font-mono text-slate-900 font-bold">${formatCurrency(deb.balance)}</span>
+      </div>
+    `).join('') || '<div class="text-slate-400">No overdue receivables</div>';
+
+    // Creditors
+    document.getElementById('dash-creditors-total').textContent = formatCurrency(d.creditors_tile.total);
+    document.getElementById('dash-creditors-list').innerHTML = (d.creditors_tile.top_creditors || []).map(crd => `
+      <div class="flex justify-between border-b border-slate-100 py-0.5">
+        <span class="truncate max-w-[170px] text-slate-700">${crd.name}</span>
+        <span class="font-mono text-slate-900 font-bold">${formatCurrency(crd.balance)}</span>
+      </div>
+    `).join('') || '<div class="text-slate-400">No pending payables</div>';
+
+    // Cash & Funds
+    document.getElementById('dash-cash-total').textContent = formatCurrency(d.funds_flow_tile.cash_bank_balance);
+    document.getElementById('dash-inflow').textContent = formatCurrency(d.funds_flow_tile.inflow);
+    document.getElementById('dash-outflow').textContent = formatCurrency(d.funds_flow_tile.outflow);
+
+    // Stock
+    document.getElementById('dash-stock-val').textContent = formatCurrency(d.stock_tile.total_valuation);
+    document.getElementById('dash-stock-list').innerHTML = (d.stock_tile.top_items || []).map(it => `
+      <div class="flex justify-between border-b border-slate-100 py-0.5">
+        <span class="truncate max-w-[170px] text-slate-700">${it.name}</span>
+        <span class="font-mono text-blue-700 font-bold">${it.closing_qty} ${it.uom_symbol}</span>
+      </div>
+    `).join('') || '<div class="text-slate-400">No stock items</div>';
+
+  } catch (err) {
+    console.error('Failed to load Dashboard tiles:', err);
+  }
 }
 
 function openReport(reportType) {
@@ -1288,6 +1352,12 @@ function setupKeyboardShortcuts() {
     if (e.ctrlKey && (e.key === 'n' || e.key === 'N')) {
       e.preventDefault();
       toggleCalculator();
+      return;
+    }
+
+    if (e.altKey && (e.key === 'd' || e.key === 'D')) {
+      e.preventDefault();
+      toggleDashboard();
       return;
     }
 

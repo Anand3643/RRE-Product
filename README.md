@@ -1,14 +1,15 @@
-# TallyPrime Gold — Ramraj Enterprises (Full Accounting Suite)
+# TallyPrime Gold & Tally.ERP 9 — Modular Enterprise Suite
 
-An accurate, production-grade recreation of **TallyPrime / Tally ERP 9** architecture, workflows, systems, features, and statutory formulas.
+An accurate, production-grade recreation of **TallyPrime / Tally ERP 9** architecture, workflows, systems, features, and statutory formulas reverse engineered from the official Tally model binaries, configuration, and data structures.
 
 ---
 
-## ⚡ Complete Gateway of Tally & Keyboard Shortcuts
+## ⚡ Gateway of Tally & Keyboard Shortcuts
 
 | Shortcut | Function | Description |
 | :---: | :--- | :--- |
 | **Esc** | **Gateway / Back** | Return to Gateway of Tally or exit modal dialogs |
+| **Alt+D** | **Dashboard** | Toggle TallyPrime Modern Interactive Analytical Dashboard |
 | **F4** | **Contra** | Cash to Bank, Bank to Cash, Bank to Bank transfers |
 | **F5** | **Payment** | Cheque / NEFT / Cash expense and vendor payments with BRS tracking |
 | **F6** | **Receipt** | Inward collections from customers & capital infusion |
@@ -35,11 +36,31 @@ An accurate, production-grade recreation of **TallyPrime / Tally ERP 9** archite
 
 ---
 
+## 🏛️ Reverse-Engineered Modular Architecture
+
+Extracted directly from `tally model/TallyPrime` and `tally model/Tally/Tally.ERP9`:
+- **Dual Server Ports**:
+  - `4000`: TallyPrime Modern Web UI and REST API.
+  - `9000`: Tally Native XML Gateway Server (Configured via `tally.ini` `ServerPort=9000`), handling native `<ENVELOPE>` XML export/import for third-party ERP integrations.
+- **Company Dataset (`data/100000/company.db`)**:
+  - Follows standard Tally numbered folder storage convention (e.g., Company 100000).
+- **Core Modules**:
+  - `core/db.js`: SQLite ACID transactional engine for ledgers, groups, stock items, vouchers, godowns, and cost centres.
+  - `core/accountingEngine.js`: Double-entry accounting engine calculating running ledger balances, weighted average stock valuation, COGS, P&L, and Balance Sheet.
+  - `core/gstEngine.js`: Statutory Indian GST calculation engine (Intra-state CGST+SGST vs Inter-state IGST), GSTR-1, and GSTR-3B ITC netting.
+  - `modules/dashboard/dashboardApi.js`: Modern TallyPrime drill-down telemetry API (`drilldown-BS`, `drilldown-PandL`, `drilldown-duerecv`, `drilldown-duepaya`, `drilldown-fundsflow`, `drilldown-stock`, `drilldown-costcentre`).
+  - `modules/gateway/tallyXmlGateway.js`: Official Tally XML `<ENVELOPE>` parser and generator on port 9000.
+  - `modules/masters/mastersApi.js`: CRUD endpoints for 28 statutory groups, ledgers, stock items, units, and godowns.
+  - `modules/vouchers/vouchersApi.js`: Transaction posting engine with balance verification ($\sum Dr \equiv \sum Cr$).
+  - `modules/reports/reportsApi.js`: Trial Balance, Balance Sheet, P&L, Day Book, Cash/Bank Books, Ratio Analysis, BRS, and Outstandings.
+
+---
+
 ## 📐 Mathematical Formulas & Accounting Systems
 
 ### 1. Dual-Entry Equilibrium Invariant
 $$\sum \text{Debits} \equiv \sum \text{Credits} \quad (\Delta < 0.05)$$
-Every voucher must balance before commit. The backend rejects any unbalanced transaction.
+Every voucher must balance before commit. The backend strictly enforces this invariant.
 
 ### 2. Trading & Cost of Goods Sold (COGS)
 $$\text{COGS} = \text{Opening Stock} + \text{Purchases} + \text{Direct Expenses} - \text{Closing Stock}$$
@@ -47,7 +68,7 @@ $$\text{Gross Profit} = \text{Net Sales} + \text{Direct Incomes} - \text{COGS}$$
 
 ### 3. Net Profit Formula
 $$\text{Net Profit} = \text{Gross Profit} + \text{Indirect Incomes} - \text{Indirect Expenses}$$
-Net Profit is automatically transferred to the **Capital Account** on the Balance Sheet.
+Net Profit is dynamically transferred to the **Capital Account** on the Balance Sheet.
 
 ### 4. Balance Sheet Equation
 $$\text{Total Assets} \equiv \text{Capital} + \text{Current Net Profit} + \text{Loans} + \text{Current Liabilities}$$
@@ -75,24 +96,13 @@ $$\text{Closing Stock Valuation} = \text{Closing Quantity} \times \text{Valuatio
 
 ---
 
-## 🏛️ System Architecture
-
-- **Backend**: Node.js & Express REST API (`server.js`) with ACID SQLite transactions.
-- **Database Engine**: `tally_prime.db` (`db.js`) pre-seeded with 28 statutory Indian groups, multiple godowns, cost centres, double-entry vouchers, and bill allocations.
-- **Frontend**: Zero-dependency keyboard-first Tally UI (`public/index.html`, `public/app.js`, `public/styles.css`).
-- **Interoperability**: Standard Tally XML Export (`/api/export/tally-xml`) compatible with TallyPrime / Tally ERP 9 import.
-
----
-
 ## 🚀 Quick Launch
 
-Run from workspace:
-```bash
-start-tally.bat
-```
-Or with Node:
+Run server:
 ```bash
 node server.js
 ```
 Open in browser:
-👉 **[http://localhost:4000](http://localhost:4000)**
+- Web Application: **[http://localhost:4000](http://localhost:4000)**
+- Tally Native XML Gateway: **[http://localhost:9000](http://localhost:9000)**
+- Tally Configuration: [tally.ini](file:///c:/Users/Admin/Desktop/RRE%20PRoduct/tally.ini)

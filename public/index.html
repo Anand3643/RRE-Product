@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TallyPrime Gold — Ramraj Enterprises (Full Accounting Suite)</title>
+  <title>TallyPrime Gold (V5 Edition) — Ramraj Enterprises</title>
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Lucide Icons -->
@@ -19,21 +19,25 @@
     <!-- Top Band: Company & Period Metadata -->
     <div class="px-5 py-2 flex items-center justify-between border-b border-slate-700/70 text-xs">
       <div class="flex items-center space-x-3">
-        <span class="bg-amber-400 text-slate-900 font-black px-2 py-0.5 rounded text-[11px] tracking-widest uppercase">
-          TallyPrime
+        <span class="bg-amber-400 text-slate-900 font-black px-2 py-0.5 rounded text-[11px] tracking-widest uppercase shadow-sm">
+          TallyPrime 5.0
         </span>
         <div class="h-4 w-[1px] bg-slate-600"></div>
         <div class="font-bold tracking-wide flex items-center space-x-2">
           <span class="text-white text-sm" id="top-company-name">Ramraj Enterprises</span>
-          <span class="text-[11px] font-normal text-slate-300">(Screw Compressors &amp; Spares)</span>
+          <span class="text-[11px] font-normal text-slate-300">(Company: 100000 | Screw Compressors)</span>
         </div>
       </div>
 
-      <div class="flex items-center space-x-5 text-slate-300">
+      <div class="flex items-center space-x-4 text-slate-300">
         <div>Period: <strong class="text-white font-mono">1-Apr-26 to 31-Mar-27</strong></div>
-        <div>Current Date: <strong class="text-amber-300 font-mono" id="top-current-date">1-Jun-2026</strong></div>
+        <div>Date: <strong class="text-amber-300 font-mono" id="top-current-date">1-Jun-2026</strong></div>
+        <button onclick="toggleDashboard()" id="btn-top-dashboard" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-500 text-white rounded text-[11px] font-bold flex items-center space-x-1 transition shadow-sm">
+          <i data-lucide="layout-dashboard" class="w-3.5 h-3.5"></i>
+          <span>Dashboard</span>
+        </button>
         <a href="/api/export/tally-xml" download class="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded text-[11px] font-bold flex items-center space-x-1 transition shadow-sm">
-          <span>Alt+E: XML Export</span>
+          <span>Alt+E: XML</span>
         </a>
         <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 text-white rounded text-[11px] font-semibold transition">
           Esc: Gateway
@@ -92,6 +96,158 @@
   <main class="flex-1 p-5 max-w-7xl w-full mx-auto flex flex-col justify-center items-center">
 
     <!-- ============================================== -->
+    <!-- VIEW 0: TALLYPRIME 4.x/5.x MODERN DASHBOARD    -->
+    <!-- ============================================== -->
+    <section id="view-dashboard" class="w-full max-w-6xl space-y-5 fade-in hidden">
+      <div class="flex justify-between items-center bg-white p-4 rounded-lg border border-slate-300 shadow-sm">
+        <div>
+          <h1 class="text-lg font-black text-slate-900 tracking-tight flex items-center space-x-2">
+            <i data-lucide="layout-dashboard" class="w-5 h-5 text-blue-600"></i>
+            <span>TallyPrime Live Business Dashboard</span>
+          </h1>
+          <p class="text-xs text-slate-500">Real-time financial telemetry with instant drill-down reporting</p>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button onclick="showGateway()" class="px-3 py-1.5 bg-[#1f3a52] hover:bg-[#162a3b] text-white rounded text-xs font-bold transition">
+            Gateway of Tally (Esc)
+          </button>
+        </div>
+      </div>
+
+      <!-- Dashboard Grid Tiles -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <!-- Tile 1: Balance Sheet Snapshot (drilldown-BS) -->
+        <div onclick="openReport('balance-sheet')" class="bg-white border border-slate-200 hover:border-blue-500 rounded-lg p-4 shadow-sm hover:shadow-md cursor-pointer transition space-y-3">
+          <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+            <span class="font-bold text-xs text-slate-800 flex items-center space-x-1.5">
+              <i data-lucide="scale" class="w-4 h-4 text-blue-600"></i>
+              <span>Balance Sheet Position</span>
+            </span>
+            <span class="text-[10px] text-blue-600 font-bold">Drilldown →</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+            <div class="bg-slate-50 p-2 rounded">
+              <span class="text-slate-500 block text-[10px] font-sans">Total Assets</span>
+              <span id="dash-bs-assets" class="font-bold text-slate-900">₹0.00</span>
+            </div>
+            <div class="bg-slate-50 p-2 rounded">
+              <span class="text-slate-500 block text-[10px] font-sans">Total Liabilities</span>
+              <span id="dash-bs-liab" class="font-bold text-slate-900">₹0.00</span>
+            </div>
+          </div>
+          <div class="flex justify-between text-xs pt-1 border-t border-slate-100">
+            <span class="text-slate-600">Net Working Capital:</span>
+            <span id="dash-bs-wc" class="font-mono font-bold text-blue-700">₹0.00</span>
+          </div>
+        </div>
+
+        <!-- Tile 2: Profit & Loss (drilldown-PandL) -->
+        <div onclick="openReport('profit-loss')" class="bg-white border border-slate-200 hover:border-emerald-500 rounded-lg p-4 shadow-sm hover:shadow-md cursor-pointer transition space-y-3">
+          <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+            <span class="font-bold text-xs text-slate-800 flex items-center space-x-1.5">
+              <i data-lucide="trending-up" class="w-4 h-4 text-emerald-600"></i>
+              <span>Operating Profitability</span>
+            </span>
+            <span class="text-[10px] text-emerald-600 font-bold">Drilldown →</span>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+            <div class="bg-slate-50 p-2 rounded">
+              <span class="text-slate-500 block text-[10px] font-sans">Net Sales</span>
+              <span id="dash-pl-sales" class="font-bold text-slate-900">₹0.00</span>
+            </div>
+            <div class="bg-slate-50 p-2 rounded">
+              <span class="text-slate-500 block text-[10px] font-sans">Gross Profit</span>
+              <span id="dash-pl-gp" class="font-bold text-emerald-700">₹0.00</span>
+            </div>
+          </div>
+          <div class="flex justify-between text-xs pt-1 border-t border-slate-100">
+            <span class="text-slate-600">Net Profit Transferred:</span>
+            <span id="dash-pl-np" class="font-mono font-bold text-emerald-700">₹0.00</span>
+          </div>
+        </div>
+
+        <!-- Tile 3: Sundry Debtors (drilldown-duerecv) -->
+        <div onclick="openReport('outstandings')" class="bg-white border border-slate-200 hover:border-amber-500 rounded-lg p-4 shadow-sm hover:shadow-md cursor-pointer transition space-y-3">
+          <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+            <span class="font-bold text-xs text-slate-800 flex items-center space-x-1.5">
+              <i data-lucide="users" class="w-4 h-4 text-amber-600"></i>
+              <span>Receivables (Sundry Debtors)</span>
+            </span>
+            <span class="text-[10px] text-amber-600 font-bold">Ageing →</span>
+          </div>
+          <div>
+            <div class="text-slate-500 text-[10px]">Total Pending Dues</div>
+            <div id="dash-debtors-total" class="text-xl font-black text-amber-800 font-mono">₹0.00</div>
+          </div>
+          <div class="space-y-1 text-[11px]" id="dash-debtors-list">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+
+        <!-- Tile 4: Sundry Creditors (drilldown-duepaya) -->
+        <div onclick="openReport('outstandings')" class="bg-white border border-slate-200 hover:border-indigo-500 rounded-lg p-4 shadow-sm hover:shadow-md cursor-pointer transition space-y-3">
+          <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+            <span class="font-bold text-xs text-slate-800 flex items-center space-x-1.5">
+              <i data-lucide="building" class="w-4 h-4 text-indigo-600"></i>
+              <span>Payables (Sundry Creditors)</span>
+            </span>
+            <span class="text-[10px] text-indigo-600 font-bold">Ageing →</span>
+          </div>
+          <div>
+            <div class="text-slate-500 text-[10px]">Total Outstanding Dues</div>
+            <div id="dash-creditors-total" class="text-xl font-black text-indigo-800 font-mono">₹0.00</div>
+          </div>
+          <div class="space-y-1 text-[11px]" id="dash-creditors-list">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+
+        <!-- Tile 5: Cash Flow & Funds Flow (drilldown-fundsflow) -->
+        <div onclick="openReport('bank-recon')" class="bg-white border border-slate-200 hover:border-teal-500 rounded-lg p-4 shadow-sm hover:shadow-md cursor-pointer transition space-y-3">
+          <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+            <span class="font-bold text-xs text-slate-800 flex items-center space-x-1.5">
+              <i data-lucide="landmark" class="w-4 h-4 text-teal-600"></i>
+              <span>Liquid Cash &amp; Bank Funds</span>
+            </span>
+            <span class="text-[10px] text-teal-600 font-bold">BRS →</span>
+          </div>
+          <div>
+            <div class="text-slate-500 text-[10px]">Total Liquid Assets</div>
+            <div id="dash-cash-total" class="text-xl font-black text-teal-800 font-mono">₹0.00</div>
+          </div>
+          <div class="grid grid-cols-2 gap-2 text-xs font-mono pt-1">
+            <div class="bg-slate-50 p-2 rounded">
+              <span class="text-slate-500 block text-[10px] font-sans">Total Inflow</span>
+              <span id="dash-inflow" class="text-emerald-700 font-bold">₹0.00</span>
+            </div>
+            <div class="bg-slate-50 p-2 rounded">
+              <span class="text-slate-500 block text-[10px] font-sans">Total Outflow</span>
+              <span id="dash-outflow" class="text-red-700 font-bold">₹0.00</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tile 6: Stock Summary & Valuation (drilldown-stock) -->
+        <div onclick="openReport('stock-summary')" class="bg-white border border-slate-200 hover:border-purple-500 rounded-lg p-4 shadow-sm hover:shadow-md cursor-pointer transition space-y-3">
+          <div class="flex justify-between items-center border-b border-slate-100 pb-2">
+            <span class="font-bold text-xs text-slate-800 flex items-center space-x-1.5">
+              <i data-lucide="package" class="w-4 h-4 text-purple-600"></i>
+              <span>Inventory Valuation</span>
+            </span>
+            <span class="text-[10px] text-purple-600 font-bold">Stock →</span>
+          </div>
+          <div>
+            <div class="text-slate-500 text-[10px]">Closing Stock Value (Weighted Avg)</div>
+            <div id="dash-stock-val" class="text-xl font-black text-purple-900 font-mono">₹0.00</div>
+          </div>
+          <div class="space-y-1 text-[11px]" id="dash-stock-list">
+            <!-- Populated via JS -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
     <!-- VIEW 1: GATEWAY OF TALLY (THE CLASSIC MENU)    -->
     <!-- ============================================== -->
     <section id="view-gateway" class="w-full max-w-4xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden fade-in">
@@ -143,9 +299,9 @@
               <i data-lucide="plus-circle" class="w-4 h-4 text-amber-400"></i>
               <span>Voucher Entry (V)</span>
             </button>
-            <button onclick="openReport('balance-sheet')" class="py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded font-bold text-xs shadow-sm transition flex items-center justify-center space-x-1.5">
-              <i data-lucide="file-text" class="w-4 h-4 text-emerald-400"></i>
-              <span>Balance Sheet (B)</span>
+            <button onclick="toggleDashboard()" class="py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold text-xs shadow-sm transition flex items-center justify-center space-x-1.5">
+              <i data-lucide="layout-dashboard" class="w-4 h-4 text-white"></i>
+              <span>Dashboard</span>
             </button>
           </div>
         </div>
@@ -284,7 +440,7 @@
           </div>
         </div>
 
-        <!-- Party Selection (For Sales, Purchase, Payment, Receipt) -->
+        <!-- Party Selection -->
         <div id="v-party-container" class="bg-blue-50/70 border border-blue-200 p-3.5 rounded-lg flex flex-col md:flex-row md:items-center justify-between gap-3">
           <div class="flex-1">
             <label class="block font-bold text-slate-800 mb-1 flex items-center justify-between">
@@ -300,9 +456,7 @@
           </div>
         </div>
 
-        <!-- ================================================= -->
-        <!-- MODE A: ITEM INVOICE TABLE (AUTO-GST & INVENTORY) -->
-        <!-- ================================================= -->
+        <!-- MODE A: ITEM INVOICE TABLE -->
         <div id="section-item-invoice" class="space-y-3">
           <div class="flex justify-between items-center">
             <h3 class="font-bold text-slate-800 text-xs uppercase tracking-wider flex items-center space-x-1.5">
@@ -363,9 +517,7 @@
           </div>
         </div>
 
-        <!-- ================================================= -->
-        <!-- MODE B: ACCOUNTING VOUCHER (MANUAL DR/CR GRID)     -->
-        <!-- ================================================= -->
+        <!-- MODE B: ACCOUNTING VOUCHER (MANUAL DR/CR) -->
         <div id="section-accounting-voucher" class="space-y-3 hidden">
           <div class="flex justify-between items-center">
             <h3 class="font-bold text-slate-800 text-xs uppercase tracking-wider flex items-center space-x-1.5">
@@ -473,7 +625,6 @@
 
       <div class="p-6 overflow-x-auto">
         <div class="grid grid-cols-1 md:grid-cols-2 border border-slate-300 rounded-lg text-xs overflow-hidden">
-          <!-- LIABILITIES -->
           <div class="border-b md:border-b-0 md:border-r border-slate-300">
             <div class="bg-slate-800 text-white font-bold p-2.5 flex justify-between">
               <span>Liabilities</span>
@@ -486,7 +637,6 @@
             </div>
           </div>
 
-          <!-- ASSETS -->
           <div>
             <div class="bg-slate-800 text-white font-bold p-2.5 flex justify-between">
               <span>Assets</span>
@@ -523,7 +673,6 @@
       </div>
 
       <div class="p-6 space-y-6 text-xs">
-        <!-- TRADING ACCOUNT -->
         <div class="border border-slate-300 rounded-lg overflow-hidden">
           <div class="bg-slate-800 text-white font-bold p-2.5 flex justify-between">
             <span>Trading Account (Manufacturing &amp; Gross Margin)</span>
@@ -539,7 +688,6 @@
           </div>
         </div>
 
-        <!-- PROFIT & LOSS STATEMENT -->
         <div class="border border-slate-300 rounded-lg overflow-hidden">
           <div class="bg-slate-800 text-white font-bold p-2.5 flex justify-between">
             <span>Indirect Incomes &amp; Overheads Statement</span>
@@ -656,7 +804,6 @@
       </div>
 
       <div class="p-6 space-y-4">
-        <!-- Date & Type Filter -->
         <div class="flex flex-wrap items-center justify-between gap-3 text-xs bg-slate-50 p-3 rounded-lg border border-slate-200">
           <div class="flex items-center space-x-2">
             <span class="font-bold text-slate-700">Filter Type:</span>
@@ -703,9 +850,7 @@
       </div>
 
       <div class="p-6 space-y-6 text-xs">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="ratio-cards-container">
-          <!-- Populated via JS -->
-        </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4" id="ratio-cards-container"></div>
 
         <div class="border border-slate-200 rounded-lg p-4 bg-slate-50 space-y-2">
           <h3 class="font-bold text-slate-800 uppercase text-xs">Principal Accounting Figures</h3>
@@ -744,7 +889,6 @@
       </div>
 
       <div class="p-6 space-y-6 text-xs">
-        <!-- GSTR-1 Section -->
         <div class="border border-slate-300 rounded-lg overflow-hidden">
           <div class="bg-slate-800 text-white font-bold p-2.5 flex justify-between">
             <span>GSTR-1: Table 4 (B2B Taxable Invoices)</span>
@@ -768,7 +912,6 @@
           </table>
         </div>
 
-        <!-- GSTR-3B Computation Summary -->
         <div class="border border-slate-300 rounded-lg overflow-hidden">
           <div class="bg-slate-800 text-white font-bold p-2.5">
             <span>GSTR-3B: Net Tax Payable Computation</span>
@@ -804,7 +947,6 @@
       </div>
 
       <div class="p-6 space-y-6 text-xs">
-        <!-- Bills Receivable -->
         <div class="border border-slate-300 rounded-lg overflow-hidden">
           <div class="bg-slate-800 text-white font-bold p-2.5 flex justify-between">
             <span>Bills Receivable (Sundry Debtors Pending Payments)</span>
@@ -825,7 +967,6 @@
           </table>
         </div>
 
-        <!-- Bills Payable -->
         <div class="border border-slate-300 rounded-lg overflow-hidden">
           <div class="bg-slate-800 text-white font-bold p-2.5 flex justify-between">
             <span>Bills Payable (Sundry Creditors Pending Payments)</span>
@@ -953,7 +1094,7 @@
           </div>
           <div>
             <label class="block font-bold text-slate-700 mb-0.5">State</label>
-            <select id="m-ledger-state" onchange="updateStateCode(this.value)" class="w-full border border-slate-300 rounded p-1.5 font-semibold">
+            <select id="m-ledger-state" class="w-full border border-slate-300 rounded p-1.5 font-semibold">
               <option value="Tamil Nadu|33">Tamil Nadu (33)</option>
               <option value="Karnataka|29">Karnataka (29)</option>
               <option value="Maharashtra|27">Maharashtra (27)</option>
@@ -1053,7 +1194,6 @@
     </div>
   </div>
 
-  <!-- Application Logic -->
   <script src="app.js"></script>
 </body>
 </html>
