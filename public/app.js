@@ -2718,12 +2718,595 @@ async function handleChangeDate(e) {
 
 // Helper to close modals on Esc
 function closeAnyOpenModal() {
+  const copilotDrawer = document.getElementById('ai-copilot-drawer');
+  if (copilotDrawer && !copilotDrawer.classList.contains('hidden')) {
+    copilotDrawer.classList.add('hidden');
+    return true;
+  }
   const openModals = Array.from(document.querySelectorAll('.modal-backdrop:not(.hidden)'));
   if (openModals.length > 0) {
     openModals.forEach(m => m.classList.add('hidden'));
     return true;
   }
   return false;
+}
+
+// ========================================================
+// RRE AI COPILOT & FINANCIAL INTELLIGENCE ARCHITECTURE
+// ========================================================
+
+let aiState = {
+  isCopilotOpen: false,
+  isWorkspaceActive: false,
+  insightsCache: null
+};
+
+// 1. Toggle AI Copilot Drawer
+function toggleAiCopilot(forceOpen = null) {
+  const drawer = document.getElementById('ai-copilot-drawer');
+  if (!drawer) return;
+
+  if (forceOpen === true) {
+    aiState.isCopilotOpen = true;
+  } else if (forceOpen === false) {
+    aiState.isCopilotOpen = false;
+  } else {
+    aiState.isCopilotOpen = !aiState.isCopilotOpen;
+  }
+
+  if (aiState.isCopilotOpen) {
+    drawer.classList.remove('hidden');
+    setTimeout(() => {
+      const input = document.getElementById('copilot-user-input');
+      if (input) input.focus();
+    }, 100);
+  } else {
+    drawer.classList.add('hidden');
+  }
+  if (window.lucide) window.lucide.createIcons();
+}
+
+function clearAiChat() {
+  const container = document.getElementById('ai-chat-messages');
+  if (!container) return;
+  container.innerHTML = `
+    <div class="flex items-start space-x-2">
+      <div class="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center shrink-0 mt-0.5">
+        <i data-lucide="bot" class="w-3.5 h-3.5 text-white"></i>
+      </div>
+      <div class="bg-slate-900 border border-indigo-500/30 rounded-xl p-3 text-slate-200 space-y-1.5 max-w-[85%] shadow-sm">
+        <p class="font-bold text-indigo-300">Chat reset. Ready for your prompt!</p>
+        <p class="text-[11px] text-slate-300">Ask any financial question or type a transaction to draft a voucher.</p>
+      </div>
+    </div>
+  `;
+  if (window.lucide) window.lucide.createIcons();
+}
+
+function sendCopilotQuick(prompt) {
+  const input = document.getElementById('copilot-user-input');
+  if (input) {
+    input.value = prompt;
+    handleCopilotSubmit(new Event('submit'));
+  }
+}
+
+async function handleCopilotSubmit(e) {
+  if (e) e.preventDefault();
+  const input = document.getElementById('copilot-user-input');
+  const query = (input?.value || '').trim();
+  if (!query) return;
+
+  input.value = '';
+  appendChatMessage('user', query);
+
+  const loadingId = 'loading-' + Date.now();
+  appendChatMessage('assistant', `<div id="${loadingId}" class="flex items-center space-x-2 text-indigo-300 font-mono text-[11px]"><i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Analyzing business prompt...</span></div>`);
+
+  try {
+    const isVoucherPrompt = /sold|sales|invoice|bought|purchase|procured|paid|payment|received|receipt|deposited|withdrew|rent|salary|contra/i.test(query);
+
+    if (isVoucherPrompt) {
+      const res = await fetchApi('/ai/parse-voucher', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: query })
+      });
+      const data = await res.json();
+      const el = document.getElementById(loadingId);
+      if (el) el.parentElement.innerHTML = formatCopilotVoucherDraft(data.interpreted);
+    } else {
+      const res = await fetchApi('/ai/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query })
+      });
+      const data = await res.json();
+      const el = document.getElementById(loadingId);
+      if (el) el.parentElement.innerHTML = formatCopilotAnswer(data.data?.answer || 'Query processed.');
+    }
+  } catch (err) {
+    const el = document.getElementById(loadingId);
+    if (el) el.parentElement.innerHTML = `<span class="text-rose-400">Error processing query: ${err.message}</span>`;
+  }
+
+  const container = document.getElementById('ai-chat-messages');
+  if (container) container.scrollTop = container.scrollHeight;
+  if (window.lucide) window.lucide.createIcons();
+}
+
+function appendChatMessage(sender, htmlContent) {
+  const container = document.getElementById('ai-chat-messages');
+  if (!container) return;
+
+  const msgDiv = document.createElement('div');
+  msgDiv.className = sender === 'user'
+    ? 'flex items-start justify-end space-x-2'
+    : 'flex items-start space-x-2';
+
+  if (sender === 'user') {
+    msgDiv.innerHTML = `
+      <div class="bg-indigo-600 text-white rounded-xl px-3 py-2 text-[11px] max-w-[80%] shadow-sm">
+        ${escapeHtml(htmlContent)}
+      </div>
+      <div class="w-6 h-6 rounded-full bg-slate-700 flex items-center justify-center shrink-0 mt-0.5 text-[10px] font-bold">
+        👤
+      </div>
+    `;
+  } else {
+    msgDiv.innerHTML = `
+      <div class="w-6 h-6 rounded-full bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center shrink-0 mt-0.5">
+        <i data-lucide="bot" class="w-3.5 h-3.5 text-white"></i>
+      </div>
+      <div class="bg-slate-900 border border-indigo-500/30 rounded-xl p-3 text-slate-200 text-[11px] leading-relaxed max-w-[85%] shadow-sm space-y-1.5">
+        ${htmlContent}
+      </div>
+    `;
+  }
+
+  container.appendChild(msgDiv);
+  container.scrollTop = container.scrollHeight;
+  if (window.lucide) window.lucide.createIcons();
+}
+
+function formatCopilotAnswer(text) {
+  return text
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/• (.*?)(?=\n|$)/g, '<li class="ml-3 list-disc">$1</li>')
+    .replace(/\n\n/g, '<br><br>')
+    .replace(/\n/g, '<br>');
+}
+
+function formatCopilotVoucherDraft(v) {
+  if (!v) return '<span class="text-rose-400">Could not interpret voucher details.</span>';
+
+  const entryRows = v.entries.map(e => `
+    <div class="flex justify-between items-center text-[10px] font-mono border-b border-slate-800 py-1">
+      <span class="text-slate-300 truncate max-w-[140px]">${e.ledger_name}</span>
+      <span class="font-bold ${e.debit_amount > 0 ? 'text-amber-300' : 'text-emerald-400'}">
+        ${e.debit_amount > 0 ? 'Dr ' + formatCurrency(e.debit_amount) : 'Cr ' + formatCurrency(e.credit_amount)}
+      </span>
+    </div>
+  `).join('');
+
+  const jsonStr = encodeURIComponent(JSON.stringify(v));
+
+  return `
+    <div class="space-y-2">
+      <div class="flex items-center justify-between">
+        <span class="px-2 py-0.5 rounded text-[10px] font-black bg-indigo-950 text-indigo-300 border border-indigo-500/40">
+          ✨ Drafted ${v.voucher_type} Voucher
+        </span>
+        <span class="text-[10px] text-emerald-400 font-mono font-bold">${v.is_balanced ? '✓ Balanced' : '⚠️ Unbalanced'}</span>
+      </div>
+      <div class="bg-slate-950/70 p-2 rounded border border-slate-800">
+        ${entryRows}
+      </div>
+      <div class="flex items-center justify-between text-[10px]">
+        <span class="text-slate-400">Total: <strong>${formatCurrency(v.total_amount)}</strong></span>
+        <button onclick="saveAiDraftFromChat('${jsonStr}')" class="px-2.5 py-1 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-bold rounded shadow flex items-center space-x-1">
+          <i data-lucide="check" class="w-3 h-3"></i>
+          <span>Save to Books</span>
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+async function saveAiDraftFromChat(encodedJson) {
+  try {
+    const voucher = JSON.parse(decodeURIComponent(encodedJson));
+    const res = await fetchApi('/vouchers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        voucher_type: voucher.voucher_type,
+        voucher_no: voucher.voucher_no,
+        date: voucher.date,
+        narration: voucher.narration,
+        entries: voucher.entries
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      alert(`Success! Voucher ${voucher.voucher_no} (${voucher.voucher_type}) saved into company database.`);
+      loadGatewayInfo();
+      refreshAiInsights();
+    } else {
+      alert(`Failed to save voucher: ${data.error}`);
+    }
+  } catch (err) {
+    alert(`Save error: ${err.message}`);
+  }
+}
+
+// 2. AI Executive Workspace View
+function toggleAiWorkspaceView() {
+  const wsView = document.getElementById('view-ai-workspace');
+  const gwView = document.getElementById('view-gateway');
+  const label = document.getElementById('ai-view-toggle-text');
+
+  aiState.isWorkspaceActive = !aiState.isWorkspaceActive;
+
+  if (aiState.isWorkspaceActive) {
+    if (gwView) gwView.classList.add('hidden');
+    if (wsView) {
+      wsView.classList.remove('hidden');
+      loadAiWorkspaceData();
+    }
+    if (label) label.textContent = '⌨️ Classic Tally';
+    appState.currentView = 'view-ai-workspace';
+  } else {
+    if (wsView) wsView.classList.add('hidden');
+    if (gwView) gwView.classList.remove('hidden');
+    if (label) label.textContent = '⚡ AI Workspace';
+    appState.currentView = 'view-gateway';
+  }
+  if (window.lucide) window.lucide.createIcons();
+}
+
+async function loadAiWorkspaceData() {
+  try {
+    const res = await fetchApi('/ai/insights');
+    const data = await res.json();
+    if (!data.success) return;
+
+    aiState.insightsCache = data;
+
+    // 1. Update Health Score Badge
+    const scoreEl = document.getElementById('ai-top-score');
+    if (scoreEl) scoreEl.textContent = `${data.health_score}%`;
+
+    // 2. Metrics Cards
+    const totalLiquidity = (data.metrics.cash_balance || 0) + (data.metrics.bank_balance || 0);
+    const liqEl = document.getElementById('ai-metric-liquidity');
+    if (liqEl) liqEl.textContent = formatCurrency(totalLiquidity);
+
+    const cashSubEl = document.getElementById('ai-metric-cash-sub');
+    if (cashSubEl) cashSubEl.textContent = `Cash: ${formatCurrency(data.metrics.cash_balance)} | Bank: ${formatCurrency(data.metrics.bank_balance)}`;
+
+    // Query Sales & Debtors directly
+    const [salesQ, debtorsQ, gstQ] = await Promise.all([
+      fetchApi('/ai/query', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: 'total sales' }) }).then(r => r.json()).catch(() => ({})),
+      fetchApi('/ai/query', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: 'who owes us money' }) }).then(r => r.json()).catch(() => ({})),
+      fetchApi('/ai/query', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query: 'gst tax liability' }) }).then(r => r.json()).catch(() => ({}))
+    ]);
+
+    const salesEl = document.getElementById('ai-metric-sales');
+    if (salesEl) salesEl.textContent = formatCurrency(salesQ.data?.data?.total || 0);
+
+    const salesSubEl = document.getElementById('ai-metric-sales-sub');
+    if (salesSubEl) salesSubEl.textContent = `Total Vouchers: ${salesQ.data?.data?.count || 0}`;
+
+    const debtorsEl = document.getElementById('ai-metric-debtors');
+    const debtorsList = Array.isArray(debtorsQ.data?.data) ? debtorsQ.data.data : [];
+    const totalDebtors = debtorsList.reduce((s, d) => s + (d.balance || 0), 0);
+    if (debtorsEl) debtorsEl.textContent = formatCurrency(totalDebtors);
+
+    const debtorsSubEl = document.getElementById('ai-metric-debtors-sub');
+    if (debtorsSubEl) debtorsSubEl.textContent = debtorsList.length > 0 ? `Top: ${debtorsList[0].name}` : 'No overdue debtors';
+
+    const gstEl = document.getElementById('ai-metric-gst');
+    if (gstEl) gstEl.textContent = formatCurrency(gstQ.data?.data?.totalGst || 0);
+
+    // 3. Populate Anomaly Feed
+    const feed = document.getElementById('ai-anomaly-feed');
+    if (feed) {
+      if (data.issues && data.issues.length > 0) {
+        feed.innerHTML = data.issues.map(iss => `
+          <div class="p-3 bg-slate-900 border ${iss.severity === 'CRITICAL' ? 'border-rose-500/50 bg-rose-950/20' : 'border-amber-500/50 bg-amber-950/20'} rounded-lg flex items-start justify-between">
+            <div class="flex items-start space-x-2">
+              <i data-lucide="${iss.severity === 'CRITICAL' ? 'alert-triangle' : 'alert-circle'}" class="w-4 h-4 ${iss.severity === 'CRITICAL' ? 'text-rose-400' : 'text-amber-400'} shrink-0 mt-0.5"></i>
+              <div>
+                <div class="font-bold text-slate-200">${iss.title}</div>
+                <div class="text-[11px] text-slate-400 mt-0.5">${iss.description}</div>
+              </div>
+            </div>
+            <button onclick="handleResolveAnomaly('${iss.type}')" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded text-[10px] font-bold shrink-0 ml-3 transition">
+              Resolve
+            </button>
+          </div>
+        `).join('');
+      } else {
+        feed.innerHTML = `
+          <div class="p-3 bg-emerald-950/30 border border-emerald-500/40 rounded-lg flex items-center space-x-2 text-emerald-300">
+            <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400 shrink-0"></i>
+            <span>No financial anomalies detected! Your books, vouchers, and cash accounts are 100% compliant.</span>
+          </div>
+        `;
+      }
+    }
+  } catch (err) {
+    console.warn('[AI Workspace] Load notice:', err.message);
+  } finally {
+    if (window.lucide) window.lucide.createIcons();
+  }
+}
+
+function refreshAiInsights() {
+  loadAiWorkspaceData();
+}
+
+function handleResolveAnomaly(type) {
+  if (type === 'NEGATIVE_CASH') {
+    openVoucherScreen('Receipt');
+  } else if (type === 'UNBALANCED_VOUCHER') {
+    showReport('view-daybook');
+  } else if (type === 'LOW_STOCK') {
+    openVoucherScreen('Purchase');
+  } else {
+    toggleAiCopilot(true);
+  }
+}
+
+function fillAndSubmitAiPrompt(promptText) {
+  const input = document.getElementById('ai-ws-prompt-input');
+  if (input) {
+    input.value = promptText;
+    handleAiWorkspaceSubmit(new Event('submit'));
+  }
+}
+
+async function handleAiWorkspaceSubmit(e) {
+  if (e) e.preventDefault();
+  const input = document.getElementById('ai-ws-prompt-input');
+  const prompt = (input?.value || '').trim();
+  if (!prompt) return;
+
+  const btn = document.getElementById('btn-ai-ws-submit');
+  const container = document.getElementById('ai-ws-draft-container');
+  if (btn) { btn.disabled = true; btn.innerHTML = '<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Drafting...</span>'; }
+
+  try {
+    const res = await fetchApi('/ai/parse-voucher', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    });
+    const data = await res.json();
+
+    if (!data.success) {
+      alert(`AI parsing note: ${data.error || 'Please provide more details.'}`);
+      return;
+    }
+
+    const v = data.interpreted;
+    const jsonStr = encodeURIComponent(JSON.stringify(v));
+
+    if (container) {
+      container.classList.remove('hidden');
+      container.innerHTML = `
+        <div class="p-3.5 bg-slate-900 border border-indigo-500/40 rounded-xl space-y-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <span class="px-2 py-0.5 rounded text-[11px] font-black bg-indigo-600 text-white">${v.voucher_type} Voucher</span>
+              <span class="text-xs text-slate-300 font-mono">${v.voucher_no} (${v.date})</span>
+            </div>
+            <span class="text-xs font-bold ${v.is_balanced ? 'text-emerald-400' : 'text-rose-400'}">${v.is_balanced ? '✓ Double-Entry Verified' : '⚠️ Unbalanced'}</span>
+          </div>
+
+          <div class="bg-slate-950 rounded-lg p-2.5 border border-slate-800">
+            <table class="w-full text-xs font-mono">
+              <thead>
+                <tr class="text-slate-500 border-b border-slate-800">
+                  <th class="text-left pb-1 font-sans">Ledger Account</th>
+                  <th class="text-right pb-1 font-sans">Debit (Dr)</th>
+                  <th class="text-right pb-1 font-sans">Credit (Cr)</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-800/60">
+                ${v.entries.map(e => `
+                  <tr>
+                    <td class="py-1 text-slate-300">${e.ledger_name}</td>
+                    <td class="py-1 text-right text-amber-300">${e.debit_amount > 0 ? formatCurrency(e.debit_amount) : '-'}</td>
+                    <td class="py-1 text-right text-emerald-400">${e.credit_amount > 0 ? formatCurrency(e.credit_amount) : '-'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="flex items-center justify-between pt-1">
+            <div class="text-[11px] text-slate-400">Total: <strong class="text-white">${formatCurrency(v.total_amount)}</strong></div>
+            <div class="space-x-2">
+              <button type="button" onclick="document.getElementById('ai-ws-draft-container').classList.add('hidden')" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded font-bold text-xs">Dismiss</button>
+              <button type="button" onclick="saveAiDraftFromChat('${jsonStr}')" class="px-4 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded font-black text-xs shadow-md">
+                💾 Confirm &amp; Save Voucher
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+  } catch (err) {
+    alert(`AI drafting error: ${err.message}`);
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-300"></i><span>Draft</span>'; }
+    if (window.lucide) window.lucide.createIcons();
+  }
+}
+
+// 3. Omni-Search Command Palette (Ctrl+K)
+const OMNI_COMMANDS = [
+  { title: 'Create Sales Voucher', category: 'Vouchers', hotkey: 'F8', action: () => openVoucherScreen('Sales') },
+  { title: 'Create Purchase Voucher', category: 'Vouchers', hotkey: 'F9', action: () => openVoucherScreen('Purchase') },
+  { title: 'Create Payment Voucher', category: 'Vouchers', hotkey: 'F5', action: () => openVoucherScreen('Payment') },
+  { title: 'Create Receipt Voucher', category: 'Vouchers', hotkey: 'F6', action: () => openVoucherScreen('Receipt') },
+  { title: 'Create Contra Voucher', category: 'Vouchers', hotkey: 'F4', action: () => openVoucherScreen('Contra') },
+  { title: 'Create Journal Voucher', category: 'Vouchers', hotkey: 'F7', action: () => openVoucherScreen('Journal') },
+  { title: 'Balance Sheet', category: 'Reports', hotkey: 'B', action: () => showReport('view-balance-sheet') },
+  { title: 'Profit & Loss Statement', category: 'Reports', hotkey: 'P', action: () => showReport('view-profit-loss') },
+  { title: 'Trial Balance', category: 'Reports', hotkey: 'T', action: () => showReport('view-trial-balance') },
+  { title: 'Day Book Journal', category: 'Reports', hotkey: 'D', action: () => showReport('view-daybook') },
+  { title: 'Ratio Analysis', category: 'Reports', hotkey: 'R', action: () => showReport('view-ratio-analysis') },
+  { title: 'GST Statutory Returns (GSTR-1 & 3B)', category: 'Reports', hotkey: 'O', action: () => showReport('view-gst-reports') },
+  { title: 'Create Ledger Account', category: 'Masters', hotkey: 'Alt+C', action: () => openModal('createLedgerModal') },
+  { title: 'Create Stock Item', category: 'Masters', hotkey: 'I', action: () => openModal('createStockModal') },
+  { title: 'AI Copilot Assistant', category: 'AI', hotkey: 'Alt+A', action: () => toggleAiCopilot(true) },
+  { title: 'AI Executive Workspace', category: 'AI', hotkey: '⚡', action: () => toggleAiWorkspaceView() },
+  { title: 'Parse Invoice / Bill Document', category: 'AI', hotkey: '🧾', action: () => openAiDocParserModal() },
+  { title: 'Security Control & User Management', category: 'System', hotkey: 'Alt+K', action: () => openUserManagement() },
+  { title: 'Change Theme Palette', category: 'System', hotkey: 'Alt+T', action: () => openThemeSelectorModal() },
+  { title: 'Change Current Date', category: 'System', hotkey: 'F2', action: () => openChangeDateModal() }
+];
+
+function openOmniSearchModal() {
+  openModal('omniSearchModal');
+  const input = document.getElementById('omni-search-input');
+  if (input) {
+    input.value = '';
+    setTimeout(() => input.focus(), 80);
+  }
+  renderOmniResults(OMNI_COMMANDS);
+}
+
+function handleOmniSearchInput(e) {
+  const query = (e.target.value || '').trim().toLowerCase();
+  if (!query) {
+    renderOmniResults(OMNI_COMMANDS);
+    return;
+  }
+
+  const filtered = OMNI_COMMANDS.filter(c =>
+    c.title.toLowerCase().includes(query) ||
+    c.category.toLowerCase().includes(query) ||
+    (c.hotkey && c.hotkey.toLowerCase().includes(query))
+  );
+
+  filtered.unshift({
+    title: `Ask AI Copilot: "${e.target.value}"`,
+    category: '✨ AI Natural Language',
+    hotkey: 'Enter',
+    action: () => {
+      closeModal('omniSearchModal');
+      toggleAiCopilot(true);
+      sendCopilotQuick(e.target.value);
+    }
+  });
+
+  renderOmniResults(filtered);
+}
+
+function renderOmniResults(list) {
+  const container = document.getElementById('omni-results-list');
+  if (!container) return;
+
+  if (list.length === 0) {
+    container.innerHTML = '<div class="p-4 text-center text-slate-500">No matching commands or ledgers found.</div>';
+    return;
+  }
+
+  container.innerHTML = list.map((item, idx) => `
+    <div onclick="executeOmniAction(${idx})" class="flex items-center justify-between p-2.5 rounded-lg hover:bg-indigo-950/70 cursor-pointer border border-transparent hover:border-indigo-500/30 transition text-xs">
+      <div class="flex items-center space-x-2.5">
+        <span class="px-1.5 py-0.5 rounded text-[9px] font-bold ${item.category.includes('AI') ? 'bg-purple-900/60 text-purple-300' : 'bg-slate-800 text-slate-400'}">
+          ${item.category}
+        </span>
+        <span class="text-slate-200 font-semibold">${item.title}</span>
+      </div>
+      <kbd class="px-1.5 py-0.5 bg-slate-800 text-slate-400 font-mono text-[10px] rounded">${item.hotkey || 'Go'}</kbd>
+    </div>
+  `).join('');
+
+  window._activeOmniList = list;
+}
+
+function executeOmniAction(idx) {
+  const item = (window._activeOmniList || OMNI_COMMANDS)[idx];
+  if (item && item.action) {
+    closeModal('omniSearchModal');
+    item.action();
+  }
+}
+
+// 4. AI Document / Invoice Text Parser
+function openAiDocParserModal() {
+  openModal('aiDocParserModal');
+  const txt = document.getElementById('ai-doc-raw-text');
+  if (txt) {
+    setTimeout(() => txt.focus(), 80);
+  }
+  const preview = document.getElementById('ai-doc-preview-area');
+  if (preview) preview.classList.add('hidden');
+}
+
+async function handleAiDocParse() {
+  const txt = document.getElementById('ai-doc-raw-text')?.value;
+  const btn = document.getElementById('btn-parse-doc');
+  const preview = document.getElementById('ai-doc-preview-area');
+
+  if (!txt || !txt.trim()) {
+    alert('Please paste or type invoice text to parse.');
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Analyzing Bill...</span>';
+  }
+
+  try {
+    const res = await fetchApi('/ai/parse-document', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: txt })
+    });
+    const data = await res.json();
+    if (!data.success) {
+      alert(`Parsing failed: ${data.error}`);
+      return;
+    }
+
+    const doc = data.document_parsed;
+    const v = doc.draft_voucher;
+    const jsonStr = encodeURIComponent(JSON.stringify(v));
+
+    if (preview) {
+      preview.classList.remove('hidden');
+      preview.innerHTML = `
+        <div class="space-y-2">
+          <div class="flex justify-between items-center text-xs">
+            <span class="font-bold text-indigo-900">Extracted Invoice: ${doc.invoice_no}</span>
+            <span class="font-bold text-emerald-700">${formatCurrency(doc.detected_amount)}</span>
+          </div>
+          <div class="text-[11px] text-slate-600 font-mono">
+            Voucher Type: <strong>${v.voucher_type}</strong> | Balanced: <strong>${v.is_balanced ? 'Yes' : 'No'}</strong>
+          </div>
+          <button type="button" onclick="saveAiDraftFromChat('${jsonStr}'); closeModal('aiDocParserModal');" class="w-full py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg text-xs shadow transition">
+            💾 Confirm &amp; Save Voucher to Books
+          </button>
+        </div>
+      `;
+    }
+  } catch (err) {
+    alert(`Document parse error: ${err.message}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i data-lucide="sparkles" class="w-3.5 h-3.5"></i><span>AI Parse Invoice</span>';
+    }
+    if (window.lucide) window.lucide.createIcons();
+  }
 }
 
 // ========================================================
@@ -2736,8 +3319,14 @@ function setupKeyboardShortcuts() {
     // Escape handling
     if (e.key === 'Escape') {
       e.preventDefault();
-      // If any modal is open, close modal only
+      // If any modal or AI drawer is open, close it
       if (closeAnyOpenModal()) return;
+
+      // If in AI Workspace, return to Gateway
+      if (aiState.isWorkspaceActive) {
+        toggleAiWorkspaceView();
+        return;
+      }
 
       // If in sub-view or report, return to Gateway
       if (appState.currentView === 'view-display-more') {
@@ -2748,11 +3337,24 @@ function setupKeyboardShortcuts() {
         showGateway();
         return;
       }
-      // If already in Gateway, offer quit/logout
       if (appState.currentView === 'view-gateway') {
         startWithFreshLogin();
         return;
       }
+      return;
+    }
+
+    // Ctrl+K: AI Omni-Search Command Palette
+    if (e.ctrlKey && (e.key === 'k' || e.key === 'K')) {
+      e.preventDefault();
+      openOmniSearchModal();
+      return;
+    }
+
+    // Alt+A: AI Copilot Toggle
+    if (e.altKey && (e.key === 'a' || e.key === 'A')) {
+      e.preventDefault();
+      toggleAiCopilot();
       return;
     }
 
@@ -3248,3 +3850,19 @@ window.showGateway = showGateway;
 window.toggleDashboard = toggleDashboard;
 window.openModal = openModal;
 window.closeModal = closeModal;
+window.toggleAiCopilot = toggleAiCopilot;
+window.clearAiChat = clearAiChat;
+window.sendCopilotQuick = sendCopilotQuick;
+window.handleCopilotSubmit = handleCopilotSubmit;
+window.saveAiDraftFromChat = saveAiDraftFromChat;
+window.toggleAiWorkspaceView = toggleAiWorkspaceView;
+window.loadAiWorkspaceData = loadAiWorkspaceData;
+window.refreshAiInsights = refreshAiInsights;
+window.handleResolveAnomaly = handleResolveAnomaly;
+window.fillAndSubmitAiPrompt = fillAndSubmitAiPrompt;
+window.handleAiWorkspaceSubmit = handleAiWorkspaceSubmit;
+window.openOmniSearchModal = openOmniSearchModal;
+window.handleOmniSearchInput = handleOmniSearchInput;
+window.executeOmniAction = executeOmniAction;
+window.openAiDocParserModal = openAiDocParserModal;
+window.handleAiDocParse = handleAiDocParse;

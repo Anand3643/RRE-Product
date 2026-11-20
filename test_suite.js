@@ -385,8 +385,67 @@ async function runTests() {
     assert(false, 'Double-entry voucher creation check failed', err.message);
   }
 
-  // TEST 8: Offline Bundled Client Assets
-  console.log('\n--- 8. Offline Bundled Client Assets Verification (Pillar 11) ---');
+  // TEST 8: AI Copilot & NLP Double-Entry Accounting Verification (AI Architecture)
+  console.log('\n--- 8. AI Copilot & NLP Double-Entry Accounting Verification ---');
+  try {
+    // 8a: Natural language Sales Voucher parser with 18% GST
+    const aiSales = await httpPost('/api/ai/parse-voucher', {
+      prompt: 'Sold 5 Compressors to Apex Tech at 45000 each with 18% GST on credit'
+    });
+    assert(aiSales.statusCode === 200 && aiSales.data.interpreted?.voucher_type === 'Sales', 'AI drafts Sales voucher from plain English prompt');
+    assert(aiSales.data.interpreted?.entries && aiSales.data.interpreted.entries.length >= 2, 'AI drafts balanced double-entry ledger allocations');
+    const totalDr = aiSales.data.interpreted.entries.reduce((sum, e) => sum + (e.debit_amount || 0), 0);
+    const totalCr = aiSales.data.interpreted.entries.reduce((sum, e) => sum + (e.credit_amount || 0), 0);
+    assert(Math.abs(totalDr - totalCr) < 0.01, `AI ensures mathematical double-entry balance: Debit ₹${totalDr} == Credit ₹${totalCr}`);
+
+    // 8b: Natural language Payment Voucher parser
+    const aiPayment = await httpPost('/api/ai/parse-voucher', {
+      prompt: 'Paid Office Rent 15000 via Bank'
+    });
+    assert(aiPayment.statusCode === 200 && aiPayment.data.interpreted?.voucher_type === 'Payment', 'AI drafts Payment voucher for rent expense');
+
+    // 8c: Financial Q&A Agent Query
+    const aiQuery = await httpPost('/api/ai/query', {
+      query: 'What is our current cash and bank balance?'
+    });
+    assert(aiQuery.statusCode === 200 && aiQuery.data.success && typeof aiQuery.data.data?.answer === 'string', 'AI Financial Agent answers balance queries dynamically from SQLite');
+
+    // 8d: Anomaly & Audit Diagnostic Scanner
+    const aiInsights = await httpGet('/api/ai/insights');
+    assert(aiInsights.statusCode === 200 && typeof aiInsights.data.health_score === 'number', `AI Anomaly Scanner audits company health (Score: ${aiInsights.data.health_score}%)`);
+    assert(Array.isArray(aiInsights.data.anomalies), 'AI returns structured anomaly diagnostic feed');
+
+    // 8e: Document / Invoice Parser
+    const testInvoiceText = `TAX INVOICE #INV-2026-9901
+Vendor: Global Spares Ltd.
+Date: 2026-06-15
+Item: Heavy Duty Bearing Units
+Quantity: 10 Nos @ 2500.00
+Subtotal: 25000.00
+CGST 9%: 2250.00
+SGST 9%: 2250.00
+Total Amount Payable: 29500.00`;
+    const docParseRes = await httpPost('/api/ai/parse-document', { text: testInvoiceText });
+    assert(docParseRes.statusCode === 200 && docParseRes.data.document_parsed?.draft_voucher, 'AI Document Parser extracts structured voucher from pasted invoice text');
+    assert(docParseRes.data.document_parsed.draft_voucher.voucher_type === 'Purchase', 'AI identifies supplier bill as Purchase voucher');
+  } catch (err) {
+    assert(false, 'AI Copilot and Engine verification failed', err.message);
+  }
+
+  // TEST 9: Master Observability & Structured Logging (Pillars 6, 7 & 13)
+  console.log('\n--- 9. Master Observability & Structured Logging ---');
+  try {
+    const logsRes = await httpGet('/api/system/logs?limit=25');
+    assert(logsRes.statusCode === 200 && logsRes.data.success, 'GET /api/system/logs retrieves structured log buffer');
+    assert(Array.isArray(logsRes.data.data) && logsRes.data.data.length > 0, 'Logger captures telemetry events in memory ring buffer', `Logs: ${logsRes.data.data.length}`);
+    const sampleLog = logsRes.data.data[logsRes.data.data.length - 1];
+    assert(sampleLog.timestamp && sampleLog.level, 'Log entries contain ISO timestamp and severity level', `${sampleLog.level} @ ${sampleLog.timestamp}`);
+  } catch (err) {
+    assert(false, 'Observability & Logging check failed', err.message);
+  }
+
+  // TEST 10: Offline Bundled Client Assets
+  console.log('\n--- 10. Offline Bundled Client Assets Verification (Pillar 11) ---');
   const assetsToCheck = [
     'public/index.html',
     'public/app.js',

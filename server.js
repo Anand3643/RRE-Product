@@ -37,6 +37,13 @@ const {
   restoreBackup,
   BACKUP_DIR
 } = require('./core/backupEngine');
+const {
+  parseVoucherPrompt,
+  queryFinancialAgent,
+  scanFinancialAnomalies,
+  parseInvoiceDocument
+} = require('./core/aiEngine');
+const logger = require('./core/logger');
 
 // Modular Routers
 const dashboardRouter = require('./modules/dashboard/dashboardApi');
@@ -81,6 +88,7 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(logger.requestMiddleware);
 
 // ========================================================
 // 1. HEALTH & SYSTEM MONITORING API (Pillars 6, 7 & 13)
@@ -156,6 +164,19 @@ app.get('/api/health', async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ status: 'unhealthy', error: err.message });
+  }
+});
+
+app.get('/api/system/logs', (req, res) => {
+  try {
+    const limit = Math.min(250, parseInt(req.query.limit || 50, 10));
+    res.json({
+      success: true,
+      count: logger.getRecentLogs(limit).length,
+      data: logger.getRecentLogs(limit)
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -467,6 +488,45 @@ app.get('/api/export/tally-xml', async (req, res) => {
     res.send(xml);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ========================================================
+// RRE AI COPILOT & FINANCIAL AGENT API
+// ========================================================
+app.post('/api/ai/parse-voucher', async (req, res) => {
+  try {
+    const result = await parseVoucherPrompt(req.body.prompt);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/ai/query', async (req, res) => {
+  try {
+    const result = await queryFinancialAgent(req.body.query);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/ai/insights', async (req, res) => {
+  try {
+    const result = await scanFinancialAnomalies();
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/ai/parse-document', async (req, res) => {
+  try {
+    const result = await parseInvoiceDocument(req.body.text);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
   }
 });
 
