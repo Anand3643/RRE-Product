@@ -2,6 +2,14 @@
 // RRE TALLY — MASTER APPLICATION ENGINE
 // ========================================================
 
+// Production Global Error Boundaries
+window.addEventListener('error', (event) => {
+  console.warn('[RRE Tally Runtime Error Caught]', event.message);
+});
+window.addEventListener('unhandledrejection', (event) => {
+  console.warn('[RRE Tally Async Rejection Caught]', event.reason);
+});
+
 let currentApiOrigin = (function() {
   if (typeof window !== 'undefined' && window.location && window.location.protocol.startsWith('http')) {
     return window.location.origin;

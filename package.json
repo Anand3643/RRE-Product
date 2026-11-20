@@ -67,7 +67,8 @@
       "target": [
         "nsis",
         "portable"
-      ]
+      ],
+      "compression": "maximum"
     },
     "nsis": {
       "oneClick": false,

@@ -1,6 +1,12 @@
+process.env.NODE_ENV = process.env.NODE_ENV || 'production';
 const { app, BrowserWindow, Menu, dialog, shell, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
+
+// Ensure Windows taskbar grouping uses official App ID
+try {
+  app.setAppUserModelId('com.ramraj.rretally');
+} catch (e) {}
 
 // Hardware acceleration fallback - prevents blank screen on PCs without modern GPU/DirectX drivers
 try {
