@@ -474,15 +474,26 @@ app.get('/api/export/tally-xml', async (req, res) => {
 // SYSTEM UPDATE & VERSION MANAGEMENT API
 // ========================================================
 app.get('/api/system/update-status', async (req, res) => {
-  const currentVersion = '1.0.0';
-  let currentCommit = '03810f9';
+  let buildInfo = { version: '1.0.0', commit: 'd2fa68d' };
+  try {
+    const bPath = path.join(__dirname, 'build-info.json');
+    if (fs.existsSync(bPath)) {
+      buildInfo = JSON.parse(fs.readFileSync(bPath, 'utf8'));
+    }
+  } catch (e) {}
+
+  const currentVersion = buildInfo.version || '1.0.0';
+  let currentCommit = buildInfo.commit || 'd2fa68d';
   let hasGit = false;
 
   try {
-    const { stdout } = await execPromise('git rev-parse --short HEAD', { timeout: 3000 });
-    if (stdout && stdout.trim()) {
-      currentCommit = stdout.trim();
-      hasGit = true;
+    const isGit = fs.existsSync(path.join(__dirname, '.git')) || fs.existsSync(path.join(process.cwd(), '.git'));
+    if (isGit) {
+      const { stdout } = await execPromise('git rev-parse --short HEAD', { timeout: 3000 });
+      if (stdout && stdout.trim()) {
+        currentCommit = stdout.trim();
+        hasGit = true;
+      }
     }
   } catch (e) {
     // git CLI may not be available in packaged mode
@@ -545,27 +556,60 @@ app.get('/api/system/update-status', async (req, res) => {
 });
 
 app.post('/api/system/perform-update', async (req, res) => {
-  try {
-    const { stdout: pullOut } = await execPromise('git pull origin main', { timeout: 45000 });
-    console.log('[System Update] git pull result:', pullOut);
+  const isGitRepo = fs.existsSync(path.join(__dirname, '.git')) || fs.existsSync(path.join(process.cwd(), '.git'));
 
-    // Trigger silent rebuild and installation in background
-    exec('npm run build:win && powershell -Command "Start-Process dist\\\"RRE Tally Setup 1.0.0.exe\\\" -ArgumentList \\\"/S\\\" -Wait"', (err) => {
-      if (err) console.warn('[System Update] Background installer warning:', err.message);
-      else console.log('[System Update] Successfully rebuilt and updated desktop app on PC!');
+  if (isGitRepo) {
+    try {
+      const { stdout: pullOut } = await execPromise('git pull origin main', { timeout: 45000 });
+      console.log('[System Update] git pull result:', pullOut);
+
+      // Trigger silent rebuild and installation in background
+      exec('npm run build:win && powershell -Command "Start-Process dist\\\"RRE Tally Setup 1.0.0.exe\\\" -ArgumentList \\\"/S\\\" -Wait"', (err) => {
+        if (err) console.warn('[System Update] Background installer warning:', err.message);
+        else console.log('[System Update] Successfully rebuilt and updated desktop app on PC!');
+      });
+
+      return res.json({
+        success: true,
+        message: 'Successfully updated application files from GitHub! The PC installation is being refreshed.',
+        details: pullOut
+      });
+    } catch (err) {
+      return res.status(500).json({
+        success: false,
+        error: `Git repository update error: ${err.message}`
+      });
+    }
+  }
+
+  // Packaged / Installed Mode (No .git folder)
+  // Check if setup installer exists locally or provide direct installer download
+  const possibleSetupPaths = [
+    path.join(__dirname, 'dist', 'RRE Tally Setup 1.0.0.exe'),
+    path.join(__dirname, '..', 'dist', 'RRE Tally Setup 1.0.0.exe'),
+    path.join(process.env.USERPROFILE || 'C:\\Users\\Admin', 'Desktop', 'RRE PRoduct', 'dist', 'RRE Tally Setup 1.0.0.exe')
+  ];
+
+  const foundInstaller = possibleSetupPaths.find(p => fs.existsSync(p));
+
+  if (foundInstaller) {
+    exec(`powershell -Command "Start-Process '${foundInstaller}' -ArgumentList '/S' -Wait"`, (err) => {
+      if (err) console.warn('[System Update] Installer launch notice:', err.message);
     });
 
-    res.json({
+    return res.json({
       success: true,
-      message: 'Successfully updated application files from GitHub! The PC installation is being refreshed.',
-      details: pullOut
-    });
-  } catch (err) {
-    res.status(500).json({
-      success: false,
-      error: `Update error: ${err.message}`
+      message: 'Latest RRE Tally Setup installer found and launched. Your installation is being updated in the background without affecting your accounting data.'
     });
   }
+
+  // For remote client PCs without a local installer
+  return res.json({
+    success: true,
+    requires_download: true,
+    download_url: 'https://github.com/Anand3643/RRE-Product',
+    message: 'To install the latest release on this PC, please run the setup installer RRE Tally Setup 1.0.0.exe. All your company accounting data in company.db remains 100% intact.'
+  });
 });
 
 // SPA Fallback

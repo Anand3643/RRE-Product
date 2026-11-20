@@ -2668,10 +2668,17 @@ async function performDirectUpdate() {
     const res = await fetch(`${API_BASE}/system/perform-update`, { method: 'POST' });
     const data = await res.json();
     if (data.success) {
-      alert('RRE Tally has been updated successfully to the latest version! The application will now reload.');
-      location.reload();
+      if (data.requires_download) {
+        alert(data.message);
+        if (data.download_url) {
+          window.open(data.download_url, '_blank');
+        }
+      } else {
+        alert(data.message || 'RRE Tally update launched successfully! The application will refresh.');
+        setTimeout(() => location.reload(), 2500);
+      }
     } else {
-      alert(`Update failed: ${data.error || 'Unknown error'}`);
+      alert(`Update notification: ${data.error || 'Please run the RRE Tally Setup installer to update.'}`);
     }
   } catch (err) {
     alert(`Update request error: ${err.message}`);

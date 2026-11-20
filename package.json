@@ -46,6 +46,7 @@
       "output": "dist"
     },
     "files": [
+      "build-info.json",
       "main.js",
       "server.js",
       "tally.ini",
