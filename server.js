@@ -17,6 +17,8 @@ const {
   loadDemoCompany,
   updateCompanyInfo,
   authenticateUser,
+  registerUser,
+  loginWithGoogle,
   getAllUsers,
   createUser,
   updateUser,
@@ -305,6 +307,40 @@ app.post('/api/auth/login', rateLimitLoginMiddleware, async (req, res) => {
   } catch (err) {
     loginRateLimiter.recordFailure(clientMeta.ip);
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Create / Register Account via Email
+app.post('/api/auth/register', rateLimitLoginMiddleware, async (req, res) => {
+  const clientMeta = {
+    ip: req.ip || req.connection?.remoteAddress || '127.0.0.1',
+    agent: req.headers['user-agent'] || 'TallyClient'
+  };
+
+  try {
+    const result = await registerUser(req.body, clientMeta);
+    loginRateLimiter.recordSuccess(clientMeta.ip);
+    res.json(result);
+  } catch (err) {
+    loginRateLimiter.recordFailure(clientMeta.ip);
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// Authenticate / Register via Google Account
+app.post('/api/auth/google', rateLimitLoginMiddleware, async (req, res) => {
+  const clientMeta = {
+    ip: req.ip || req.connection?.remoteAddress || '127.0.0.1',
+    agent: req.headers['user-agent'] || 'GoogleAuthClient'
+  };
+
+  try {
+    const result = await loginWithGoogle(req.body, clientMeta);
+    loginRateLimiter.recordSuccess(clientMeta.ip);
+    res.json(result);
+  } catch (err) {
+    loginRateLimiter.recordFailure(clientMeta.ip);
+    res.status(400).json({ success: false, error: err.message });
   }
 });
 

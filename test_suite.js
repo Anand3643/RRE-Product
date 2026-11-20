@@ -293,6 +293,69 @@ async function runTests() {
     // Test POST login API for admin
     const adminLoginApi = await httpPost('/api/auth/login', { username: 'admin', password: 'admin123' });
     assert(adminLoginApi.statusCode === 200 && adminLoginApi.data.success && adminLoginApi.data.data.user.role === 'Owner', 'POST /api/auth/login succeeds for Admin');
+
+    // Test POST /api/auth/register (Email User Creation in Authenticator DB)
+    const testEmail = `cfo_${Date.now().toString().slice(-4)}@ramrajgroup.com`;
+    const regRes = await httpPost('/api/auth/register', {
+      full_name: 'Chief Financial Officer',
+      email: testEmail,
+      username: `cfo_${Date.now().toString().slice(-4)}`,
+      password: 'CFO_Password_2026!',
+      role: 'Accountant'
+    });
+    assert(regRes.statusCode === 200 && regRes.data.success, 'POST /api/auth/register creates user account via Email');
+    assert(regRes.data.data.user.email === testEmail, 'Registered user stores correct email address in DB');
+
+    // Verify stored user in SQLite Authenticator with PBKDF2 hash
+    const storedUser = await get('SELECT * FROM users WHERE email = ?', [testEmail]);
+    assert(storedUser && storedUser.auth_provider === 'email', 'User record saved in Authenticator table with auth_provider = "email"');
+    assert(storedUser && storedUser.password.startsWith('pbkdf2$10000$'), 'Registered user password cryptographically hashed with PBKDF2');
+
+    // Test Login with newly registered user
+    const regLoginRes = await httpPost('/api/auth/login', {
+      username: storedUser.username,
+      password: 'CFO_Password_2026!'
+    });
+    assert(regLoginRes.statusCode === 200 && regLoginRes.data.success, 'New email user can authenticate via POST /api/auth/login');
+
+    // Test duplicate registration rejection
+    const dupRes = await httpPost('/api/auth/register', {
+      full_name: 'Duplicate Test',
+      email: testEmail,
+      password: 'somepassword'
+    });
+    assert(dupRes.statusCode === 400 && dupRes.data.success === false, 'Duplicate email registration safely rejected with 400 error');
+
+    // Test POST /api/auth/google (Google Account Provisioning in Authenticator DB)
+    const googleEmail = `auditor_${Date.now().toString().slice(-4)}@gmail.com`;
+    const googleId = `g_${Date.now()}`;
+    const googleRes = await httpPost('/api/auth/google', {
+      email: googleEmail,
+      name: 'Google External Auditor',
+      role: 'Auditor',
+      google_id: googleId
+    });
+    assert(googleRes.statusCode === 200 && googleRes.data.success, 'POST /api/auth/google provisions & logs in Google account');
+    assert(googleRes.data.data.user.role === 'Auditor', 'Google authenticated user receives selected RBAC role');
+
+    // Verify Google user stored in SQLite Authenticator
+    const storedGoogleUser = await get('SELECT * FROM users WHERE google_id = ?', [googleId]);
+    assert(storedGoogleUser && storedGoogleUser.auth_provider === 'google', 'Google user stored in Authenticator with auth_provider = "google"');
+    assert(storedGoogleUser && storedGoogleUser.google_id === googleId, 'Google identifier securely preserved in database');
+
+    // Test subsequent Google sign-in for existing user
+    const repeatGoogleRes = await httpPost('/api/auth/google', {
+      email: googleEmail,
+      name: 'Google External Auditor Updated',
+      google_id: googleId
+    });
+    assert(repeatGoogleRes.statusCode === 200 && repeatGoogleRes.data.success, 'Existing Google user successfully re-authenticates');
+
+    // Test GET /api/auth/users returns auth_provider
+    const usersListRes = await httpGet('/api/auth/users');
+    assert(usersListRes.statusCode === 200 && usersListRes.data.success, 'GET /api/auth/users returns user directory');
+    const hasAuthProvider = usersListRes.data.data.some(u => u.auth_provider === 'email' || u.auth_provider === 'google');
+    assert(hasAuthProvider, 'Users list includes auth_provider metadata for multi-provider identity management');
   } catch (err) {
     assert(false, 'API Endpoints check failed', err.message);
   }

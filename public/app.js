@@ -629,6 +629,194 @@ function handleLogout() {
   startWithFreshLogin();
 }
 
+function openRegisterModal() {
+  openModal('registerModal');
+  const nameInput = document.getElementById('reg-fullname');
+  if (nameInput) nameInput.focus();
+  const errEl = document.getElementById('reg-error-msg');
+  if (errEl) errEl.classList.add('hidden');
+}
+
+function openGoogleLoginModal() {
+  openModal('googleLoginModal');
+  const emailInput = document.getElementById('google-email');
+  if (emailInput) emailInput.focus();
+  const errEl = document.getElementById('google-error-msg');
+  if (errEl) errEl.classList.add('hidden');
+}
+
+function fillGoogleProfile(email, name, role) {
+  const emailInput = document.getElementById('google-email');
+  const nameInput = document.getElementById('google-name');
+  const roleInput = document.getElementById('google-role');
+  if (emailInput) emailInput.value = email;
+  if (nameInput) nameInput.value = name;
+  if (roleInput) roleInput.value = role;
+}
+
+async function handleRegister(e) {
+  if (e) e.preventDefault();
+  const full_name = (document.getElementById('reg-fullname')?.value || '').trim();
+  const email = (document.getElementById('reg-email')?.value || '').trim();
+  const username = (document.getElementById('reg-username')?.value || '').trim();
+  const password = (document.getElementById('reg-password')?.value || '').trim();
+  const role = document.getElementById('reg-role')?.value || 'Accountant';
+  const errEl = document.getElementById('reg-error-msg');
+  const errText = document.getElementById('reg-error-text');
+  const submitBtn = document.getElementById('btn-reg-submit');
+
+  if (errEl) errEl.classList.add('hidden');
+  if (!full_name || !email || !password) {
+    if (errEl) errEl.classList.remove('hidden');
+    if (errText) errText.textContent = 'Please fill in your full name, email address, and password.';
+    return;
+  }
+
+  const origBtnText = submitBtn ? submitBtn.innerHTML : '';
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="inline-block animate-spin mr-1">⌛</span> Registering in Authenticator...';
+  }
+
+  let authData = null;
+
+  try {
+    const res = await fetchApi('/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ full_name, email, username, password, role })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      if (errEl) errEl.classList.remove('hidden');
+      if (errText) errText.textContent = data.error || 'Registration failed.';
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = origBtnText; }
+      return;
+    }
+    authData = data.data;
+  } catch (err) {
+    console.warn('[Authenticator] Offline fallback registration:', err.message);
+    const fallbackUsername = username || email.split('@')[0] || 'user';
+    authData = {
+      user: {
+        id: Date.now(),
+        username: fallbackUsername,
+        full_name,
+        role,
+        email,
+        auth_provider: 'email',
+        status: 'Active'
+      },
+      permissions: getOfflineRolePermissions(role),
+      token: 'offline_token_' + Date.now()
+    };
+  } finally {
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = origBtnText; }
+  }
+
+  if (authData) {
+    closeModal('registerModal');
+    appState.currentUser = authData.user;
+    appState.permissions = authData.permissions;
+
+    localStorage.setItem('tally_user_session', JSON.stringify({
+      user: authData.user,
+      permissions: authData.permissions,
+      token: authData.token
+    }));
+
+    const ribbon = document.getElementById('header-ribbon');
+    if (ribbon) ribbon.classList.remove('opacity-40');
+
+    updateUserDisplay();
+    applyRolePermissions();
+    showGateway();
+  }
+}
+
+async function handleGoogleAuthSubmit(e) {
+  if (e) e.preventDefault();
+  const email = (document.getElementById('google-email')?.value || '').trim();
+  const name = (document.getElementById('google-name')?.value || '').trim();
+  const role = document.getElementById('google-role')?.value || 'Accountant';
+  const errEl = document.getElementById('google-error-msg');
+  const errText = document.getElementById('google-error-text');
+  const submitBtn = document.getElementById('btn-google-submit');
+
+  if (errEl) errEl.classList.add('hidden');
+  if (!email) {
+    if (errEl) errEl.classList.remove('hidden');
+    if (errText) errText.textContent = 'Please enter a valid Google account email.';
+    return;
+  }
+
+  const origBtnText = submitBtn ? submitBtn.innerHTML : '';
+  if (submitBtn) {
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="inline-block animate-spin mr-1">⌛</span> Authenticating with Google...';
+  }
+
+  let authData = null;
+
+  try {
+    const res = await fetchApi('/auth/google', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email,
+        name: name || email.split('@')[0],
+        role,
+        google_id: 'g_' + Math.abs(email.split('').reduce((a, b) => { a = ((a << 5) - a) + b.charCodeAt(0); return a & a; }, 0)).toString(16)
+      })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      if (errEl) errEl.classList.remove('hidden');
+      if (errText) errText.textContent = data.error || 'Google authentication failed.';
+      if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = origBtnText; }
+      return;
+    }
+    authData = data.data;
+  } catch (err) {
+    console.warn('[Authenticator] Offline fallback Google auth:', err.message);
+    const googleUsername = email.split('@')[0].replace(/[^a-z0-9_]/gi, '').toLowerCase() || 'google_user';
+    authData = {
+      user: {
+        id: Date.now(),
+        username: googleUsername,
+        full_name: name || email.split('@')[0],
+        role,
+        email,
+        auth_provider: 'google',
+        status: 'Active'
+      },
+      permissions: getOfflineRolePermissions(role),
+      token: 'offline_token_' + Date.now()
+    };
+  } finally {
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = origBtnText; }
+  }
+
+  if (authData) {
+    closeModal('googleLoginModal');
+    appState.currentUser = authData.user;
+    appState.permissions = authData.permissions;
+
+    localStorage.setItem('tally_user_session', JSON.stringify({
+      user: authData.user,
+      permissions: authData.permissions,
+      token: authData.token
+    }));
+
+    const ribbon = document.getElementById('header-ribbon');
+    if (ribbon) ribbon.classList.remove('opacity-40');
+
+    updateUserDisplay();
+    applyRolePermissions();
+    showGateway();
+  }
+}
+
 function openAlterCompany() {
   if (appState.currentView === 'view-login' || !appState.currentUser) {
     selectQuickUser('admin');
@@ -2828,9 +3016,16 @@ async function loadUsersList() {
 
       const lastLoginStr = u.last_login ? new Date(u.last_login).toLocaleString('en-IN') : 'Never';
 
+      let providerBadge = '';
+      if (u.auth_provider === 'google') {
+        providerBadge = '<span class="ml-1.5 px-1.5 py-0.5 rounded text-[9px] font-black bg-rose-50 text-rose-600 border border-rose-200">Google</span>';
+      } else if (u.auth_provider === 'email') {
+        providerBadge = '<span class="ml-1.5 px-1.5 py-0.5 rounded text-[9px] font-black bg-blue-50 text-blue-600 border border-blue-200">Email</span>';
+      }
+
       return `
         <tr class="hover:bg-slate-50 transition border-b border-slate-100">
-          <td class="p-2.5 font-bold text-slate-900">${u.username}</td>
+          <td class="p-2.5 font-bold text-slate-900">${u.username} ${providerBadge}</td>
           <td class="p-2.5 text-slate-700">${u.full_name}</td>
           <td class="p-2.5">
             <span class="px-2 py-0.5 rounded text-[10px] ${roleBadgeClass}">${u.role}</span>
@@ -3019,6 +3214,11 @@ window.toggleFreshLoginStartup = toggleFreshLoginStartup;
 window.loginAsGuest = loginAsGuest;
 window.handleLogin = handleLogin;
 window.handleLogout = handleLogout;
+window.openRegisterModal = openRegisterModal;
+window.openGoogleLoginModal = openGoogleLoginModal;
+window.fillGoogleProfile = fillGoogleProfile;
+window.handleRegister = handleRegister;
+window.handleGoogleAuthSubmit = handleGoogleAuthSubmit;
 window.selectQuickUser = selectQuickUser;
 window.togglePasswordVisibility = togglePasswordVisibility;
 window.startCleanSlate = startCleanSlate;

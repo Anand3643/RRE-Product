@@ -1,6 +1,7 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
+const crypto = require('crypto');
 const { hashPassword, verifyPassword, createSessionToken } = require('./security');
 
 // Determine writable data directory mirroring TallyPrime Data path (e.g. data/100000)
@@ -332,10 +333,18 @@ async function initDb() {
       status TEXT DEFAULT 'Active',
       allow_backdated_entries INTEGER DEFAULT 1,
       disallowed_vouchers TEXT DEFAULT '',
+      auth_provider TEXT DEFAULT 'local',
+      google_id TEXT,
+      avatar_url TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       last_login DATETIME
     )
   `);
+
+  // Column migrations for Google and Email Authentication
+  try { await run("ALTER TABLE users ADD COLUMN auth_provider TEXT DEFAULT 'local'"); } catch (e) {}
+  try { await run("ALTER TABLE users ADD COLUMN google_id TEXT"); } catch (e) {}
+  try { await run("ALTER TABLE users ADD COLUMN avatar_url TEXT"); } catch (e) {}
 
   // 15. User Login Audit Trail
   await run(`
@@ -939,7 +948,7 @@ function getRolePermissions(role) {
 
 async function getAllUsers() {
   await seedDefaultUsers();
-  return await all('SELECT id, username, full_name, role, email, phone, status, allow_backdated_entries, created_at, last_login FROM users ORDER BY id ASC');
+  return await all('SELECT id, username, full_name, role, email, phone, status, allow_backdated_entries, auth_provider, google_id, created_at, last_login FROM users ORDER BY id ASC');
 }
 
 async function createUser(userData) {
@@ -1129,6 +1138,105 @@ async function updateCompanyInfo(info) {
   return { success: true, message: 'Company profile updated successfully.' };
 }
 
+async function registerUser(userData, clientMeta = {}) {
+  await seedDefaultUsers();
+  const { full_name, email, username, password, role } = userData;
+
+  if (!full_name || !email || !password) {
+    throw new Error('Full name, email address, and password are required.');
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanName = full_name.trim();
+  let cleanUsername = (username || cleanEmail.split('@')[0] || 'user').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+
+  if (!cleanUsername) cleanUsername = 'user_' + Date.now().toString().slice(-4);
+
+  // Check for conflicts
+  const existing = await get(
+    'SELECT id, username, email FROM users WHERE username = ? COLLATE NOCASE OR (email != "" AND email = ? COLLATE NOCASE)',
+    [cleanUsername, cleanEmail]
+  );
+
+  if (existing) {
+    if (existing.email && existing.email.toLowerCase() === cleanEmail) {
+      throw new Error(`An account with email "${cleanEmail}" already exists. Please log in.`);
+    }
+    // If username is taken, append suffix
+    cleanUsername = `${cleanUsername}_${Date.now().toString().slice(-3)}`;
+  }
+
+  const hashedPassword = hashPassword(password.trim());
+  const assignedRole = role || 'Data Entry';
+
+  const res = await run(
+    `INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries, auth_provider)
+     VALUES (?, ?, ?, ?, ?, '', 'Active', 1, 'email')`,
+    [cleanUsername, hashedPassword, cleanName, assignedRole, cleanEmail]
+  );
+
+  const newUser = await get('SELECT * FROM users WHERE id = ?', [res.lastID]);
+  console.log(`[Authenticator] Registered new email user "${cleanUsername}" (${cleanEmail}) with role ${assignedRole}.`);
+
+  return handleLoginSuccess(newUser, clientMeta);
+}
+
+async function loginWithGoogle(googleData, clientMeta = {}) {
+  await seedDefaultUsers();
+  const { email, name, google_id, role, avatar_url } = googleData;
+
+  if (!email) {
+    throw new Error('Valid Google account email is required.');
+  }
+
+  const cleanEmail = email.trim().toLowerCase();
+  const cleanName = (name || cleanEmail.split('@')[0] || 'Google User').trim();
+  const cleanGoogleId = (google_id || `g_${Date.now()}`).trim();
+
+  // 1. Look up existing user by google_id or email
+  let user = await get(
+    'SELECT * FROM users WHERE google_id = ? OR (email != "" AND email = ? COLLATE NOCASE)',
+    [cleanGoogleId, cleanEmail]
+  );
+
+  if (user) {
+    // Update Google credentials & metadata
+    await run(
+      'UPDATE users SET google_id = COALESCE(google_id, ?), auth_provider = ?, avatar_url = COALESCE(?, avatar_url) WHERE id = ?',
+      [cleanGoogleId, user.auth_provider === 'local' ? 'hybrid' : 'google', avatar_url || null, user.id]
+    );
+    user = await get('SELECT * FROM users WHERE id = ?', [user.id]);
+    console.log(`[Authenticator] Google login authenticated for user "${user.username}" (${cleanEmail}).`);
+    return handleLoginSuccess(user, clientMeta);
+  }
+
+  // 2. User does not exist -> Auto-provision in Authenticator
+  let baseUsername = cleanEmail.split('@')[0].replace(/[^a-z0-9_]/gi, '').toLowerCase();
+  if (!baseUsername) baseUsername = 'google_user';
+  let candidateUsername = baseUsername;
+  let counter = 1;
+
+  while (await get('SELECT id FROM users WHERE username = ? COLLATE NOCASE', [candidateUsername])) {
+    candidateUsername = `${baseUsername}_${counter++}`;
+  }
+
+  // Generate cryptographically secure random password
+  const randomSecret = crypto.randomBytes(24).toString('hex');
+  const hashedPassword = hashPassword(randomSecret);
+  const assignedRole = role || 'Accountant'; // Default high privilege for user-added Google profile
+
+  const res = await run(
+    `INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries, auth_provider, google_id, avatar_url)
+     VALUES (?, ?, ?, ?, ?, '', 'Active', 1, 'google', ?, ?)`,
+    [candidateUsername, hashedPassword, cleanName, assignedRole, cleanEmail, cleanGoogleId, avatar_url || '']
+  );
+
+  const newUser = await get('SELECT * FROM users WHERE id = ?', [res.lastID]);
+  console.log(`[Authenticator] Auto-provisioned new Google user "${candidateUsername}" (${cleanEmail}) in database.`);
+
+  return handleLoginSuccess(newUser, clientMeta);
+}
+
 module.exports = {
   db,
   dbPath,
@@ -1143,6 +1251,8 @@ module.exports = {
   loadDemoCompany,
   updateCompanyInfo,
   authenticateUser,
+  registerUser,
+  loginWithGoogle,
   getAllUsers,
   createUser,
   updateUser,
