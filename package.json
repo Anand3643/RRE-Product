@@ -7,6 +7,7 @@
   "scripts": {
     "start": "node server.js",
     "desktop": "electron .",
+    "test": "node test_suite.js",
     "build:win": "electron-builder --win nsis",
     "build:portable": "electron-builder --win portable",
     "install:desktop": "powershell -ExecutionPolicy Bypass -File create-shortcuts.ps1"
