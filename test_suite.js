@@ -295,7 +295,7 @@ async function runTests() {
     assert(adminLoginApi.statusCode === 200 && adminLoginApi.data.success && adminLoginApi.data.data.user.role === 'Owner', 'POST /api/auth/login succeeds for Admin');
 
     // Test POST /api/auth/register (Email User Creation in Authenticator DB)
-    const testEmail = `cfo_${Date.now().toString().slice(-4)}@ramrajgroup.com`;
+    const testEmail = `cfo_${Date.now().toString().slice(-4)}@example.com`;
     const regRes = await httpPost('/api/auth/register', {
       full_name: 'Chief Financial Officer',
       email: testEmail,

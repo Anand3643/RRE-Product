@@ -5,7 +5,7 @@ const fs = require('fs');
 
 // Ensure Windows taskbar grouping uses official App ID
 try {
-  app.setAppUserModelId('com.ramraj.rretally');
+  app.setAppUserModelId('com.rre.tally');
 } catch (e) {}
 
 // Hardware acceleration fallback - prevents blank screen on PCs without modern GPU/DirectX drivers
@@ -56,7 +56,7 @@ async function createWindow() {
     height: 820,
     minWidth: 1024,
     minHeight: 700,
-    title: 'RRE Tally — Ramraj Enterprises',
+    title: 'RRE Tally',
     icon: path.join(__dirname, 'tally_icon.ico'),
     backgroundColor: '#0a192f',
     webPreferences: {
@@ -194,7 +194,7 @@ async function createWindow() {
               type: 'info',
               title: 'About RRE Tally',
               message: 'RRE Tally (V5 Edition) — Standalone Desktop',
-              detail: 'Company: Ramraj Enterprises\nMode: 100% Offline Standalone (No Internet or External Server Required)\nData Storage: Local PC SQLite (company.db)\nCompany No: 100000 | Tamil Nadu (33)\nNative Tally XML Port: 9000 (ODBC / Tally Protocol)\nFull double-entry integrity & statutory compliance.'
+              detail: 'RRE Tally (V5 Edition)\nMode: 100% Offline Standalone (No Internet or External Server Required)\nData Storage: Local PC SQLite (company.db)\nCompany No: 100000 | Tamil Nadu (33)\nNative Tally XML Port: 9000 (ODBC / Tally Protocol)\nFull double-entry integrity & statutory compliance.'
             });
           }
         },

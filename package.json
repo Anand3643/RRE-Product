@@ -24,7 +24,7 @@
     "gst",
     "inventory"
   ],
-  "author": "Ramraj Enterprises",
+  "author": "RRE",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
@@ -38,9 +38,9 @@
     "electron-builder": "^26.18.0"
   },
   "build": {
-    "appId": "com.ramraj.rretally",
+    "appId": "com.rre.tally",
     "productName": "RRE Tally",
-    "copyright": "Copyright © 2026 Ramraj Enterprises",
+    "copyright": "Copyright © 2026 RRE Tally",
     "npmRebuild": false,
     "directories": {
       "output": "dist"

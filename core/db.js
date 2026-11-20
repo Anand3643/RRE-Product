@@ -390,7 +390,7 @@ async function seedTallyMasters(force = false) {
   if (comp.count === 0) {
     await run(`
       INSERT INTO company_info (company_number, name, formal_name, financial_year_from, books_beginning_from, gstin, pan, address, state, state_code, pin_code)
-      VALUES ('100000', 'Ramraj Enterprises', 'M/s. RAMRAJ ENTERPRISES', '2026-04-01', '2026-04-01', '33ANUPS7331M1Z8', 'ANUPS7331M', '12/4 Industrial Estate, Ambattur', 'Tamil Nadu', '33', '600058')
+      VALUES ('100000', 'RRE Tally', 'M/s. RRE TALLY', '2026-04-01', '2026-04-01', '', '', '', 'Tamil Nadu', '33', '')
     `);
   }
 
@@ -702,7 +702,7 @@ async function seedDefaultUsers() {
         password: 'admin123',
         full_name: 'System Administrator (Owner)',
         role: 'Owner',
-        email: 'admin@ramraj.com',
+        email: 'admin@rretally.com',
         phone: '9840012345',
         allow_backdated_entries: 1
       },
@@ -711,7 +711,7 @@ async function seedDefaultUsers() {
         password: 'acc123',
         full_name: 'S. Ramanathan (Senior Accountant)',
         role: 'Accountant',
-        email: 'ramanathan@ramraj.com',
+        email: 'accountant@rretally.com',
         phone: '9840012346',
         allow_backdated_entries: 1
       },
@@ -720,7 +720,7 @@ async function seedDefaultUsers() {
         password: 'data123',
         full_name: 'K. Priya (Accounts Clerk)',
         role: 'Data Entry',
-        email: 'priya@ramraj.com',
+        email: 'dataentry@rretally.com',
         phone: '9840012347',
         allow_backdated_entries: 0
       },
@@ -736,9 +736,9 @@ async function seedDefaultUsers() {
       {
         username: 'viewer',
         password: 'view123',
-        full_name: 'Rajesh Ramraj (Managing Director)',
+        full_name: 'Executive Director (Viewer)',
         role: 'Viewer',
-        email: 'rajesh@ramraj.com',
+        email: 'director@rretally.com',
         phone: '9840012349',
         allow_backdated_entries: 0
       },
@@ -747,7 +747,7 @@ async function seedDefaultUsers() {
         password: 'guest',
         full_name: 'Guest User (Inspection & Demo)',
         role: 'Guest',
-        email: 'guest@ramraj.com',
+        email: 'guest@rretally.com',
         phone: '',
         allow_backdated_entries: 0
       }
@@ -768,7 +768,7 @@ async function seedDefaultUsers() {
     if (!guestExists) {
       await run(
         `INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries)
-         VALUES ('guest', ?, 'Guest User (Inspection & Demo)', 'Guest', 'guest@ramraj.com', '', 'Active', 0)`,
+         VALUES ('guest', ?, 'Guest User (Inspection & Demo)', 'Guest', 'guest@rretally.com', '', 'Active', 0)`,
         [hashPassword('guest')]
       );
     }

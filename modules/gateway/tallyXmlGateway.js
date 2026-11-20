@@ -36,7 +36,7 @@ router.post(['/', '/tally-xml'], async (req, res) => {
     }
 
     const comp = await get('SELECT * FROM company_info LIMIT 1');
-    const compName = comp ? comp.name : 'Ramraj Enterprises';
+    const compName = comp ? comp.name : 'RRE Tally';
     const compGstin = comp ? comp.gstin : '33ANUPS7331M1Z8';
 
     let xmlResponse = `<?xml version="1.0" encoding="utf-8"?>

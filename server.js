@@ -241,7 +241,7 @@ app.get('/api/gateway/info', async (req, res) => {
     res.json({
       success: true,
       data: {
-        company: comp || { name: 'Ramraj Enterprises', gstin: '33ANUPS7331M1Z8', state: 'Tamil Nadu', state_code: '33' },
+        company: comp || { name: 'RRE Tally', gstin: '', state: 'Tamil Nadu', state_code: '33' },
         current_date: lastVoucher ? lastVoucher.date : '2026-06-01',
         financial_year: '1-Apr-2026 to 31-Mar-2027',
         last_voucher: lastVoucher || null,

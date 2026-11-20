@@ -249,7 +249,7 @@ async function seedTallyMasters() {
   // 1. Company Info
   await run(`
     INSERT INTO company_info (name, formal_name, financial_year_from, books_beginning_from, gstin, pan, address, state, state_code, pin_code)
-    VALUES ('Ramraj Enterprises', 'M/s. RAMRAJ ENTERPRISES', '2026-04-01', '2026-04-01', '33ANUPS7331M1Z8', 'ANUPS7331M', '12/4 Industrial Estate, Ambattur', 'Tamil Nadu', '33', '600058')
+    VALUES ('RRE Tally', 'M/s. RRE TALLY', '2026-04-01', '2026-04-01', '', '', '', 'Tamil Nadu', '33', '')
   `);
 
   // 2. Standard Tally 28 Groups (15 Primary + 13 Secondary)

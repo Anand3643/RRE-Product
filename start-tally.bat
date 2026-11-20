@@ -1,5 +1,5 @@
 @echo off
-title TallyPrime Web Edition — Ramraj Enterprises
+title RRE Tally Web Edition
 echo =======================================================
 echo   Starting TallyPrime Web Edition (Double-Entry Engine)
 echo =======================================================

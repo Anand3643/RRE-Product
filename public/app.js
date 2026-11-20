@@ -130,12 +130,12 @@ function getOfflineRolePermissions(role) {
 // Application State with Resilient Offline Defaults
 let appState = {
   company: {
-    name: 'Ramraj Enterprises',
+    name: 'RRE Tally',
     company_number: '100000',
-    formal_name: 'M/s. RAMRAJ ENTERPRISES',
+    formal_name: 'M/s. RRE TALLY',
     financial_year_from: '2026-04-01',
     books_beginning_from: '2026-04-01',
-    gstin: '33ANUPS7331M1Z8',
+    gstin: '',
     state: 'Tamil Nadu',
     state_code: '33',
     currency_symbol: '₹'
@@ -921,7 +921,7 @@ async function loadGatewayInfo() {
     appState.company = d.company;
 
     // Update Top & Gateway DOM safely
-    const companyTitle = d.company?.name || 'Ramraj Enterprises';
+    const companyTitle = d.company?.name || 'RRE Tally';
     const setElText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
 
     setElText('top-company-name', companyTitle);
