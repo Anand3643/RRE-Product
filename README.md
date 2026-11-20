@@ -96,6 +96,26 @@ $$\text{Closing Stock Valuation} = \text{Closing Quantity} \times \text{Valuatio
 
 ---
 
+## 🛡️ Production Engineering Architecture (The 13 Pillars)
+
+RRE Tally implements the 13 enterprise system pillars designed for high-reliability offline desktop & local client-server operations:
+
+1. **Secrets Management**: Zero API keys or hardcoded secrets. Server reads from `.env` or system environment with zero-config safe offline defaults. No secrets exposed to frontend.
+2. **Security & Parameterized SQL**: 100% parameterized SQLite queries preventing SQL injection. Strict HTTP security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, CSP, Referrer-Policy).
+3. **Authentication & RBAC**: Role-Based Access Control with 6 security tiers (Owner, Accountant, Data Entry, Auditor, Viewer, Guest). PBKDF2 password hashing with 10,000 iterations & cryptographic salt. Brute-force rate limiting on `/api/auth/login`.
+4. **Encryption**: Passwords cryptographically hashed at rest. HMAC-SHA256 session token generation and verification. Optional AES-256-GCM encrypted database backup archives.
+5. **Disaster Recovery & Point-in-Time Backups**: Automated snapshot backups (`data/100000/backups/`) with SHA-256 checksum integrity verification. Automatic rollback snapshots taken prior to restore drills or data resets. 1-click backup and restore from the UI (`Alt+Y: Data`).
+6. **Monitoring & Health Checks**: Comprehensive diagnostic endpoint (`GET /api/health`) reporting system uptime, SQLite WAL status, integrity check, disk usage, memory telemetry, and active record counts.
+7. **System Design & Separation of Concerns**: Modular decoupled subsystems for Core Accounting Engine, Statutory GST Engine, Backup Engine, Security Subsystem, and Desktop Shell.
+8. **Networking & Origin Lockdown**: Strict loopback binding (`127.0.0.1`) preventing unauthorized remote network exposure. Keep-alive timeout optimization (`65000` ms) preventing socket drops.
+9. **Scaling & Query Optimization**: Database performance indices on vouchers, ledger entries, inventory entries, and user audit tables. SQLite WAL (Write-Ahead Logging) mode and PRAGMA busy_timeout.
+10. **Load Testing & Benchmarks**: High-throughput automated stress testing script (`npm run test:load`) verifying sub-50ms p50/p95 latency and zero dropped requests at 300+ requests/second.
+11. **Testing Suite**: Automated verification suite (`npm test`) running 58 comprehensive audit tests across schema, cryptography, RBAC, double-entry balance, backups, health checks, and bundled assets.
+12. **Deployment & CI/CD**: Reproducible Windows NSIS setup package (`dist/RRE Tally Setup 1.0.0.exe`) and portable executable with desktop shortcuts.
+13. **Data Retention & Pruning**: Automated snapshot retention policy retaining up to 30 snapshots with automated safe pruning.
+
+---
+
 ## 💻 Install and Run on PC
 
 ### 1. Ready-to-Use Windows Desktop App

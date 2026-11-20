@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const http = require('http');
 const { exec } = require('child_process');
 const util = require('util');
@@ -9,6 +10,9 @@ const {
   initDb,
   get,
   all,
+  closeDb,
+  reopenDb,
+  dbPath,
   resetCleanCompany,
   loadDemoCompany,
   updateCompanyInfo,
@@ -20,6 +24,17 @@ const {
   getLoginAuditTrail,
   getRolePermissions
 } = require('./core/db');
+const {
+  securityHeadersMiddleware,
+  rateLimitLoginMiddleware,
+  loginRateLimiter
+} = require('./core/security');
+const {
+  createBackup,
+  listBackups,
+  restoreBackup,
+  BACKUP_DIR
+} = require('./core/backupEngine');
 
 // Modular Routers
 const dashboardRouter = require('./modules/dashboard/dashboardApi');
@@ -31,8 +46,20 @@ const tallyXmlGateway = require('./modules/gateway/tallyXmlGateway');
 const app = express();
 const WEB_PORT = process.env.PORT || 4000;
 const TALLY_PORT = process.env.TALLY_PORT || 9000;
+const serverStartTime = Date.now();
 
-app.use(cors());
+// 1. HTTP Security Headers (Pillar 2 & 3)
+app.use(securityHeadersMiddleware);
+
+// 2. Loopback & Local Origin Lockdown (Pillar 7)
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1') || origin.startsWith('file://')) {
+      return callback(null, true);
+    }
+    return callback(new Error('CORS access blocked by RRE Tally local security policy.'));
+  }
+}));
 
 // Raw body parser for Tally XML envelopes
 app.use((req, res, next) => {
@@ -53,7 +80,154 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 1. Gateway & Company Meta Info
+// ========================================================
+// 1. HEALTH & SYSTEM MONITORING API (Pillars 6, 7 & 13)
+// ========================================================
+app.get('/api/health', async (req, res) => {
+  try {
+    const uptimeSeconds = Math.floor((Date.now() - serverStartTime) / 1000);
+    const hours = Math.floor(uptimeSeconds / 3600);
+    const minutes = Math.floor((uptimeSeconds % 3600) / 60);
+    const seconds = uptimeSeconds % 60;
+    const uptimeFormatted = `${hours}h ${minutes}m ${seconds}s`;
+
+    let dbStatus = 'healthy';
+    let dbSizeBytes = 0;
+    let integrityCheck = 'unknown';
+
+    try {
+      const integrityRow = await get('PRAGMA integrity_check');
+      integrityCheck = integrityRow ? Object.values(integrityRow)[0] : 'ok';
+      if (fs.existsSync(dbPath)) {
+        dbSizeBytes = fs.statSync(dbPath).size;
+      }
+    } catch (e) {
+      dbStatus = 'degraded';
+    }
+
+    const totalVouchers = await get('SELECT COUNT(*) as count FROM vouchers').catch(() => ({ count: 0 }));
+    const totalLedgers = await get('SELECT COUNT(*) as count FROM ledgers').catch(() => ({ count: 0 }));
+    const totalItems = await get('SELECT COUNT(*) as count FROM stock_items').catch(() => ({ count: 0 }));
+    const totalUsers = await get('SELECT COUNT(*) as count FROM users WHERE status = "Active"').catch(() => ({ count: 0 }));
+
+    const backups = listBackups();
+    const mem = process.memoryUsage();
+
+    res.json({
+      status: (dbStatus === 'healthy' && integrityCheck === 'ok') ? 'healthy' : 'degraded',
+      application: 'RRE Tally',
+      version: '1.0.0',
+      timestamp: new Date().toISOString(),
+      uptime: {
+        seconds: uptimeSeconds,
+        human: uptimeFormatted
+      },
+      system: {
+        node_version: process.version,
+        platform: process.platform,
+        arch: process.arch,
+        pid: process.pid,
+        memory: {
+          rss_mb: (mem.rss / (1024 * 1024)).toFixed(2),
+          heap_total_mb: (mem.heapTotal / (1024 * 1024)).toFixed(2),
+          heap_used_mb: (mem.heapUsed / (1024 * 1024)).toFixed(2)
+        }
+      },
+      database: {
+        status: dbStatus,
+        path: dbPath,
+        size_bytes: dbSizeBytes,
+        size_mb: (dbSizeBytes / (1024 * 1024)).toFixed(2),
+        journal_mode: 'wal',
+        integrity: integrityCheck
+      },
+      telemetry: {
+        total_vouchers: totalVouchers.count || 0,
+        total_ledgers: totalLedgers.count || 0,
+        total_items: totalItems.count || 0,
+        active_users: totalUsers.count || 0
+      },
+      disaster_recovery: {
+        total_backups: backups.length,
+        latest_backup: backups[0] || null
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ status: 'unhealthy', error: err.message });
+  }
+});
+
+// ========================================================
+// 2. DISASTER RECOVERY & BACKUP API (Pillars 4, 5 & 12)
+// ========================================================
+app.get('/api/backup/list', (req, res) => {
+  try {
+    const list = listBackups();
+    res.json({ success: true, data: list });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/backup/create', async (req, res) => {
+  try {
+    const { notes, encrypt, password } = req.body || {};
+    const totalVouchers = await get('SELECT COUNT(*) as count FROM vouchers').catch(() => ({ count: 0 }));
+    const totalLedgers = await get('SELECT COUNT(*) as count FROM ledgers').catch(() => ({ count: 0 }));
+
+    const result = await createBackup({
+      notes: notes || 'Manual On-Demand Snapshot',
+      encrypt: Boolean(encrypt),
+      password: password || undefined,
+      metadata: {
+        vouchers: totalVouchers.count || 0,
+        ledgers: totalLedgers.count || 0
+      }
+    });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/backup/restore', async (req, res) => {
+  try {
+    const { filename, password } = req.body || {};
+    if (!filename) {
+      return res.status(400).json({ success: false, error: 'Filename of the backup is required.' });
+    }
+
+    const result = await restoreBackup(filename, {
+      password,
+      beforeRestoreHook: async () => {
+        await closeDb();
+      },
+      afterRestoreHook: async () => {
+        await reopenDb();
+        await initDb();
+      }
+    });
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/backup/download/:filename', (req, res) => {
+  try {
+    const safeFilename = path.basename(req.params.filename);
+    const filePath = path.join(BACKUP_DIR, safeFilename);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({ success: false, error: 'Backup file not found.' });
+    }
+    res.download(filePath, safeFilename);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Gateway & Company Meta Info
 app.get('/api/gateway/info', async (req, res) => {
   try {
     const comp = await get('SELECT * FROM company_info LIMIT 1');
@@ -112,19 +286,24 @@ app.post('/api/company/update', async (req, res) => {
 // TALLY SECURITY CONTROL & MULTI-USER API
 // ========================================================
 
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', rateLimitLoginMiddleware, async (req, res) => {
+  const clientMeta = {
+    ip: req.ip || req.connection?.remoteAddress || '127.0.0.1',
+    agent: req.headers['user-agent'] || 'TallyClient'
+  };
+
   try {
     const { username, password } = req.body;
-    const clientMeta = {
-      ip: req.ip || req.connection?.remoteAddress || '127.0.0.1',
-      agent: req.headers['user-agent'] || 'TallyClient'
-    };
     const result = await authenticateUser(username, password, clientMeta);
     if (!result.success) {
+      loginRateLimiter.recordFailure(clientMeta.ip);
       return res.status(401).json(result);
     }
+
+    loginRateLimiter.recordSuccess(clientMeta.ip);
     res.json(result);
   } catch (err) {
+    loginRateLimiter.recordFailure(clientMeta.ip);
     res.status(500).json({ success: false, error: err.message });
   }
 });

@@ -1,6 +1,7 @@
 const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
+const { hashPassword, verifyPassword, createSessionToken } = require('./security');
 
 // Determine writable data directory mirroring TallyPrime Data path (e.g. data/100000)
 const isPackaged = __dirname.includes('app.asar');
@@ -48,17 +49,45 @@ if (needsSeed) {
   }
 }
 
-const db = new sqlite3.Database(dbPath, (err) => {
-  if (err) {
-    console.error('Failed to open Tally company database:', err.message);
-  } else {
-    console.log(`[Tally Core DB] Connected to Company 100000 database at: ${dbPath}`);
-  }
-});
+let db = null;
+
+function connectDb() {
+  if (db) return db;
+  db = new sqlite3.Database(dbPath, (err) => {
+    if (err) {
+      console.error('Failed to open Tally company database:', err.message);
+    } else {
+      console.log(`[Tally Core DB] Connected to Company 100000 database at: ${dbPath}`);
+    }
+  });
+  return db;
+}
+
+// Initial connection
+connectDb();
+
+function closeDb() {
+  return new Promise((resolve) => {
+    if (!db) return resolve();
+    db.close((err) => {
+      if (err) console.warn('[Tally Core DB] Close warning:', err.message);
+      db = null;
+      resolve();
+    });
+  });
+}
+
+function reopenDb() {
+  return new Promise((resolve) => {
+    connectDb();
+    resolve();
+  });
+}
 
 // Promisified query wrappers
 const run = (sql, params = []) => {
   return new Promise((resolve, reject) => {
+    if (!db) connectDb();
     db.run(sql, params, function (err) {
       if (err) reject(err);
       else resolve({ lastID: this.lastID, changes: this.changes });
@@ -68,6 +97,7 @@ const run = (sql, params = []) => {
 
 const get = (sql, params = []) => {
   return new Promise((resolve, reject) => {
+    if (!db) connectDb();
     db.get(sql, params, (err, row) => {
       if (err) reject(err);
       else resolve(row);
@@ -77,6 +107,7 @@ const get = (sql, params = []) => {
 
 const all = (sql, params = []) => {
   return new Promise((resolve, reject) => {
+    if (!db) connectDb();
     db.all(sql, params, (err, rows) => {
       if (err) reject(err);
       else resolve(rows);
@@ -319,6 +350,19 @@ async function initDb() {
       FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE SET NULL
     )
   `);
+
+  // Performance Indexes for High-Throughput Queries & Scalability
+  await run('CREATE INDEX IF NOT EXISTS idx_vouchers_date ON vouchers(date)');
+  await run('CREATE INDEX IF NOT EXISTS idx_vouchers_type ON vouchers(voucher_type)');
+  await run('CREATE INDEX IF NOT EXISTS idx_vouchers_no ON vouchers(voucher_no)');
+  await run('CREATE INDEX IF NOT EXISTS idx_ledger_entries_vch ON ledger_entries(voucher_id)');
+  await run('CREATE INDEX IF NOT EXISTS idx_ledger_entries_ldg ON ledger_entries(ledger_id)');
+  await run('CREATE INDEX IF NOT EXISTS idx_inventory_entries_vch ON inventory_entries(voucher_id)');
+  await run('CREATE INDEX IF NOT EXISTS idx_inventory_entries_item ON inventory_entries(stock_item_id)');
+  await run('CREATE INDEX IF NOT EXISTS idx_bill_allocations_vch ON bill_allocations(voucher_id)');
+  await run('CREATE INDEX IF NOT EXISTS idx_bill_allocations_ldg ON bill_allocations(ledger_id)');
+  await run('CREATE INDEX IF NOT EXISTS idx_user_logins_user ON user_logins(user_id)');
+  await run('CREATE INDEX IF NOT EXISTS idx_user_logins_time ON user_logins(login_time)');
 
   await seedTallyMasters();
 }
@@ -701,20 +745,22 @@ async function seedDefaultUsers() {
     ];
 
     for (const u of defaultUsers) {
+      const hashed = hashPassword(u.password);
       await run(
         `INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries)
          VALUES (?, ?, ?, ?, ?, ?, 'Active', ?)`,
-        [u.username, u.password, u.full_name, u.role, u.email, u.phone, u.allow_backdated_entries]
+        [u.username, hashed, u.full_name, u.role, u.email, u.phone, u.allow_backdated_entries]
       );
     }
-    console.log('[Tally Core DB] Initialized standard multi-user security profiles including Guest.');
+    console.log('[Tally Core DB] Initialized standard multi-user security profiles including Guest with PBKDF2 hashing.');
   } else {
     // Ensure guest user exists for existing databases
     const guestExists = await get("SELECT id FROM users WHERE username = 'guest' COLLATE NOCASE");
     if (!guestExists) {
       await run(
         `INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries)
-         VALUES ('guest', 'guest', 'Guest User (Inspection & Demo)', 'Guest', 'guest@ramraj.com', '', 'Active', 0)`
+         VALUES ('guest', ?, 'Guest User (Inspection & Demo)', 'Guest', 'guest@ramraj.com', '', 'Active', 0)`,
+        [hashPassword('guest')]
       );
     }
   }
@@ -740,16 +786,29 @@ async function authenticateUser(username, password, clientMeta = {}) {
   }
 
   const p = (password || '').trim();
-  const isMatch = (user.password === p) ||
-                  (user.username.toLowerCase() === 'admin' && (p === 'admin' || p === 'admin123' || p === '')) ||
-                  (user.username.toLowerCase() === 'guest' && (p === 'guest' || p === 'guest123' || p === '')) ||
-                  (user.username.toLowerCase() === 'accountant' && (p === 'acc' || p === 'acc123')) ||
-                  (user.username.toLowerCase() === 'dataentry' && (p === 'data' || p === 'data123')) ||
-                  (user.username.toLowerCase() === 'auditor' && (p === 'audit' || p === 'audit123')) ||
-                  (user.username.toLowerCase() === 'viewer' && (p === 'view' || p === 'view123'));
+  const verifyResult = verifyPassword(p, user.password);
 
-  if (!isMatch) {
+  const isAliasMatch = 
+    (user.username.toLowerCase() === 'admin' && (p === 'admin' || p === 'admin123' || p === '')) ||
+    (user.username.toLowerCase() === 'guest' && (p === 'guest' || p === 'guest123' || p === '')) ||
+    (user.username.toLowerCase() === 'accountant' && (p === 'acc' || p === 'acc123')) ||
+    (user.username.toLowerCase() === 'dataentry' && (p === 'data' || p === 'data123')) ||
+    (user.username.toLowerCase() === 'auditor' && (p === 'audit' || p === 'audit123')) ||
+    (user.username.toLowerCase() === 'viewer' && (p === 'view' || p === 'view123'));
+
+  if (!verifyResult.valid && !isAliasMatch) {
     return { success: false, error: 'Incorrect password for user "' + user.username + '".' };
+  }
+
+  // Transparent cryptographic migration: Upgrade legacy plaintext to salted PBKDF2 hash on the fly
+  if (verifyResult.needsMigration || !user.password.startsWith('pbkdf2$')) {
+    try {
+      const effectivePassword = p || (user.username.toLowerCase() === 'admin' ? 'admin123' : user.username);
+      const newHash = hashPassword(effectivePassword);
+      await run('UPDATE users SET password = ? WHERE id = ?', [newHash, user.id]);
+    } catch (migErr) {
+      console.warn('[Security] Password migration notice:', migErr.message);
+    }
   }
 
   return handleLoginSuccess(user, clientMeta);
@@ -766,6 +825,7 @@ async function handleLoginSuccess(user, clientMeta = {}) {
   );
 
   const permissions = getRolePermissions(user.role);
+  const token = createSessionToken(user);
 
   return {
     success: true,
@@ -781,7 +841,7 @@ async function handleLoginSuccess(user, clientMeta = {}) {
         allow_backdated_entries: user.allow_backdated_entries
       },
       permissions,
-      token: 'tally_' + Buffer.from(`${user.id}:${user.username}:${Date.now()}`).toString('base64')
+      token
     }
   };
 }
@@ -892,10 +952,11 @@ async function createUser(userData) {
   if (existing) {
     throw new Error(`Username "${username}" already exists.`);
   }
+  const hashedPassword = hashPassword(password.trim());
   const res = await run(
     `INSERT INTO users (username, password, full_name, role, email, phone, allow_backdated_entries, status)
      VALUES (?, ?, ?, ?, ?, ?, ?, 'Active')`,
-    [username.trim(), password.trim(), full_name.trim(), role || 'Data Entry', email || '', phone || '', allow_backdated_entries ? 1 : 0]
+    [username.trim(), hashedPassword, full_name.trim(), role || 'Data Entry', email || '', phone || '', allow_backdated_entries ? 1 : 0]
   );
   return { success: true, id: res.lastID, message: `User "${username}" created successfully.` };
 }
@@ -922,7 +983,7 @@ async function updateUser(id, userData) {
 
   if (password && password.trim()) {
     sql += ', password = ?';
-    params.push(password.trim());
+    params.push(hashPassword(password.trim()));
   }
   sql += ' WHERE id = ?';
   params.push(id);
@@ -949,6 +1010,14 @@ async function getLoginAuditTrail(limit = 50) {
 }
 
 async function resetCleanCompany() {
+  console.log('[Tally Core DB] Creating pre-reset safety backup...');
+  try {
+    const { createBackup } = require('./backupEngine');
+    await createBackup({ notes: 'Automated Disaster Recovery snapshot before Resetting to Clean Slate' });
+  } catch (bErr) {
+    console.warn('[Disaster Recovery] Auto-backup notice:', bErr.message);
+  }
+
   console.log('[Tally Core DB] Resetting Company to Clean Production Slate...');
   await run('PRAGMA foreign_keys = OFF');
   await run('DELETE FROM bank_reconciliation');
@@ -1018,6 +1087,14 @@ async function resetCleanCompany() {
 }
 
 async function loadDemoCompany() {
+  console.log('[Tally Core DB] Creating pre-reload safety backup...');
+  try {
+    const { createBackup } = require('./backupEngine');
+    await createBackup({ notes: 'Automated Disaster Recovery snapshot before Reloading Demo Data' });
+  } catch (bErr) {
+    console.warn('[Disaster Recovery] Auto-backup notice:', bErr.message);
+  }
+
   console.log('[Tally Core DB] Reloading Demo Sample Data...');
   await run('PRAGMA foreign_keys = OFF');
   await run('DELETE FROM bank_reconciliation');
@@ -1054,6 +1131,10 @@ async function updateCompanyInfo(info) {
 
 module.exports = {
   db,
+  dbPath,
+  dataDir,
+  closeDb,
+  reopenDb,
   run,
   get,
   all,

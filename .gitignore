@@ -1,11 +1,18 @@
 node_modules/
 .env
 .env.local
+.env.*.local
 *.db
 *.sqlite
 *.sqlite3
+*.db-wal
+*.db-shm
+*.bak
+*.enc
 data/
 tally model/
 dist/
 build/
 *.log
+.DS_Store
+Thumbs.db

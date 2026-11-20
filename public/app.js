@@ -2262,11 +2262,131 @@ function openMasterAlterModal() { openModal('masterAlterModal'); }
 function openBankingUtilitiesModal() { openModal('bankingUtilitiesModal'); }
 function openOtherVouchersModal() { openModal('otherVouchersModal'); }
 function openStockJournalModal() { openVoucherScreen('Journal'); }
-function openDataMenuModal() { openModal('dataMenuModal'); }
+function openDataMenuModal() {
+  openModal('dataMenuModal');
+  loadBackupDisasterRecoveryData();
+}
 function openExchangeMenuModal() { openModal('exchangeMenuModal'); }
 function openHelpModal() {
   openModal('helpMenuModal');
   setTimeout(() => checkForUpdates(), 200);
+}
+
+async function loadBackupDisasterRecoveryData() {
+  const tbody = document.getElementById('backup-list-tbody');
+  const integrityEl = document.getElementById('health-db-integrity');
+  const sizeEl = document.getElementById('health-db-size');
+  const uptimeEl = document.getElementById('health-uptime');
+  const badgeText = document.getElementById('health-status-text');
+
+  try {
+    // 1. Fetch Health Metrics
+    const healthRes = await fetch(`${API_BASE}/health`).then(r => r.json()).catch(() => null);
+    if (healthRes && healthRes.status === 'healthy') {
+      if (badgeText) badgeText.textContent = 'Healthy';
+      if (integrityEl) integrityEl.textContent = 'Verified (OK)';
+      if (sizeEl) sizeEl.textContent = `${healthRes.database?.size_mb || '0.10'} MB`;
+      if (uptimeEl) uptimeEl.textContent = healthRes.uptime?.human || 'Active';
+    }
+
+    // 2. Fetch Backups
+    const backupRes = await fetch(`${API_BASE}/backup/list`).then(r => r.json()).catch(() => ({ data: [] }));
+    const backups = backupRes.data || [];
+
+    if (!tbody) return;
+
+    if (backups.length === 0) {
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="4" class="p-3 text-center text-slate-400 font-sans">
+            No snapshots recorded yet. Click "Capture Snapshot" above to create an automated point-in-time backup.
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    tbody.innerHTML = backups.map(b => {
+      const dateStr = new Date(b.created_at).toLocaleString();
+      const safeName = b.filename;
+      const noteStr = b.notes ? `<div class="text-[9px] text-slate-500 font-sans">${escapeHtml(b.notes)}</div>` : '';
+      return `
+        <tr class="hover:bg-slate-50 transition">
+          <td class="p-2">
+            <span class="font-bold text-slate-900">${escapeHtml(b.filename)}</span>
+            ${noteStr}
+          </td>
+          <td class="p-2 text-slate-600 font-sans">${dateStr}</td>
+          <td class="p-2 font-mono text-slate-700">${b.size_formatted}</td>
+          <td class="p-2 text-right space-x-1 font-sans">
+            <button type="button" onclick="triggerRestoreBackup('${safeName}')" class="px-2 py-0.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-[10px] font-bold shadow-sm" title="Restore database from this point-in-time snapshot">
+              Restore Drill
+            </button>
+            <a href="${API_BASE}/backup/download/${safeName}" download class="px-2 py-0.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded text-[10px] font-bold">
+              Download
+            </a>
+          </td>
+        </tr>
+      `;
+    }).join('');
+    if (window.lucide) window.lucide.createIcons();
+  } catch (err) {
+    if (tbody) {
+      tbody.innerHTML = `<tr><td colspan="4" class="p-3 text-center text-rose-500 font-sans">Error loading backup records: ${escapeHtml(err.message)}</td></tr>`;
+    }
+  }
+}
+
+async function triggerCreateBackup() {
+  const noteInput = document.getElementById('backup-note-input');
+  const btn = document.getElementById('btn-create-backup');
+  const notes = noteInput ? noteInput.value.trim() : '';
+
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await fetch(`${API_BASE}/backup/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notes })
+    });
+    const data = await res.json();
+    if (data.success) {
+      if (noteInput) noteInput.value = '';
+      loadBackupDisasterRecoveryData();
+      alert(`Point-in-Time Snapshot created successfully:\n${data.data.filename}\nSize: ${data.data.size_formatted}\nSHA-256 Checksum verified.`);
+    } else {
+      alert(`Could not create backup: ${data.error}`);
+    }
+  } catch (err) {
+    alert(`Snapshot creation failed: ${err.message}`);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+async function triggerRestoreBackup(filename) {
+  const confirmMsg = `WARNING: Are you sure you want to restore the company database from "${filename}"?\n\nA safety rollback snapshot will be created automatically before restoring so zero data can ever be lost.\n\nProceed with restore drill?`;
+  if (!confirm(confirmMsg)) return;
+
+  try {
+    const res = await fetch(`${API_BASE}/backup/restore`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename })
+    });
+    const data = await res.json();
+    if (data.success) {
+      alert(`Restore successful!\n${data.message}\nRollback snapshot saved as: ${data.rollback_snapshot}`);
+      closeModal('dataMenuModal');
+      if (typeof loadGatewayInfo === 'function') await loadGatewayInfo();
+      if (typeof loadDashboard === 'function') await loadDashboard();
+    } else {
+      alert(`Restore failed: ${data.error}`);
+    }
+  } catch (err) {
+    alert(`Restore drill failed: ${err.message}`);
+  }
 }
 
 async function checkForUpdates() {

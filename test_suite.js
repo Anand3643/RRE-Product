@@ -1,12 +1,28 @@
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 const { app, startServer } = require('./server');
 const {
+  initDb,
   get,
   all,
   authenticateUser,
   getRolePermissions,
   getAllUsers
 } = require('./core/db');
+const {
+  hashPassword,
+  verifyPassword,
+  createSessionToken,
+  verifySessionToken,
+  loginRateLimiter
+} = require('./core/security');
+const {
+  createBackup,
+  listBackups,
+  restoreBackup,
+  calculateChecksum
+} = require('./core/backupEngine');
 
 async function runTests() {
   console.log('====================================================');
@@ -26,9 +42,10 @@ async function runTests() {
     }
   }
 
-  // TEST 1: Database Connection & Schema Verification
-  console.log('--- 1. Database Connection & Schema Verification ---');
+  // TEST 1: Database Connection, Schema & Index Verification
+  console.log('--- 1. Database Connection, Schema & Index Verification (Pillars 1 & 8) ---');
   try {
+    await initDb();
     const comp = await get('SELECT * FROM company_info LIMIT 1');
     assert(comp && comp.name, 'Company info loaded', comp?.name);
 
@@ -40,12 +57,60 @@ async function runTests() {
 
     const itemCount = await get('SELECT count(*) as count FROM stock_items');
     assert(itemCount.count >= 0, 'Inventory stock items table accessible', `Count: ${itemCount.count}`);
+
+    // Verify Performance Indexes
+    const indices = await all("SELECT name FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'");
+    const indexNames = indices.map(i => i.name);
+    assert(indexNames.includes('idx_vouchers_date'), 'Index idx_vouchers_date created for query optimization');
+    assert(indexNames.includes('idx_ledger_entries_vch'), 'Index idx_ledger_entries_vch created for balance lookups');
   } catch (err) {
     assert(false, 'Database queries failed', err.message);
   }
 
-  // TEST 2: Multi-User Authentication Engine
-  console.log('\n--- 2. Multi-User Authentication Engine Verification ---');
+  // TEST 2: Cryptographic Security & Password Hashing
+  console.log('\n--- 2. Cryptographic Security & Password Hashing (Pillars 2, 3 & 4) ---');
+  try {
+    const testPlain = 'SecurePass_2026!';
+    const hashed = hashPassword(testPlain);
+    assert(hashed.startsWith('pbkdf2$10000$'), 'Password hashed with Salted PBKDF2-SHA512');
+
+    const checkMatch = verifyPassword(testPlain, hashed);
+    assert(checkMatch.valid === true, 'Valid password successfully verified against PBKDF2 hash');
+
+    const checkBad = verifyPassword('WrongPassword', hashed);
+    assert(checkBad.valid === false, 'Invalid password rejected by PBKDF2 verification');
+
+    // Transparent legacy migration test
+    const legacyCheck = verifyPassword('legacy123', 'legacy123');
+    assert(legacyCheck.valid === true && legacyCheck.needsMigration === true, 'Legacy plaintext identified for transparent auto-migration');
+
+    // Secure HMAC Session Token Test
+    const dummyUser = { id: 1, username: 'admin', role: 'Owner' };
+    const token = createSessionToken(dummyUser, 2);
+    assert(token.startsWith('rre_'), 'Cryptographic HMAC session token generated');
+
+    const decoded = verifySessionToken(token);
+    assert(decoded.valid === true && decoded.user.username === 'admin', 'HMAC session token successfully verified & decoded');
+
+    // Rate Limiter Test (Brute Force Protection)
+    const testIp = '192.168.1.99';
+    loginRateLimiter.recordSuccess(testIp); // Reset
+    for (let i = 0; i < 9; i++) {
+      loginRateLimiter.recordFailure(testIp);
+    }
+    const check9 = loginRateLimiter.check(testIp);
+    assert(check9.allowed === true && check9.remaining === 1, 'Rate limiter tracks failed attempts correctly');
+
+    loginRateLimiter.recordFailure(testIp); // 10th failure -> lockout
+    const check10 = loginRateLimiter.check(testIp);
+    assert(check10.allowed === false, 'Rate limiter temporarily locks out IP after 10 failed attempts');
+    loginRateLimiter.recordSuccess(testIp); // Cleanup
+  } catch (err) {
+    assert(false, 'Security and cryptographic checks failed', err.message);
+  }
+
+  // TEST 3: Multi-User Authentication Engine Verification
+  console.log('\n--- 3. Multi-User Authentication Engine Verification (Pillars 2 & 3) ---');
   const testRoles = [
     { username: 'admin', pass: 'admin123', expectedRole: 'Owner' },
     { username: 'admin', pass: '', expectedRole: 'Owner' }, // Passwordless admin shortcut
@@ -73,8 +138,8 @@ async function runTests() {
   const nonExistent = await authenticateUser('non_existent_user_xyz', 'pwd');
   assert(!nonExistent.success, 'Reject non-existent user');
 
-  // TEST 3: Role Security & Permissions Matrix
-  console.log('\n--- 3. Role Security Permissions Verification ---');
+  // TEST 4: Role Security Permissions Verification
+  console.log('\n--- 4. Role Security Permissions Verification (Pillars 3 & 6) ---');
   const ownerPerms = getRolePermissions('Owner');
   assert(ownerPerms.canCreateVouchers === true && ownerPerms.canManageUsers === true && ownerPerms.canAlterCompany === true, 'Owner has Full Access');
 
@@ -87,8 +152,27 @@ async function runTests() {
   const auditorPerms = getRolePermissions('Auditor');
   assert(auditorPerms.canCreateVouchers === false && auditorPerms.canViewFinancials === true, 'Auditor cannot record vouchers but can inspect Books');
 
-  // TEST 4: Backend Web Server & REST API Verification
-  console.log('\n--- 4. Backend Web Server & REST API Verification ---');
+  // TEST 5: Disaster Recovery & Automated Backups (Pillar 12)
+  console.log('\n--- 5. Disaster Recovery & Automated Backups (Pillar 12) ---');
+  try {
+    // Create point-in-time snapshot
+    const backupRes = await createBackup({ notes: 'Test Suite Automated Snapshot' });
+    assert(backupRes.success === true && backupRes.data.filename, 'Snapshot backup created successfully', backupRes.data.filename);
+
+    const backupsList = listBackups();
+    assert(backupsList.length > 0, 'Backups list retrieved successfully', `Count: ${backupsList.length}`);
+
+    // Verify SHA-256 checksum integrity
+    const latest = backupsList[0];
+    const fullBackupPath = path.join(__dirname, 'data', '100000', 'backups', latest.filename);
+    const checksum = calculateChecksum(fullBackupPath);
+    assert(checksum.length === 64, 'SHA-256 cryptographic checksum verified for backup file', checksum.slice(0, 16) + '...');
+  } catch (err) {
+    assert(false, 'Disaster recovery checks failed', err.message);
+  }
+
+  // TEST 6: Backend Web Server & REST API Verification
+  console.log('\n--- 6. Backend Web Server, Security Headers & Health Checks (Pillars 6, 7 & 13) ---');
   const serverInfo = await startServer(4005, '127.0.0.1');
   const baseUrl = `http://${serverInfo.host}:${serverInfo.port}`;
 
@@ -99,9 +183,19 @@ async function runTests() {
         res.on('data', chunk => { body += chunk; });
         res.on('end', () => {
           try {
-            resolve({ status: res.statusMessage, statusCode: res.statusCode, data: JSON.parse(body) });
+            resolve({
+              status: res.statusMessage,
+              statusCode: res.statusCode,
+              headers: res.headers,
+              data: JSON.parse(body)
+            });
           } catch(e) {
-            resolve({ status: res.statusMessage, statusCode: res.statusCode, raw: body });
+            resolve({
+              status: res.statusMessage,
+              statusCode: res.statusCode,
+              headers: res.headers,
+              raw: body
+            });
           }
         });
       }).on('error', reject);
@@ -122,9 +216,19 @@ async function runTests() {
         res.on('data', chunk => { body += chunk; });
         res.on('end', () => {
           try {
-            resolve({ status: res.statusMessage, statusCode: res.statusCode, data: JSON.parse(body) });
+            resolve({
+              status: res.statusMessage,
+              statusCode: res.statusCode,
+              headers: res.headers,
+              data: JSON.parse(body)
+            });
           } catch(e) {
-            resolve({ status: res.statusMessage, statusCode: res.statusCode, raw: body });
+            resolve({
+              status: res.statusMessage,
+              statusCode: res.statusCode,
+              headers: res.headers,
+              raw: body
+            });
           }
         });
       });
@@ -135,6 +239,20 @@ async function runTests() {
   }
 
   try {
+    // Health Check Endpoint (Pillar 13)
+    const healthRes = await httpGet('/api/health');
+    assert(healthRes.statusCode === 200 && healthRes.data.status === 'healthy', 'GET /api/health reports healthy system status');
+    assert(healthRes.data.system?.node_version, 'Health check returns Node version and memory metrics');
+    assert(healthRes.data.database?.integrity === 'ok', 'Health check reports SQLite WAL integrity OK');
+
+    // Security Headers (Pillar 2)
+    assert(healthRes.headers['x-content-type-options'] === 'nosniff', 'Security header X-Content-Type-Options: nosniff present');
+    assert(healthRes.headers['x-frame-options'] === 'SAMEORIGIN', 'Security header X-Frame-Options: SAMEORIGIN present');
+
+    // Backup API endpoints
+    const backupApiList = await httpGet('/api/backup/list');
+    assert(backupApiList.statusCode === 200 && backupApiList.data.success, 'GET /api/backup/list returns backup archive metadata');
+
     const gwRes = await httpGet('/api/gateway/info');
     assert(gwRes.statusCode === 200 && gwRes.data.success, 'GET /api/gateway/info returns company metadata', gwRes.data.data?.company?.name);
 
@@ -179,8 +297,8 @@ async function runTests() {
     assert(false, 'API Endpoints check failed', err.message);
   }
 
-  // TEST 5: Double-Entry Transaction Recording
-  console.log('\n--- 5. Double-Entry Accounting Engine Verification ---');
+  // TEST 7: Double-Entry Transaction Recording
+  console.log('\n--- 7. Double-Entry Accounting Engine Verification (Pillars 1 & 6) ---');
   try {
     const cashLedger = await get("SELECT id FROM ledgers WHERE name LIKE '%Cash%' LIMIT 1");
     const bankLedger = await get("SELECT id FROM ledgers WHERE name LIKE '%Bank%' LIMIT 1");
@@ -204,11 +322,8 @@ async function runTests() {
     assert(false, 'Double-entry voucher creation check failed', err.message);
   }
 
-  // TEST 6: Offline Bundled Client Assets
-  console.log('\n--- 6. Offline Bundled Client Assets Verification ---');
-  const fs = require('fs');
-  const path = require('path');
-
+  // TEST 8: Offline Bundled Client Assets
+  console.log('\n--- 8. Offline Bundled Client Assets Verification (Pillar 11) ---');
   const assetsToCheck = [
     'public/index.html',
     'public/app.js',
@@ -237,7 +352,7 @@ async function runTests() {
   console.log('====================================================');
 
   if (failed === 0) {
-    console.log('🎉 ALL 33 AUDIT TESTS PASSED! APPLICATION IS HEALTHY & READY.\n');
+    console.log('🎉 ALL PRODUCTION PILLAR TESTS PASSED! APPLICATION IS 100% HEALTHY.\n');
     process.exit(0);
   } else {
     console.error('⚠️ Some tests failed. Please review.\n');
