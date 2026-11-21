@@ -50,7 +50,7 @@ async function salesVoucherBreakup(voucherIds) {
     if (/CGST/i.test(r.name)) m.cgst += net;
     else if (/SGST/i.test(r.name)) m.sgst += net;
     else if (/IGST/i.test(r.name)) m.igst += net;
-    else if (r.group_name === 'Sales Accounts' || /sales/i.test(r.name)) m.taxable += net;
+    else if (r.group_name === 'Sales Accounts' || /sales account/i.test(r.name)) m.taxable += net;
   }
   return map;
 }

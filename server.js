@@ -51,6 +51,8 @@ const mastersRouter = require('./modules/masters/mastersApi');
 const vouchersRouter = require('./modules/vouchers/vouchersApi');
 const reportsRouter = require('./modules/reports/reportsApi');
 const tallyXmlGateway = require('./modules/gateway/tallyXmlGateway');
+const quotationsRouter = require('./modules/quotations/quotationsApi');
+const { documentsRouter, reportCenterRouter } = require('./modules/documents/documentsApi');
 
 const app = express();
 const WEB_PORT = process.env.PORT || 4000;
@@ -420,6 +422,9 @@ app.use('/api/dashboard', dashboardRouter);
 app.use('/api/masters', mastersRouter);
 app.use('/api/vouchers', vouchersRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api/quotations', quotationsRouter);
+app.use('/api/documents', documentsRouter);
+app.use('/api/report-center', reportCenterRouter);
 
 // 3. Tally XML Protocol (for external connectors and ERP bridges)
 app.use('/', tallyXmlGateway);
