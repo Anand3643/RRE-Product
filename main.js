@@ -146,7 +146,11 @@ async function createWindow() {
         { label: 'Ratio Analysis (R)', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("ratio-analysis")') },
         { label: 'GST Portal (G)', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("gst-portal")') },
         { label: 'Outstandings (O)', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("outstandings")') },
-        { label: 'Bank Reconciliation (K)', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("brs")') }
+        { label: 'Bank Reconciliation (K)', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openReport && window.openReport("brs")') },
+        { type: 'separator' },
+        { label: 'Quotations & Follow-ups (E)', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openQuotations && window.openQuotations()') },
+        { label: 'New Quotation (Alt+N)', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openQuotationEditor && window.openQuotationEditor()') },
+        { label: 'Report Center — PDF / CSV (G)', click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openReportCenter && window.openReportCenter()') }
       ]
     },
     {

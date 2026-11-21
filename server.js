@@ -81,6 +81,8 @@ const companies = require('./core/companies');
 const { forLegacyParser } = require('./core/invoiceExtract');
 const assistant = require('./core/assistant');
 const { getRolePermissions: rolePerms } = require('./core/db');
+const quotationsRouter = require('./modules/quotations/quotationsApi');
+const { documentsRouter, reportCenterRouter } = require('./modules/documents/documentsApi');
 
 const app = express();
 const WEB_PORT = process.env.PORT || 4000;
@@ -524,6 +526,9 @@ app.use('/api/inventory', inventoryRouter); // new: reorder, demand, dead stock,
 app.use('/api/bank', bankRouter); // new: statement import, smart reconciliation
 app.use('/api/gst', gstRouter); // new: GSTIN/HSN validation, tax checks, GSTR-2B reconciliation
 app.use('/api/platform', platformRouter); // new: notifications, search, export, activity log, backup verify
+app.use('/api/quotations', quotationsRouter);
+app.use('/api/documents', documentsRouter);
+app.use('/api/report-center', reportCenterRouter);
 
 // 3. Tally XML Protocol (for external connectors and ERP bridges)
 app.use('/', tallyXmlGateway);

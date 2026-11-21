@@ -1,4 +1,11 @@
 const { get, all } = require('./db');
+const {
+  calculateAllLedgerBalances,
+  calculateClosingStockValuation,
+  calculateProfitLoss,
+  calculateBalanceSheet,
+  calculateRatioAnalysis
+} = require('./accountingEngine');
 
 /**
  * RRE TALLY — EMBEDDED AI COPILOT & NLP ACCOUNTING ENGINE
@@ -204,7 +211,7 @@ async function parseVoucherPrompt(promptText) {
 }
 
 /**
- * 2. Conversational Financial Agent & Query Engine
+ * 2. Conversational Financial Agent & Universal Database Query Engine
  * Answers business and financial questions directly from live SQLite tables
  */
 async function queryFinancialAgent(queryText) {
@@ -214,7 +221,124 @@ async function queryFinancialAgent(queryText) {
 
   const query = queryText.trim().toLowerCase();
 
-  // 1. Cash Balance Query
+  // 1. Profit & Loss / Net Profit / Margins
+  if (/profit|net profit|gross profit|p&l|p and l|margin|earnings|loss\b/i.test(query)) {
+    const plData = await calculateProfitLoss();
+    const gp = plData.trading.gross_profit;
+    const np = plData.indirect.net_profit;
+    const sales = plData.trading.sales;
+    const cogs = plData.cogs;
+    const directExp = plData.trading.direct_expenses;
+    const indirectExp = plData.indirect.indirect_expenses;
+    const gmPct = sales > 0 ? ((gp / sales) * 100).toFixed(2) : '0.00';
+    const nmPct = sales > 0 ? ((np / sales) * 100).toFixed(2) : '0.00';
+
+    return {
+      answer: `📊 **Profit & Loss Financial Summary:**\n\n` +
+              `• **Net Profit:** **${formatCurrency(np)}** (Net Margin: **${nmPct}%**)\n` +
+              `• **Gross Profit:** **${formatCurrency(gp)}** (Gross Margin: **${gmPct}%**)\n` +
+              `• **Sales Turnover:** ${formatCurrency(sales)}\n` +
+              `• **Cost of Goods Sold (COGS):** ${formatCurrency(cogs)}\n` +
+              `• **Direct Expenses:** ${formatCurrency(directExp)}\n` +
+              `• **Indirect Operating Expenses:** ${formatCurrency(indirectExp)}\n\n` +
+              `${np >= 0 ? '✅ Business is operating profitably with positive bottom-line margin.' : '⚠️ Warning: Net operating loss detected. Review overheads and pricing.'}`,
+      action: 'view-profit-loss',
+      data: { grossProfit: gp, netProfit: np, sales, cogs, directExp, indirectExp, gmPct, nmPct }
+    };
+  }
+
+  // 2. Purchases & Procurement Invoices
+  if (/(?:total|show|what|how much|my|our)?\s*(?:purchase|bought|procured|supplier bill|vendor bill)/i.test(query) && !/bought \d|purchased \d/i.test(query)) {
+    const purchaseData = await get(`
+      SELECT COUNT(*) as count, COALESCE(SUM(total_amount), 0) as total
+      FROM vouchers WHERE voucher_type = 'Purchase'
+    `);
+    const pl = await calculateProfitLoss();
+    const purchaseItems = pl.trading.purchase_items || [];
+    const itemDetails = purchaseItems.slice(0, 3).map(p => `• **${p.name}**: ${formatCurrency(p.closing_balance)}`).join('\n');
+
+    return {
+      answer: `🛒 **Purchases & Procurement Overview:**\n\n` +
+              `• **Total Purchases:** **${formatCurrency(purchaseData.total || pl.trading.purchases)}**\n` +
+              `• **Purchase Vouchers:** **${purchaseData.count}** bills recorded\n` +
+              (itemDetails ? `\nTop Purchase Accounts:\n${itemDetails}` : ''),
+      action: 'view-purchases',
+      data: { total: purchaseData.total, count: purchaseData.count, items: purchaseItems }
+    };
+  }
+
+  // 3. Expenses Breakdown
+  if (/expense|spending|cost breakdown|overhead|operating cost|spent on/i.test(query)) {
+    const ledgers = await calculateAllLedgerBalances();
+    const expenseLedgers = ledgers.filter(l =>
+      l.closing_balance > 0 &&
+      (l.group_nature === 'Expenses' || l.group_name === 'Direct Expenses' || l.group_name === 'Indirect Expenses')
+    ).sort((a, b) => b.closing_balance - a.closing_balance);
+
+    const totalExpenses = expenseLedgers.reduce((s, l) => s + l.closing_balance, 0);
+
+    if (expenseLedgers.length === 0) {
+      return { answer: "No expense transactions currently recorded in your books.", data: [] };
+    }
+
+    const breakdownText = expenseLedgers.slice(0, 5).map(l => {
+      const pct = totalExpenses > 0 ? ((l.closing_balance / totalExpenses) * 100).toFixed(1) : 0;
+      return `• **${l.name}**: ${formatCurrency(l.closing_balance)} (${pct}% of total)`;
+    }).join('\n');
+
+    return {
+      answer: `💸 **Operating Expenses Breakdown:**\n\n` +
+              `Total recorded expenses: **${formatCurrency(totalExpenses)}** across **${expenseLedgers.length}** accounts:\n\n` +
+              breakdownText,
+      action: 'view-profit-loss',
+      data: { totalExpenses, ledgers: expenseLedgers }
+    };
+  }
+
+  // 4. Stock / Inventory Valuation
+  if (/stock valuation|inventory value|total stock|inventory summary|closing stock|how much stock|stock level/i.test(query)) {
+    const { totalStockValuation, items } = await calculateClosingStockValuation();
+    const inStock = items.filter(it => it.closing_qty > 0);
+    const lowStock = items.filter(it => it.closing_qty <= 0);
+
+    const topItems = [...items].sort((a, b) => b.closing_val - a.closing_val).slice(0, 4);
+    const listText = topItems.map(it => `• **${it.name}**: ${it.closing_qty} ${it.uom_symbol} = **${formatCurrency(it.closing_val)}**`).join('\n');
+
+    return {
+      answer: `📦 **Inventory & Stock Valuation Statement:**\n\n` +
+              `• **Total Stock Valuation:** **${formatCurrency(totalStockValuation)}**\n` +
+              `• **Items Tracked:** **${items.length}** (${inStock.length} in-stock, ${lowStock.length} re-order alerts)\n\n` +
+              `Top Valued Inventory Items:\n${listText}`,
+      action: 'view-stock',
+      data: { totalValuation: totalStockValuation, itemCount: items.length, items }
+    };
+  }
+
+  // 5. Specific Stock Item Query (e.g. "how many compressors", "stock of ac", "copper pipe stock")
+  if (/how many|stock of|quantity of|rate of|price of|unit of/i.test(query) || (query.includes('stock') && query.split(' ').length > 1)) {
+    const { items } = await calculateClosingStockValuation();
+    // Match item name
+    const matchedItem = items.find(it => {
+      const itName = it.name.toLowerCase();
+      const tokens = query.replace(/(how many|stock of|quantity of|rate of|price of|do we have|in stock|\?)/g, '').trim().split(/\s+/);
+      return tokens.some(t => t.length > 2 && itName.includes(t));
+    });
+
+    if (matchedItem) {
+      return {
+        answer: `📦 **Stock Item Details — ${matchedItem.name}:**\n\n` +
+                `• **Available Quantity:** **${matchedItem.closing_qty} ${matchedItem.uom_symbol}**\n` +
+                `• **Valuation Rate:** **${formatCurrency(matchedItem.valuation_rate)}** per ${matchedItem.uom_symbol}\n` +
+                `• **Current Inventory Value:** **${formatCurrency(matchedItem.closing_val)}**\n` +
+                `• **HSN / SAC:** \`${matchedItem.hsn_code || 'N/A'}\` | **GST Rate:** ${matchedItem.gst_rate || 18}%\n\n` +
+                (matchedItem.closing_qty <= 0 ? '⚠️ **Low Stock Alert:** Quantity is zero or negative. Create a Purchase voucher to re-order.' : '✅ Stock is available for billing and dispatch.'),
+        action: 'view-stock',
+        data: matchedItem
+      };
+    }
+  }
+
+  // 6. Cash Balance Query
   if (query.includes('cash') && (query.includes('balance') || query.includes('how much') || query.includes('have'))) {
     const cashLedger = await get("SELECT id, name, opening_balance, opening_balance_type FROM ledgers WHERE name LIKE '%Cash%' LIMIT 1");
     if (!cashLedger) return { answer: "No Cash Account found in your Chart of Accounts.", cards: [] };
@@ -226,13 +350,13 @@ async function queryFinancialAgent(queryText) {
     const balance = signedOpening(cashLedger) + (flow.dr - flow.cr);
 
     return {
-      answer: `Your current **Cash-in-Hand** balance is **${formatCurrency(balance)}**. ${balance < 0 ? '⚠️ **Warning:** Negative cash balance detected. Please record capital introduction or cash receipts.' : 'Cash balance is healthy.'}`,
+      answer: `Your current **Cash-in-Hand** balance is **${formatCurrency(balance)}**. ${balance < 0 ? '⚠️ **Warning:** Negative cash balance detected. Please record capital introduction or cash receipts.' : 'Cash liquidity is in healthy state.'}`,
       action: 'view-cash',
       data: { balance, account: cashLedger.name }
     };
   }
 
-  // 2. Bank Balance Query
+  // 7. Bank Balance Query
   if (query.includes('bank') && (query.includes('balance') || query.includes('how much') || query.includes('have'))) {
     const bankLedgers = await all("SELECT id, name, opening_balance, opening_balance_type FROM ledgers WHERE name LIKE '%Bank%' OR name LIKE '%HDFC%' OR name LIKE '%SBI%'");
     if (!bankLedgers || bankLedgers.length === 0) return { answer: "No active Bank Accounts found in the Chart of Accounts.", cards: [] };
@@ -248,12 +372,13 @@ async function queryFinancialAgent(queryText) {
 
     const detailText = bankDetails.map(b => `• **${b.name}**: ${formatCurrency(b.balance)}`).join('\n');
     return {
-      answer: `Total **Bank Balance** across all accounts is **${formatCurrency(totalBank)}**:\n\n${detailText}`,
+      answer: `Total **Bank Balance** across all active accounts is **${formatCurrency(totalBank)}**:\n\n${detailText}`,
+      action: 'view-bank',
       data: { totalBank, accounts: bankDetails }
     };
   }
 
-  // 3. Sales / Revenue Query
+  // 8. Sales / Revenue Query
   if (query.includes('sale') || query.includes('revenue') || query.includes('turnover')) {
     const salesData = await get(`
       SELECT COUNT(*) as count, COALESCE(SUM(total_amount), 0) as total
@@ -266,7 +391,7 @@ async function queryFinancialAgent(queryText) {
     };
   }
 
-  // 4. Debtors / Who owes money
+  // 9. Debtors / Who owes money
   if (query.includes('debtor') || query.includes('owes us') || query.includes('receivable') || query.includes('customers')) {
     const debtors = await all(`
       SELECT l.id, l.name, l.opening_balance, l.opening_balance_type,
@@ -293,11 +418,12 @@ async function queryFinancialAgent(queryText) {
     const listText = outstanding.slice(0, 5).map(d => `• **${d.name}**: ${formatCurrency(d.balance)}`).join('\n');
     return {
       answer: `Total outstanding receivables are **${formatCurrency(totalReceivable)}** from **${outstanding.length}** customers:\n\n${listText}`,
+      action: 'view-debtors',
       data: outstanding
     };
   }
 
-  // 5. Creditors / Payables
+  // 10. Creditors / Payables
   if (query.includes('creditor') || query.includes('we owe') || query.includes('payable') || query.includes('suppliers') || query.includes('vendors')) {
     const creditors = await all(`
       SELECT l.id, l.name, l.opening_balance, l.opening_balance_type,
@@ -319,23 +445,157 @@ async function queryFinancialAgent(queryText) {
     const listText = outstanding.slice(0, 5).map(c => `• **${c.name}**: ${formatCurrency(c.balance)}`).join('\n');
     return {
       answer: `Total outstanding payables to suppliers are **${formatCurrency(totalPayable)}**:\n\n${listText || 'None currently overdue.'}`,
+      action: 'view-creditors',
       data: outstanding
     };
   }
 
-  // 6. GST Calculation / Tax Liability
-  if (query.includes('gst') || query.includes('tax') || query.includes('cgst') || query.includes('sgst')) {
+  // 11. Working Capital & Balance Sheet & Solvency
+  if (/working capital|current ratio|quick ratio|balance sheet|net worth|solvency|financial position/i.test(query)) {
+    const ratios = await calculateRatioAnalysis();
+    return {
+      answer: `⚖️ **Working Capital & Solvency Position:**\n\n` +
+              `• **Net Working Capital:** **${formatCurrency(ratios.working_capital)}**\n` +
+              `• **Current Assets:** ${formatCurrency(ratios.current_assets)}\n` +
+              `• **Current Liabilities:** ${formatCurrency(ratios.current_liabilities)}\n` +
+              `• **Current Ratio:** **${ratios.ratios.current_ratio.value}** (Benchmark: 2.00 — ${ratios.ratios.current_ratio.status})\n` +
+              `• **Quick Ratio:** **${ratios.ratios.quick_ratio.value}** (Benchmark: 1.00 — ${ratios.ratios.quick_ratio.status})\n` +
+              `• **Debt-to-Equity:** **${ratios.ratios.debt_equity.value}** (${ratios.ratios.debt_equity.status})\n\n` +
+              `${ratios.working_capital >= 0 ? '✅ Working capital is adequate to support daily operational obligations.' : '⚠️ Negative working capital detected. Short-term debt restructuring recommended.'}`,
+      action: 'view-balance-sheet',
+      data: ratios
+    };
+  }
+
+  // 12. Specific Ledger Account Balance (e.g. "balance of Sharma & Sons", "Office Rent balance", "HDFC Bank")
+  if (/balance of|account of|how much in|ledger balance/i.test(query) || (query.includes('balance') && query.split(' ').length > 1)) {
+    const allLedgers = await calculateAllLedgerBalances();
+    const cleanQuery = query.replace(/(balance of|account of|how much in|ledger balance|what is the balance of|balance|\?)/g, '').trim();
+
+    const matchedLedger = allLedgers.find(l => {
+      const lName = l.name.toLowerCase();
+      return cleanQuery.length >= 3 && (lName.includes(cleanQuery) || cleanQuery.includes(lName));
+    });
+
+    if (matchedLedger) {
+      const recentEntries = await all(`
+        SELECT v.voucher_no, v.voucher_type, v.date, le.debit_amount, le.credit_amount
+        FROM ledger_entries le
+        JOIN vouchers v ON le.voucher_id = v.id
+        WHERE le.ledger_id = ?
+        ORDER BY v.date DESC, v.id DESC
+        LIMIT 3
+      `, [matchedLedger.id]);
+
+      const entryText = recentEntries.length > 0
+        ? recentEntries.map(e => `• ${e.date} [${e.voucher_no} - ${e.voucher_type}]: ${e.debit_amount > 0 ? 'Dr ' + formatCurrency(e.debit_amount) : 'Cr ' + formatCurrency(e.credit_amount)}`).join('\n')
+        : '• No recent transaction history.';
+
+      return {
+        answer: `🏛️ **Ledger Statement — ${matchedLedger.name}:**\n\n` +
+                `• **Closing Balance:** **${formatCurrency(matchedLedger.closing_balance)} ${matchedLedger.closing_type}**\n` +
+                `• **Group:** ${matchedLedger.group_name} (${matchedLedger.group_nature})\n` +
+                `• **Opening Balance:** ${formatCurrency(matchedLedger.opening_balance)} ${matchedLedger.opening_balance_type}\n` +
+                `• **Total Debits:** ${formatCurrency(matchedLedger.net_debit)} | **Total Credits:** ${formatCurrency(matchedLedger.net_credit)}\n\n` +
+                `Recent Voucher Postings:\n${entryText}`,
+        action: 'view-ledger',
+        data: { ledger: matchedLedger, recent: recentEntries }
+      };
+    }
+  }
+
+  // 13. Recent Transactions / Audit Trail
+  if (/recent|latest transactions|last vouchers|history|audit trail|daybook entries/i.test(query)) {
+    const recentVouchers = await all(`
+      SELECT v.id, v.voucher_no, v.voucher_type, v.date, v.total_amount, v.narration
+      FROM vouchers v
+      ORDER BY v.date DESC, v.id DESC
+      LIMIT 5
+    `);
+
+    if (recentVouchers.length === 0) {
+      return { answer: "No vouchers currently recorded in this financial company.", data: [] };
+    }
+
+    const listText = recentVouchers.map(v =>
+      `• **${v.date}** — **${v.voucher_no}** (${v.voucher_type}): **${formatCurrency(v.total_amount)}**\n  _${v.narration || 'No narration'}_`
+    ).join('\n\n');
+
+    return {
+      answer: `📒 **Recent Financial Transactions (Latest ${recentVouchers.length}):**\n\n${listText}`,
+      action: 'view-daybook',
+      data: recentVouchers
+    };
+  }
+
+  // 14. Company Profile & Details
+  if (/company|gstin|pan|jurisdiction|financial year|profile|about company/i.test(query)) {
+    const comp = await get("SELECT * FROM companies LIMIT 1");
+    if (comp) {
+      return {
+        answer: `🏢 **Company Profile & Master Information:**\n\n` +
+                `• **Company Name:** **${comp.name}**\n` +
+                `• **GSTIN:** \`${comp.gstin || 'Not Configured'}\`\n` +
+                `• **PAN:** \`${comp.pan || 'Not Configured'}\`\n` +
+                `• **State / Territory:** ${comp.state || 'Tamil Nadu'}\n` +
+                `• **Financial Year:** ${comp.financial_year_from} to ${comp.financial_year_to}\n` +
+                `• **System Security:** Offline Local SQLite Database (\`data/100000/company.db\`)`,
+        action: 'view-company',
+        data: comp
+      };
+    }
+  }
+
+  // 15. GST Calculation / Tax Liability
+  if (query.includes('gst') || query.includes('tax') || query.includes('cgst') || query.includes('sgst') || query.includes('igst')) {
     const cgst = await get("SELECT COALESCE(SUM(credit_amount - debit_amount), 0) as net FROM ledger_entries le JOIN ledgers l ON le.ledger_id = l.id WHERE l.name LIKE '%CGST%'");
     const sgst = await get("SELECT COALESCE(SUM(credit_amount - debit_amount), 0) as net FROM ledger_entries le JOIN ledgers l ON le.ledger_id = l.id WHERE l.name LIKE '%SGST%'");
     const totalGst = (cgst.net || 0) + (sgst.net || 0);
 
     return {
       answer: `Current net **GST Statutory Liability** is **${formatCurrency(totalGst)}** (CGST: ${formatCurrency(cgst.net || 0)} | SGST: ${formatCurrency(sgst.net || 0)}). All vouchers reflect verified GSTR-1 and GSTR-3B double-entry calculation.`,
+      action: 'view-gst',
       data: { totalGst, cgst: cgst.net, sgst: sgst.net }
     };
   }
 
-  // 7. General Financial Health Audit
+  // 16. Universal Semantic Search Fallback: Search across Ledgers and Stock Items
+  const cleanTerm = query.replace(/(show|check|find|what is|how much|details of|\?)/g, '').trim();
+  if (cleanTerm.length >= 3) {
+    const matchedLedger = await get("SELECT id, name, opening_balance FROM ledgers WHERE name LIKE ? LIMIT 1", [`%${cleanTerm}%`]);
+    if (matchedLedger) {
+      const allL = await calculateAllLedgerBalances();
+      const l = allL.find(x => x.id === matchedLedger.id);
+      if (l) {
+        return {
+          answer: `🏛️ **Ledger Match Found — ${l.name}:**\n\n` +
+                  `• **Current Closing Balance:** **${formatCurrency(l.closing_balance)} ${l.closing_type}**\n` +
+                  `• **Group:** ${l.group_name} (${l.group_nature})\n` +
+                  `• **Total Debits:** ${formatCurrency(l.net_debit)} | **Total Credits:** ${formatCurrency(l.net_credit)}`,
+          action: 'view-ledger',
+          data: l
+        };
+      }
+    }
+
+    const matchedItem = await get("SELECT id, name FROM stock_items WHERE name LIKE ? LIMIT 1", [`%${cleanTerm}%`]);
+    if (matchedItem) {
+      const { items } = await calculateClosingStockValuation();
+      const it = items.find(x => x.id === matchedItem.id);
+      if (it) {
+        return {
+          answer: `📦 **Stock Item Match Found — ${it.name}:**\n\n` +
+                  `• **Closing Stock:** **${it.closing_qty} ${it.uom_symbol}**\n` +
+                  `• **Valuation Rate:** ${formatCurrency(it.valuation_rate)} per ${it.uom_symbol}\n` +
+                  `• **Total Value:** **${formatCurrency(it.closing_val)}**`,
+          action: 'view-stock',
+          data: it
+        };
+      }
+    }
+  }
+
+  // 17. General Financial Health Audit Fallback
   const anomalies = await scanFinancialAnomalies();
   return {
     answer: `**RRE AI System Health Report:** Overall financial compliance score is **${anomalies.health_score}% (${anomalies.status})**.\n\n` +
@@ -343,6 +603,7 @@ async function queryFinancialAgent(queryText) {
             `• Bank Liquidity: ${formatCurrency(anomalies.metrics.bank_balance)}\n` +
             `• Active Vouchers: ${anomalies.metrics.voucher_count}\n` +
             `• System Double-Entry Proof: ${anomalies.metrics.is_balanced ? '✅ 100% Mathematically Balanced' : '⚠️ Discrepancy Found'}`,
+    action: 'view-health',
     data: anomalies
   };
 }

@@ -384,7 +384,91 @@ async function initDb() {
     )
   `);
 
+  // 16. Sales Quotations / Estimates (Zoho Books-style)
+  await run(`
+    CREATE TABLE IF NOT EXISTS quotations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      quote_no TEXT NOT NULL UNIQUE,
+      revision INTEGER DEFAULT 0,
+      parent_quote_id INTEGER,
+      date TEXT NOT NULL,
+      expiry_date TEXT,
+      party_ledger_id INTEGER,
+      customer_name TEXT,
+      customer_email TEXT,
+      customer_phone TEXT,
+      customer_gstin TEXT,
+      billing_address TEXT,
+      place_of_supply TEXT,
+      place_of_supply_code TEXT,
+      reference_no TEXT,
+      salesperson TEXT,
+      subject TEXT,
+      status TEXT NOT NULL DEFAULT 'Draft', -- Draft, Sent, Accepted, Declined, Expired, Invoiced
+      discount_pct REAL DEFAULT 0,
+      shipping_charges REAL DEFAULT 0,
+      subtotal REAL DEFAULT 0,
+      discount_amount REAL DEFAULT 0,
+      taxable_amount REAL DEFAULT 0,
+      cgst REAL DEFAULT 0,
+      sgst REAL DEFAULT 0,
+      igst REAL DEFAULT 0,
+      round_off REAL DEFAULT 0,
+      total REAL DEFAULT 0,
+      customer_notes TEXT,
+      terms TEXT,
+      next_followup_date TEXT,
+      converted_voucher_id INTEGER,
+      created_by TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(party_ledger_id) REFERENCES ledgers(id),
+      FOREIGN KEY(converted_voucher_id) REFERENCES vouchers(id) ON DELETE SET NULL
+    )
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS quotation_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      quotation_id INTEGER NOT NULL,
+      stock_item_id INTEGER,
+      item_name TEXT NOT NULL,
+      description TEXT,
+      hsn_code TEXT,
+      uom TEXT,
+      quantity REAL NOT NULL DEFAULT 1,
+      rate REAL NOT NULL DEFAULT 0,
+      discount_pct REAL DEFAULT 0,
+      gst_rate REAL DEFAULT 18,
+      amount REAL NOT NULL DEFAULT 0,
+      sort_order INTEGER DEFAULT 0,
+      FOREIGN KEY(quotation_id) REFERENCES quotations(id) ON DELETE CASCADE,
+      FOREIGN KEY(stock_item_id) REFERENCES stock_items(id)
+    )
+  `);
+
+  // 17. Quote Follow-up Activity Log
+  await run(`
+    CREATE TABLE IF NOT EXISTS quotation_followups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      quotation_id INTEGER NOT NULL,
+      followup_date TEXT NOT NULL,
+      mode TEXT DEFAULT 'Call', -- Call, Email, WhatsApp, Visit, Meeting
+      notes TEXT,
+      outcome TEXT, -- Interested, Negotiating, No Response, Revised, Won, Lost
+      next_followup_date TEXT,
+      done_by TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(quotation_id) REFERENCES quotations(id) ON DELETE CASCADE
+    )
+  `);
+
   // Performance Indexes for High-Throughput Queries & Scalability
+  await run('CREATE INDEX IF NOT EXISTS idx_quotations_date ON quotations(date)');
+  await run('CREATE INDEX IF NOT EXISTS idx_quotations_status ON quotations(status)');
+  await run('CREATE INDEX IF NOT EXISTS idx_quotations_followup ON quotations(next_followup_date)');
+  await run('CREATE INDEX IF NOT EXISTS idx_quotation_items_q ON quotation_items(quotation_id)');
+  await run('CREATE INDEX IF NOT EXISTS idx_quotation_followups_q ON quotation_followups(quotation_id)');
   await run('CREATE INDEX IF NOT EXISTS idx_vouchers_date ON vouchers(date)');
   await run('CREATE INDEX IF NOT EXISTS idx_vouchers_type ON vouchers(voucher_type)');
   await run('CREATE INDEX IF NOT EXISTS idx_vouchers_no ON vouchers(voucher_no)');
@@ -1049,6 +1133,9 @@ async function resetCleanCompany() {
 
   console.log('[Tally Core DB] Resetting Company to Clean Production Slate...');
   await run('PRAGMA foreign_keys = OFF');
+  await run('DELETE FROM quotation_followups').catch(() => {});
+  await run('DELETE FROM quotation_items').catch(() => {});
+  await run('DELETE FROM quotations').catch(() => {});
   await run('DELETE FROM bank_reconciliation');
   await run('DELETE FROM bill_allocations');
   await run('DELETE FROM inventory_entries');
@@ -1126,6 +1213,9 @@ async function loadDemoCompany() {
 
   console.log('[Tally Core DB] Reloading Demo Sample Data...');
   await run('PRAGMA foreign_keys = OFF');
+  await run('DELETE FROM quotation_followups').catch(() => {});
+  await run('DELETE FROM quotation_items').catch(() => {});
+  await run('DELETE FROM quotations').catch(() => {});
   await run('DELETE FROM bank_reconciliation');
   await run('DELETE FROM bill_allocations');
   await run('DELETE FROM inventory_entries');

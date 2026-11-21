@@ -39,6 +39,12 @@ const RULES = [
   { m: 'DELETE', re: /^\/api\/vouchers\/\d+/, perm: 'canDeleteVouchers' },
   { m: 'POST', re: /^\/api\/vouchers\/?$/, perm: 'canCreateVouchers', checkVoucherType: true },
   { m: 'POST', re: /^\/api\/masters\//, perm: 'canCreateVouchers' },
+  // Quotations can be converted into Sales invoices (a posting), so changing them needs the same permission as posting
+  { re: /^\/api\/quotations(\/|$)/, m: 'POST', perm: 'canCreateVouchers' },
+  { re: /^\/api\/quotations(\/|$)/, m: 'PUT', perm: 'canCreateVouchers' },
+  { re: /^\/api\/quotations(\/|$)/, m: 'DELETE', perm: 'canCreateVouchers' },
+  // The report centre holds sales analytics and receivable ageing
+  { re: /^\/api\/report-center(\/|$)/, perm: 'canViewFinancials' },
   { m: 'POST', re: /^\/api\/reports\/bank-reconciliation\/clear/, perm: 'canCreateVouchers' }
   // anything else under /api: authenticated user is enough (reads, AI drafts, dashboard)
 ];

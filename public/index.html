@@ -347,8 +347,38 @@
           <p class="text-xs text-slate-500">Real-time financial telemetry with instant drill-down reporting</p>
         </div>
         <div class="flex items-center space-x-2">
+          <button onclick="toggleAiCopilot()" class="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded text-xs font-bold transition flex items-center space-x-1 shadow-sm">
+            <i data-lucide="bot" class="w-3.5 h-3.5 text-amber-300"></i>
+            <span>AI Copilot (Alt+A)</span>
+          </button>
           <button onclick="showGateway()" class="px-3 py-1.5 bg-[#1f3a52] hover:bg-[#162a3b] text-white rounded text-xs font-bold transition">
             Gateway of Tally (Esc)
+          </button>
+        </div>
+      </div>
+
+      <!-- AI Assistance & Anomaly Insights Banner -->
+      <div class="bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 border border-indigo-500/40 rounded-lg p-3.5 text-white shadow-md flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div class="flex items-center space-x-3">
+          <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center shadow-md shrink-0">
+            <i data-lucide="sparkles" class="w-4 h-4 text-white"></i>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="font-bold text-xs text-white">RRE AI Financial Intelligence &amp; Anomaly Audit</span>
+              <span id="dash-ai-score-badge" class="px-2 py-0.2 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">100% Health</span>
+            </div>
+            <p id="dash-ai-summary" class="text-[11px] text-slate-300">Continuous double-entry verification active. Zero mathematical discrepancies detected.</p>
+          </div>
+        </div>
+        <div class="flex items-center space-x-2 shrink-0">
+          <button onclick="toggleAiCopilot()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-bold transition flex items-center space-x-1 shadow-sm">
+            <i data-lucide="bot" class="w-3.5 h-3.5 text-amber-300"></i>
+            <span>Ask AI Copilot</span>
+          </button>
+          <button onclick="toggleAiWorkspaceView()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-indigo-500/40 rounded text-xs font-bold transition flex items-center space-x-1">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-emerald-300"></i>
+            <span>AI Workspace</span>
           </button>
         </div>
       </div>
@@ -526,41 +556,57 @@
           <div class="absolute -right-8 -top-8 w-32 h-32 bg-indigo-600/10 rounded-full blur-2xl pointer-events-none"></div>
           <div class="flex items-center justify-between mb-2">
             <label class="text-xs font-bold uppercase tracking-wider text-indigo-300 flex items-center space-x-1.5">
-              <i data-lucide="wand-2" class="w-3.5 h-3.5 text-amber-400"></i>
-              <span>Natural Language Voucher Drafter (Plain English to Double-Entry)</span>
+              <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-400"></i>
+              <span>Universal Financial Q&amp;A Agent &amp; Double-Entry Drafter</span>
             </label>
-            <button onclick="openAiDocParserModal()" class="text-[11px] text-purple-400 hover:text-purple-300 font-bold hover:underline flex items-center space-x-1">
-              <i data-lucide="file-text" class="w-3 h-3"></i>
-              <span>Parse Bill / Invoice Text</span>
-            </button>
+            <div class="flex items-center space-x-2">
+              <button type="button" id="btn-toggle-ai-voice-ws" onclick="toggleAiVoice()" class="px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 shadow-sm bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700" title="Toggle Spoken Voice Output">
+                <i data-lucide="volume-x" class="w-3.5 h-3.5 text-slate-400"></i>
+                <span>Voice: OFF</span>
+              </button>
+              <button type="button" onclick="openAiDocParserModal()" class="text-[11px] text-purple-400 hover:text-purple-300 font-bold hover:underline flex items-center space-x-1">
+                <i data-lucide="file-text" class="w-3 h-3"></i>
+                <span>Parse Invoice</span>
+              </button>
+            </div>
           </div>
 
           <form id="form-ai-workspace-prompt" onsubmit="handleAiWorkspaceSubmit(event)" class="space-y-2.5">
             <div class="relative">
               <input type="text" id="ai-ws-prompt-input"
-                     placeholder="e.g. Sold 5 Compressors to Apex Tech at 45000 each with 18% GST on credit..."
-                     class="w-full bg-slate-900 border border-indigo-500/40 rounded-xl px-4 py-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-sans shadow-inner pr-28">
+                     placeholder="Ask ANY business question (e.g. 'What is our net profit?', 'Total purchases?', 'Stock of Compressors?') or draft a voucher (e.g. 'Paid Rent 15000'). Press Enter..."
+                     class="w-full bg-slate-900 border border-indigo-500/40 rounded-xl px-4 py-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-sans shadow-inner pr-32">
               <button type="submit" id="btn-ai-ws-submit"
                       class="absolute right-1.5 top-1.5 bottom-1.5 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-lg text-xs font-black shadow-md flex items-center space-x-1.5 transition">
                 <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-300"></i>
-                <span>Draft</span>
+                <span>Run (Enter)</span>
               </button>
             </div>
 
             <!-- Suggestion Chips -->
             <div class="flex flex-wrap items-center gap-1.5 text-[11px]">
-              <span class="text-slate-500 font-bold">Try asking:</span>
-              <button type="button" onclick="fillAndSubmitAiPrompt('Sold 5 Screw Compressors to Apex Tech at 45000 with 18% GST on credit')" class="px-2 py-0.5 rounded-full bg-slate-800 hover:bg-indigo-950 border border-slate-700 hover:border-indigo-500 text-slate-300 hover:text-indigo-200 transition">
-                ✨ Sold 5 Compressors @ ₹45k + 18% GST
+              <span class="text-slate-500 font-bold">Ask Database:</span>
+              <button type="button" onclick="fillAndSubmitAiPrompt('What is our net profit and margins?')" class="px-2.5 py-0.5 rounded-full bg-slate-800 hover:bg-indigo-950 border border-indigo-500/40 text-indigo-300 hover:text-indigo-200 transition">
+                📊 Net Profit &amp; Margins
               </button>
-              <button type="button" onclick="fillAndSubmitAiPrompt('Paid Office Rent 15000 via Bank')" class="px-2 py-0.5 rounded-full bg-slate-800 hover:bg-indigo-950 border border-slate-700 hover:border-indigo-500 text-slate-300 hover:text-indigo-200 transition">
-                ✨ Paid Office Rent ₹15,000 via Bank
+              <button type="button" onclick="fillAndSubmitAiPrompt('Show total purchases and vendor bills')" class="px-2.5 py-0.5 rounded-full bg-slate-800 hover:bg-indigo-950 border border-indigo-500/40 text-indigo-300 hover:text-indigo-200 transition">
+                🛒 Total Purchases
               </button>
-              <button type="button" onclick="fillAndSubmitAiPrompt('Received 50000 from Apex Tech in Cash')" class="px-2 py-0.5 rounded-full bg-slate-800 hover:bg-indigo-950 border border-slate-700 hover:border-indigo-500 text-slate-300 hover:text-indigo-200 transition">
-                ✨ Received ₹50,000 from Customer
+              <button type="button" onclick="fillAndSubmitAiPrompt('What is our total stock valuation?')" class="px-2.5 py-0.5 rounded-full bg-slate-800 hover:bg-indigo-950 border border-indigo-500/40 text-indigo-300 hover:text-indigo-200 transition">
+                📦 Stock Valuation
               </button>
-              <button type="button" onclick="fillAndSubmitAiPrompt('Deposited 25000 Cash to Bank')" class="px-2 py-0.5 rounded-full bg-slate-800 hover:bg-indigo-950 border border-slate-700 hover:border-indigo-500 text-slate-300 hover:text-indigo-200 transition">
-                ✨ Deposited ₹25,000 Cash to Bank
+              <button type="button" onclick="fillAndSubmitAiPrompt('What is our working capital and financial position?')" class="px-2.5 py-0.5 rounded-full bg-slate-800 hover:bg-indigo-950 border border-indigo-500/40 text-indigo-300 hover:text-indigo-200 transition">
+                ⚖️ Working Capital
+              </button>
+              <button type="button" onclick="fillAndSubmitAiPrompt('How much cash and bank balance do we have?')" class="px-2.5 py-0.5 rounded-full bg-slate-800 hover:bg-indigo-950 border border-indigo-500/40 text-indigo-300 hover:text-indigo-200 transition">
+                💰 Cash &amp; Bank
+              </button>
+              <span class="text-slate-600 font-bold ml-1">Draft:</span>
+              <button type="button" onclick="fillAndSubmitAiPrompt('Sold 5 Screw Compressors to Apex Tech at 45000 with 18% GST on credit')" class="px-2 py-0.5 rounded-full bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-300 transition">
+                ✨ Sold 5 Compressors @ 45k
+              </button>
+              <button type="button" onclick="fillAndSubmitAiPrompt('Paid Office Rent 15000 via Bank')" class="px-2 py-0.5 rounded-full bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-300 transition">
+                ✨ Paid Rent ₹15k
               </button>
             </div>
           </form>
@@ -738,10 +784,77 @@
               <span>Go To (Alt+G)</span>
             </button>
           </div>
+
+          <!-- Gateway Left: AI Assistance & Copilot Portion -->
+          <div class="mt-3 p-3 bg-gradient-to-br from-indigo-950 via-slate-900 to-purple-950 rounded-lg border border-indigo-500/40 text-white shadow-md space-y-2">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-1.5">
+                <div class="w-6 h-6 rounded-md bg-gradient-to-tr from-purple-500 to-indigo-500 flex items-center justify-center shadow-sm">
+                  <i data-lucide="sparkles" class="w-3.5 h-3.5 text-white"></i>
+                </div>
+                <div>
+                  <span class="text-xs font-black tracking-tight text-white block">AI Copilot &amp; Assistance</span>
+                  <span class="text-[9px] text-indigo-300 font-mono">100% Offline NLP Engine</span>
+                </div>
+              </div>
+              <span class="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center space-x-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>Active</span>
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-300 leading-snug">Draft balanced vouchers from plain English, query balances, or run automated compliance audits.</p>
+            <div class="grid grid-cols-2 gap-1.5 pt-0.5">
+              <button onclick="toggleAiCopilot()" class="py-1.5 px-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold text-[11px] flex items-center justify-center space-x-1 transition shadow-sm" title="AI Assistant Chat Drawer (Alt+A)">
+                <i data-lucide="bot" class="w-3 h-3 text-amber-300"></i>
+                <span>Copilot (Alt+A)</span>
+              </button>
+              <button onclick="toggleAiWorkspaceView()" class="py-1.5 px-2 bg-purple-900/90 hover:bg-purple-800 text-purple-200 border border-purple-500/40 rounded font-bold text-[11px] flex items-center justify-center space-x-1 transition shadow-sm" title="AI Executive Workspace (W)">
+                <i data-lucide="layout-grid" class="w-3 h-3 text-emerald-300"></i>
+                <span>Workspace (W)</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- Right Panel: Gateway Menu List (Masters, Transactions, Utilities, Reports, Quit) -->
         <div class="p-5 space-y-3.5">
+          <!-- AI ASSISTANCE MENU PORTION -->
+          <div>
+            <div class="text-[10px] font-black text-indigo-700 uppercase tracking-widest px-3 mb-1 flex items-center justify-between">
+              <span>AI Assistance &amp; Copilot</span>
+              <span class="text-[9px] bg-gradient-to-r from-purple-100 to-indigo-100 text-indigo-900 px-1.5 py-0.2 rounded font-extrabold border border-indigo-200">Smart NLP</span>
+            </div>
+            <div class="space-y-0.5">
+              <div onclick="toggleAiWorkspaceView()" class="gateway-item font-bold text-indigo-950 bg-gradient-to-r from-indigo-50/80 to-purple-50/80 border border-indigo-200/60 hover:bg-indigo-600 hover:text-white">
+                <span class="flex items-center space-x-1.5">
+                  <i data-lucide="sparkles" class="w-3.5 h-3.5 text-purple-600 group-hover:text-amber-300"></i>
+                  <span>AI <span class="hotkey">W</span>orkspace</span>
+                </span>
+                <span class="text-[10px] font-mono text-indigo-600 font-bold">Executive Hub</span>
+              </div>
+              <div onclick="toggleAiCopilot()" class="gateway-item">
+                <span class="flex items-center space-x-1.5">
+                  <i data-lucide="bot" class="w-3.5 h-3.5 text-indigo-600"></i>
+                  <span>AI C<span class="hotkey">o</span>pilot Drafter</span>
+                </span>
+                <span class="text-[10px] text-slate-400 font-mono">Alt+A</span>
+              </div>
+              <div onclick="openOmniSearchModal()" class="gateway-item">
+                <span class="flex items-center space-x-1.5">
+                  <i data-lucide="search" class="w-3.5 h-3.5 text-indigo-600"></i>
+                  <span>As<span class="hotkey">k</span> AI / Omni-Search</span>
+                </span>
+                <span class="text-[10px] text-slate-400 font-mono">Ctrl+K</span>
+              </div>
+              <div onclick="openAiDocParserModal()" class="gateway-item">
+                <span class="flex items-center space-x-1.5">
+                  <i data-lucide="file-text" class="w-3.5 h-3.5 text-purple-600"></i>
+                  <span>AI <span class="hotkey">I</span>nvoice / Bill Parser</span>
+                </span>
+                <span class="text-[10px] text-slate-400 font-mono">OCR Text</span>
+              </div>
+            </div>
+          </div>
           <!-- MASTERS -->
           <div>
             <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Masters</div>
@@ -772,6 +885,25 @@
               <div onclick="openReport('daybook')" class="gateway-item">
                 <span>Day Boo<span class="hotkey">k</span></span>
                 <span class="text-[10px] text-slate-400 font-mono">Entries</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- SALES PIPELINE: QUOTATIONS, FOLLOW-UPS & REPORTS -->
+          <div>
+            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Sales Pipeline</div>
+            <div class="space-y-0.5">
+              <div onclick="openQuotations()" class="gateway-item">
+                <span>Quotations / <span class="hotkey">E</span>stimates</span>
+                <span class="text-[10px] text-slate-400 font-mono">Alt+N: New</span>
+              </div>
+              <div onclick="openQuotations(); setQuoteFollowupFilter('due')" class="gateway-item">
+                <span>Follow-<span class="hotkey">U</span>ps Due</span>
+                <span id="gw-followup-badge" class="text-[10px] text-slate-400 font-mono">Follow-ups</span>
+              </div>
+              <div onclick="openReportCenter()" class="gateway-item">
+                <span>Report <span class="hotkey">G</span>enerator</span>
+                <span class="text-[10px] text-slate-400 font-mono">PDF / CSV</span>
               </div>
             </div>
           </div>
@@ -953,11 +1085,39 @@
               As Voucher (Dr/Cr)
             </button>
           </div>
+          <button type="button" onclick="toggleVoucherAiAssistBar()" class="px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded text-[11px] font-bold flex items-center space-x-1 shadow-sm transition" title="Auto-fill with AI Assistant">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-300"></i>
+            <span>AI Assist</span>
+          </button>
           <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs text-white">Esc: Quit</button>
         </div>
       </div>
 
-      <form id="form-voucher" onsubmit="handleSaveVoucher(event)" class="p-6 space-y-5 text-xs">
+      <form id="form-voucher" onsubmit="handleSaveVoucher(event)" class="p-6 space-y-4 text-xs">
+        <!-- AI Voucher Assistant Quick Bar -->
+        <div id="voucher-ai-assist-bar" class="p-3 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-500/40 rounded-lg text-white shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div class="flex items-center space-x-2 shrink-0">
+            <div class="w-6 h-6 rounded bg-gradient-to-tr from-purple-500 to-indigo-500 flex items-center justify-center shadow">
+              <i data-lucide="sparkles" class="w-3.5 h-3.5 text-white"></i>
+            </div>
+            <div>
+              <span class="font-black text-xs text-white">AI Voucher Auto-Fill</span>
+              <span class="hidden md:inline text-[10px] text-indigo-300 ml-1.5 font-normal">Type natural English to auto-draft</span>
+            </div>
+          </div>
+          <div class="flex-1 flex items-center space-x-1.5">
+            <input type="text" id="voucher-ai-prompt-input"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();handleVoucherAiAutoFill();}"
+                   placeholder="e.g. Paid Office Rent 15000 via Bank, or Sold 5 Compressors to Apex Tech at 45000 with 18% GST..."
+                   class="flex-1 bg-slate-900 border border-indigo-500/50 rounded px-3 py-1.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 font-sans shadow-inner">
+            <button type="button" onclick="handleVoucherAiAutoFill()" id="btn-v-ai-autofill"
+                    class="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded font-bold text-xs transition flex items-center space-x-1 shadow-md shrink-0">
+              <i data-lucide="wand-2" class="w-3 h-3 text-amber-300"></i>
+              <span>Auto-Fill</span>
+            </button>
+          </div>
+        </div>
+
         <!-- Header Metadata: Type, Number, Date, Reference -->
         <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
           <div>
@@ -1364,7 +1524,7 @@
               <option value="Journal">Journal (F7)</option>
             </select>
           </div>
-          <div class="text-slate-500 font-medium">Click any voucher row to inspect double-entry details</div>
+          <div class="text-slate-500 font-medium">Click any voucher row to open its printable invoice / PDF</div>
         </div>
 
         <div class="border border-slate-300 rounded-lg overflow-hidden text-xs">
@@ -1601,6 +1761,295 @@
       </div>
     </section>
 
+    <!-- ============================================== -->
+    <!-- VIEW: QUOTATIONS & FOLLOW-UPS (E)              -->
+    <!-- ============================================== -->
+    <section id="view-quotations" class="w-full max-w-6xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden hidden fade-in">
+      <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
+        <div>
+          <h2 class="text-sm font-bold uppercase tracking-wider">Quotations &amp; Follow-ups</h2>
+          <p class="text-[10px] text-slate-300">Estimates, follow-up schedule and conversion to Sales Invoice</p>
+        </div>
+        <div class="flex items-center space-x-2">
+          <button onclick="openReportCenter('quotation-register')" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Reports (G)</button>
+          <button onclick="openQuotationEditor()" class="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded text-xs font-bold flex items-center space-x-1">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i><span>New Quote (Alt+N)</span>
+          </button>
+          <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
+        </div>
+      </div>
+
+      <div class="p-5 space-y-4">
+        <!-- Pipeline KPI tiles -->
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-3 text-xs">
+          <div class="p-3 rounded-lg border border-slate-200 bg-slate-50">
+            <div class="text-[10px] font-bold uppercase tracking-wider text-slate-500">Open Pipeline</div>
+            <div id="qt-kpi-open" class="text-base font-black font-mono text-slate-900">₹0.00</div>
+            <div id="qt-kpi-open-count" class="text-[10px] text-slate-500">0 quotes</div>
+          </div>
+          <div class="p-3 rounded-lg border border-emerald-200 bg-emerald-50">
+            <div class="text-[10px] font-bold uppercase tracking-wider text-emerald-700">Won Value</div>
+            <div id="qt-kpi-won" class="text-base font-black font-mono text-emerald-900">₹0.00</div>
+            <div class="text-[10px] text-emerald-700">Accepted + Invoiced</div>
+          </div>
+          <div class="p-3 rounded-lg border border-blue-200 bg-blue-50">
+            <div class="text-[10px] font-bold uppercase tracking-wider text-blue-700">Conversion</div>
+            <div id="qt-kpi-conv" class="text-base font-black font-mono text-blue-900">0%</div>
+            <div class="text-[10px] text-blue-700">Won ÷ decided</div>
+          </div>
+          <button onclick="setQuoteFollowupFilter('overdue')" class="text-left p-3 rounded-lg border border-rose-200 bg-rose-50 hover:ring-2 hover:ring-rose-300 transition">
+            <div class="text-[10px] font-bold uppercase tracking-wider text-rose-700">Follow-ups Overdue</div>
+            <div id="qt-kpi-overdue" class="text-base font-black font-mono text-rose-900">0</div>
+            <div class="text-[10px] text-rose-700">Click to view</div>
+          </button>
+          <button onclick="setQuoteFollowupFilter('due')" class="text-left p-3 rounded-lg border border-amber-200 bg-amber-50 hover:ring-2 hover:ring-amber-300 transition">
+            <div class="text-[10px] font-bold uppercase tracking-wider text-amber-700">Due Today / Next 7d</div>
+            <div class="text-base font-black font-mono text-amber-900"><span id="qt-kpi-today">0</span> / <span id="qt-kpi-upcoming">0</span></div>
+            <div class="text-[10px] text-amber-700">Click to view</div>
+          </button>
+        </div>
+
+        <!-- Filters -->
+        <div class="flex flex-wrap items-center gap-2 text-xs bg-slate-50 p-3 rounded-lg border border-slate-200">
+          <input id="qt-search" type="text" placeholder="Search quote #, customer, subject…" oninput="debouncedLoadQuotations()" class="border border-slate-300 rounded p-1.5 w-60 bg-white">
+          <select id="qt-status-filter" onchange="loadQuotations()" class="border border-slate-300 rounded p-1.5 bg-white font-semibold">
+            <option value="">All Statuses</option>
+            <option>Draft</option><option>Sent</option><option>Accepted</option><option>Declined</option>
+            <option>Expired</option><option>Revised</option><option>Invoiced</option>
+          </select>
+          <select id="qt-followup-filter" onchange="loadQuotations()" class="border border-slate-300 rounded p-1.5 bg-white font-semibold">
+            <option value="">All Follow-ups</option>
+            <option value="overdue">Overdue</option>
+            <option value="today">Due Today</option>
+            <option value="due">Overdue + Today</option>
+            <option value="upcoming">Next 7 Days</option>
+          </select>
+          <span class="text-slate-500 ml-auto">Click a quote to view, follow up, or convert</span>
+        </div>
+
+        <div class="border border-slate-300 rounded-lg overflow-hidden text-xs">
+          <table class="w-full">
+            <thead class="bg-slate-800 text-white font-semibold">
+              <tr>
+                <th class="p-2.5 text-left w-24">Date</th>
+                <th class="p-2.5 text-left w-32">Quote #</th>
+                <th class="p-2.5 text-left">Customer / Subject</th>
+                <th class="p-2.5 text-center w-24">Status</th>
+                <th class="p-2.5 text-left w-28">Valid Till</th>
+                <th class="p-2.5 text-left w-32">Next Follow-up</th>
+                <th class="p-2.5 text-right w-32">Amount (₹)</th>
+                <th class="p-2.5 text-center w-20">PDF</th>
+              </tr>
+            </thead>
+            <tbody id="qt-tbody" class="divide-y divide-slate-200 bg-white"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- VIEW: QUOTATION EDITOR                          -->
+    <!-- ============================================== -->
+    <section id="view-quotation-editor" class="w-full max-w-6xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden hidden fade-in">
+      <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
+        <div>
+          <h2 id="qe-title" class="text-sm font-bold uppercase tracking-wider">New Quotation</h2>
+          <p class="text-[10px] text-slate-300">GST is calculated per line; IGST applies automatically for inter-state place of supply</p>
+        </div>
+        <button onclick="openQuotations()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc: Back</button>
+      </div>
+
+      <form id="qe-form" onsubmit="handleSaveQuotation(event)" class="p-5 space-y-4 text-xs">
+        <input type="hidden" id="qe-id">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <!-- Customer -->
+          <div class="md:col-span-2 space-y-2 p-3 border border-slate-200 rounded-lg bg-slate-50/60">
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block font-bold text-slate-700 mb-0.5">Customer Ledger</label>
+                <select id="qe-party" onchange="handleQuotePartyChange()" class="w-full border border-slate-300 rounded p-1.5 bg-white font-semibold"></select>
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-0.5">Customer Name *</label>
+                <input id="qe-customer-name" type="text" required placeholder="Prospect or ledger name" class="w-full border border-slate-300 rounded p-1.5">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-0.5">Phone</label>
+                <input id="qe-phone" type="text" class="w-full border border-slate-300 rounded p-1.5 font-mono">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-0.5">Email</label>
+                <input id="qe-email" type="email" class="w-full border border-slate-300 rounded p-1.5">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-0.5">GSTIN</label>
+                <input id="qe-gstin" type="text" class="w-full border border-slate-300 rounded p-1.5 font-mono uppercase">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-0.5">Place of Supply</label>
+                <select id="qe-pos" onchange="recalcQuoteTotals()" class="w-full border border-slate-300 rounded p-1.5 bg-white font-semibold"></select>
+              </div>
+              <div class="col-span-2">
+                <label class="block font-bold text-slate-700 mb-0.5">Billing Address</label>
+                <textarea id="qe-address" rows="2" class="w-full border border-slate-300 rounded p-1.5"></textarea>
+              </div>
+            </div>
+          </div>
+          <!-- Quote meta -->
+          <div class="space-y-2 p-3 border border-slate-200 rounded-lg">
+            <div>
+              <label class="block font-bold text-slate-700 mb-0.5">Quote #</label>
+              <input id="qe-no" type="text" class="w-full border border-slate-300 rounded p-1.5 font-mono font-bold text-blue-800">
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block font-bold text-slate-700 mb-0.5">Quote Date</label>
+                <input id="qe-date" type="date" required onchange="handleQuoteDateChange()" class="w-full border border-slate-300 rounded p-1.5 font-mono">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-0.5">Valid Till</label>
+                <input id="qe-expiry" type="date" class="w-full border border-slate-300 rounded p-1.5 font-mono">
+              </div>
+            </div>
+            <div>
+              <label class="block font-bold text-amber-800 mb-0.5">Next Follow-up</label>
+              <input id="qe-followup" type="date" class="w-full border border-amber-300 bg-amber-50 rounded p-1.5 font-mono">
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block font-bold text-slate-700 mb-0.5">Reference #</label>
+                <input id="qe-ref" type="text" class="w-full border border-slate-300 rounded p-1.5">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-0.5">Salesperson</label>
+                <input id="qe-salesperson" type="text" class="w-full border border-slate-300 rounded p-1.5">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-bold text-slate-700 mb-0.5">Subject</label>
+          <input id="qe-subject" type="text" placeholder="e.g. Supply of compressor spares for Q1" class="w-full border border-slate-300 rounded p-1.5">
+        </div>
+
+        <!-- Line items -->
+        <div class="border border-slate-300 rounded-lg overflow-hidden">
+          <table class="w-full">
+            <thead class="bg-slate-800 text-white font-semibold">
+              <tr>
+                <th class="p-2 text-left">Item &amp; Description</th>
+                <th class="p-2 text-left w-24">HSN/SAC</th>
+                <th class="p-2 text-right w-20">Qty</th>
+                <th class="p-2 text-right w-28">Rate</th>
+                <th class="p-2 text-right w-16">Disc %</th>
+                <th class="p-2 text-right w-20">GST %</th>
+                <th class="p-2 text-right w-28">Amount</th>
+                <th class="p-2 w-8"></th>
+              </tr>
+            </thead>
+            <tbody id="qe-items" class="divide-y divide-slate-200"></tbody>
+          </table>
+          <div class="p-2 bg-slate-50 border-t border-slate-200">
+            <button type="button" onclick="addQuoteItemRow()" class="px-3 py-1 border border-dashed border-slate-400 rounded text-slate-700 font-semibold hover:bg-white">+ Add Line</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div class="space-y-2">
+            <div>
+              <label class="block font-bold text-slate-700 mb-0.5">Customer Notes</label>
+              <textarea id="qe-notes" rows="2" class="w-full border border-slate-300 rounded p-1.5"></textarea>
+            </div>
+            <div>
+              <label class="block font-bold text-slate-700 mb-0.5">Terms &amp; Conditions</label>
+              <textarea id="qe-terms" rows="4" class="w-full border border-slate-300 rounded p-1.5"></textarea>
+            </div>
+          </div>
+          <div class="p-3 border border-slate-200 rounded-lg bg-slate-50 space-y-1.5 font-mono self-start">
+            <div class="flex justify-between"><span class="font-sans text-slate-600">Sub Total</span><span id="qe-subtotal">₹0.00</span></div>
+            <div class="flex justify-between items-center">
+              <span class="font-sans text-slate-600">Discount <input id="qe-discount" type="number" step="0.01" min="0" max="100" value="0" oninput="recalcQuoteTotals()" class="w-14 border border-slate-300 rounded p-0.5 text-right"> %</span>
+              <span id="qe-discount-amt">-₹0.00</span>
+            </div>
+            <div id="qe-cgst-row" class="flex justify-between"><span class="font-sans text-slate-600">CGST</span><span id="qe-cgst">₹0.00</span></div>
+            <div id="qe-sgst-row" class="flex justify-between"><span class="font-sans text-slate-600">SGST</span><span id="qe-sgst">₹0.00</span></div>
+            <div id="qe-igst-row" class="flex justify-between hidden"><span class="font-sans text-slate-600">IGST</span><span id="qe-igst">₹0.00</span></div>
+            <div class="flex justify-between items-center">
+              <span class="font-sans text-slate-600">Shipping Charges</span>
+              <input id="qe-shipping" type="number" step="0.01" min="0" value="0" oninput="recalcQuoteTotals()" class="w-28 border border-slate-300 rounded p-0.5 text-right">
+            </div>
+            <div class="flex justify-between text-slate-500"><span class="font-sans">Rounding</span><span id="qe-roundoff">₹0.00</span></div>
+            <div class="flex justify-between border-t border-slate-300 pt-1.5 text-sm font-black text-slate-900"><span class="font-sans">Total (₹)</span><span id="qe-total">₹0.00</span></div>
+          </div>
+        </div>
+
+        <div class="pt-3 border-t border-slate-200 flex justify-end space-x-2">
+          <button type="button" onclick="openQuotations()" class="px-3 py-1.5 border border-slate-300 rounded font-semibold text-slate-600">Cancel</button>
+          <button type="submit" data-status="Draft" class="px-4 py-1.5 border border-[#1f3a52] text-[#1f3a52] rounded font-bold hover:bg-slate-50">Save as Draft</button>
+          <button type="submit" data-status="Sent" class="px-4 py-1.5 bg-[#1f3a52] text-white rounded font-bold hover:bg-[#162a3b]">Save &amp; Mark Sent (Ctrl+A)</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ============================================== -->
+    <!-- VIEW: REPORT CENTER (G)                         -->
+    <!-- ============================================== -->
+    <section id="view-report-center" class="w-full max-w-6xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden hidden fade-in">
+      <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
+        <div>
+          <h2 class="text-sm font-bold uppercase tracking-wider">Report Center</h2>
+          <p class="text-[10px] text-slate-300">Generate, print and export reports as PDF or Excel-ready CSV</p>
+        </div>
+        <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-slate-200 text-xs">
+        <div id="rc-list" class="p-3 space-y-3 bg-slate-50/70"></div>
+        <div class="md:col-span-3 p-4 space-y-3 min-w-0">
+          <div class="flex flex-wrap items-end gap-2 bg-slate-50 p-3 rounded-lg border border-slate-200">
+            <div>
+              <label class="block font-bold text-slate-600 mb-0.5">From</label>
+              <input id="rc-from" type="date" class="border border-slate-300 rounded p-1.5 font-mono bg-white">
+            </div>
+            <div>
+              <label class="block font-bold text-slate-600 mb-0.5">To</label>
+              <input id="rc-to" type="date" class="border border-slate-300 rounded p-1.5 font-mono bg-white">
+            </div>
+            <div id="rc-status-wrap" class="hidden">
+              <label class="block font-bold text-slate-600 mb-0.5">Status</label>
+              <select id="rc-status" class="border border-slate-300 rounded p-1.5 bg-white font-semibold">
+                <option value="">All</option><option>Draft</option><option>Sent</option><option>Accepted</option>
+                <option>Declined</option><option>Expired</option><option>Revised</option><option>Invoiced</option>
+              </select>
+            </div>
+            <div class="flex gap-1">
+              <button type="button" onclick="setReportPeriod('month')" class="px-2 py-1.5 border border-slate-300 rounded bg-white font-semibold">This Month</button>
+              <button type="button" onclick="setReportPeriod('fy')" class="px-2 py-1.5 border border-slate-300 rounded bg-white font-semibold">This FY</button>
+              <button type="button" onclick="setReportPeriod('all')" class="px-2 py-1.5 border border-slate-300 rounded bg-white font-semibold">All</button>
+            </div>
+            <button type="button" onclick="runReport()" class="px-4 py-1.5 bg-[#1f3a52] text-white rounded font-bold hover:bg-[#162a3b]">Generate</button>
+            <div class="ml-auto flex gap-1">
+              <button type="button" onclick="exportReport('pdf')" class="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white rounded font-bold flex items-center space-x-1"><i data-lucide="file-down" class="w-3.5 h-3.5"></i><span>PDF</span></button>
+              <button type="button" onclick="exportReport('csv')" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold flex items-center space-x-1"><i data-lucide="sheet" class="w-3.5 h-3.5"></i><span>CSV</span></button>
+              <button type="button" onclick="exportReport('html')" class="px-3 py-1.5 bg-slate-700 hover:bg-slate-800 text-white rounded font-bold flex items-center space-x-1"><i data-lucide="printer" class="w-3.5 h-3.5"></i><span>Print</span></button>
+            </div>
+          </div>
+          <div>
+            <h3 id="rc-title" class="text-sm font-black text-slate-900">Select a report</h3>
+            <p id="rc-subtitle" class="text-[11px] text-slate-500"></p>
+          </div>
+          <div id="rc-kpis" class="grid grid-cols-2 md:grid-cols-4 gap-2"></div>
+          <div class="border border-slate-300 rounded-lg overflow-auto max-h-[55vh]">
+            <table class="w-full">
+              <thead id="rc-thead" class="bg-slate-800 text-white font-semibold sticky top-0"></thead>
+              <tbody id="rc-tbody" class="divide-y divide-slate-200 bg-white"></tbody>
+              <tfoot id="rc-tfoot" class="bg-slate-100 font-bold"></tfoot>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
   </main>
 
   <!-- ============================================== -->
@@ -1679,6 +2128,17 @@
     <button onclick="openF12ConfigModal()" class="tally-v-btn" title="Configuration (F12)">
       <span class="fn-badge bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-300 shrink-0">F12</span>
       <span class="truncate">Configure</span>
+    </button>
+
+    <div class="h-[1px] bg-slate-300 my-1"></div>
+    <div class="text-[9px] font-black text-indigo-700 uppercase tracking-widest px-1 pt-0.5">AI Assistance</div>
+    <button onclick="toggleAiCopilot()" class="tally-v-btn bg-indigo-50 hover:bg-indigo-600 hover:text-white border-indigo-200 text-indigo-950 font-bold transition" title="AI Copilot Assistant (Alt+A)">
+      <span class="fn-badge bg-gradient-to-tr from-purple-600 to-indigo-600 text-white px-1 py-0.5 rounded text-[9px] font-mono font-bold shrink-0">AI</span>
+      <span class="truncate">Copilot (Alt+A)</span>
+    </button>
+    <button onclick="toggleAiWorkspaceView()" class="tally-v-btn bg-purple-50 hover:bg-purple-700 hover:text-white border-purple-200 text-purple-950 font-bold transition" title="AI Executive Workspace (Alt+W)">
+      <span class="fn-badge bg-purple-700 text-white px-1 py-0.5 rounded text-[9px] font-mono font-bold shrink-0">⚡</span>
+      <span class="truncate">Workspace (W)</span>
     </button>
   </aside>
 </div>
@@ -3108,7 +3568,11 @@
           <div class="text-[10px] text-slate-400">Offline Accounting Assistant</div>
         </div>
       </div>
-      <div class="flex items-center space-x-1">
+      <div class="flex items-center space-x-1.5">
+        <button id="btn-toggle-ai-voice-copilot" onclick="toggleAiVoice()" title="Toggle Voice Output" class="px-2 py-1 rounded text-[10px] font-bold bg-slate-800 border border-slate-700 text-slate-400 hover:text-white transition flex items-center space-x-1">
+          <i data-lucide="volume-x" class="w-3 h-3 text-slate-400"></i>
+          <span>Voice: OFF</span>
+        </button>
         <button onclick="clearAiChat()" title="Clear Chat" class="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition">
           <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
         </button>
@@ -3120,11 +3584,20 @@
 
     <!-- Copilot Prompt Quick Chips -->
     <div class="p-2 bg-slate-950/80 border-b border-slate-800 flex items-center space-x-1.5 overflow-x-auto text-[10px] whitespace-nowrap scrollbar-none">
+      <button onclick="sendCopilotQuick('What is our net profit and margins?')" class="px-2 py-0.5 rounded-full bg-slate-900 hover:bg-indigo-950 text-indigo-300 border border-indigo-500/40 transition">
+        📊 Net Profit
+      </button>
+      <button onclick="sendCopilotQuick('Show total purchases')" class="px-2 py-0.5 rounded-full bg-slate-900 hover:bg-indigo-950 text-indigo-300 border border-indigo-500/40 transition">
+        🛒 Purchases
+      </button>
+      <button onclick="sendCopilotQuick('What is our total stock valuation?')" class="px-2 py-0.5 rounded-full bg-slate-900 hover:bg-indigo-950 text-indigo-300 border border-indigo-500/40 transition">
+        📦 Stock Value
+      </button>
+      <button onclick="sendCopilotQuick('What is our working capital?')" class="px-2 py-0.5 rounded-full bg-slate-900 hover:bg-indigo-950 text-indigo-300 border border-indigo-500/40 transition">
+        ⚖️ Working Capital
+      </button>
       <button onclick="sendCopilotQuick('How much cash do we have?')" class="px-2 py-0.5 rounded-full bg-slate-900 hover:bg-indigo-950 text-indigo-300 border border-indigo-500/40 transition">
         💰 Cash Balance
-      </button>
-      <button onclick="sendCopilotQuick('Show total sales')" class="px-2 py-0.5 rounded-full bg-slate-900 hover:bg-indigo-950 text-indigo-300 border border-indigo-500/40 transition">
-        📊 Sales
       </button>
       <button onclick="sendCopilotQuick('Who owes us money?')" class="px-2 py-0.5 rounded-full bg-slate-900 hover:bg-indigo-950 text-indigo-300 border border-indigo-500/40 transition">
         👥 Debtors
@@ -3241,6 +3714,20 @@ TOTAL PAYABLE: Rs. 53,100.00"
   </div>
 
   <!-- ============================================== -->
+  <!-- FLOATING AI ASSISTANT QUICK TRIGGER BUBBLE     -->
+  <!-- ============================================== -->
+  <button id="floating-ai-assistant-btn" onclick="toggleAiCopilot()"
+          title="AI Assistant (Alt+A)"
+          class="fixed bottom-10 right-6 z-40 px-3.5 py-2.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-full shadow-2xl border border-indigo-400/50 flex items-center space-x-2 transition-all transform hover:scale-105 active:scale-95 group cursor-pointer">
+    <div class="relative flex items-center justify-center">
+      <i data-lucide="sparkles" class="w-4 h-4 text-amber-300 animate-pulse"></i>
+      <span class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400"></span>
+    </div>
+    <span class="font-extrabold text-xs tracking-wide">AI Assistant</span>
+    <span class="px-1.5 py-0.2 rounded text-[9px] font-mono bg-black/40 border border-white/20 text-slate-200">Alt+A</span>
+  </button>
+
+  <!-- ============================================== -->
   <!-- TALLY BOTTOM STATUS BAR                        -->
   <!-- ============================================== -->
   <footer id="tally-status-bar" class="bg-[#162a3b] text-slate-300 border-t border-slate-700 px-4 py-1.5 flex items-center justify-between text-xs select-none">
@@ -3267,6 +3754,91 @@ TOTAL PAYABLE: Rs. 53,100.00"
     </div>
   </footer>
 
+  <!-- ============================================== -->
+  <!-- MODAL: QUOTATION DETAIL & FOLLOW-UP TIMELINE    -->
+  <!-- ============================================== -->
+  <div id="quoteDetailModal" class="modal-backdrop hidden">
+    <div class="bg-white rounded-lg shadow-2xl max-w-4xl w-full border border-slate-300 overflow-hidden text-xs max-h-[92vh] flex flex-col">
+      <div class="bg-[#1f3a52] text-white px-4 py-2.5 font-bold flex justify-between items-center shrink-0">
+        <span id="qd-title">Quotation</span>
+        <button onclick="closeModal('quoteDetailModal')" class="text-slate-300 hover:text-white">✕</button>
+      </div>
+      <div class="p-4 overflow-y-auto space-y-4">
+        <!-- Summary -->
+        <div class="flex flex-wrap justify-between gap-3">
+          <div>
+            <div class="text-[10px] uppercase tracking-wider text-slate-400 font-bold">Customer</div>
+            <div id="qd-customer" class="text-sm font-black text-slate-900"></div>
+            <div id="qd-subject" class="text-slate-600"></div>
+          </div>
+          <div class="text-right">
+            <div id="qd-status" class="inline-block px-2 py-0.5 rounded text-[10px] font-bold"></div>
+            <div id="qd-total" class="text-lg font-black font-mono text-slate-900"></div>
+            <div id="qd-dates" class="text-[11px] text-slate-500 font-mono"></div>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div id="qd-actions" class="flex flex-wrap gap-1.5 p-2 bg-slate-50 border border-slate-200 rounded-lg"></div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Log follow-up -->
+          <form id="qd-followup-form" onsubmit="handleAddFollowup(event)" class="p-3 border border-amber-300 bg-amber-50/60 rounded-lg space-y-2">
+            <div class="font-black text-amber-900 flex items-center space-x-1"><i data-lucide="phone-call" class="w-3.5 h-3.5"></i><span>Log Follow-up</span></div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block font-bold text-slate-700 mb-0.5">Date</label>
+                <input id="qf-date" type="date" required class="w-full border border-slate-300 rounded p-1.5 font-mono bg-white">
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-0.5">Mode</label>
+                <select id="qf-mode" class="w-full border border-slate-300 rounded p-1.5 bg-white font-semibold">
+                  <option>Call</option><option>Email</option><option>WhatsApp</option><option>Visit</option><option>Meeting</option>
+                </select>
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-0.5">Outcome</label>
+                <select id="qf-outcome" onchange="handleFollowupOutcomeChange()" class="w-full border border-slate-300 rounded p-1.5 bg-white font-semibold">
+                  <option>Interested</option><option>Negotiating</option><option>No Response</option><option>Call Back Later</option>
+                  <option value="Won">Won (mark Accepted)</option><option value="Lost">Lost (mark Declined)</option>
+                </select>
+              </div>
+              <div>
+                <label class="block font-bold text-slate-700 mb-0.5">Next Follow-up</label>
+                <input id="qf-next" type="date" class="w-full border border-slate-300 rounded p-1.5 font-mono bg-white">
+              </div>
+            </div>
+            <div class="flex gap-1">
+              <button type="button" onclick="setNextFollowupIn(1)" class="px-2 py-0.5 border border-amber-300 rounded bg-white">+1d</button>
+              <button type="button" onclick="setNextFollowupIn(3)" class="px-2 py-0.5 border border-amber-300 rounded bg-white">+3d</button>
+              <button type="button" onclick="setNextFollowupIn(7)" class="px-2 py-0.5 border border-amber-300 rounded bg-white">+1w</button>
+              <button type="button" onclick="setNextFollowupIn(14)" class="px-2 py-0.5 border border-amber-300 rounded bg-white">+2w</button>
+              <button type="button" onclick="setNextFollowupIn(null)" class="px-2 py-0.5 border border-amber-300 rounded bg-white">None</button>
+            </div>
+            <textarea id="qf-notes" rows="2" placeholder="What was discussed? e.g. Customer asked for 2% extra discount" class="w-full border border-slate-300 rounded p-1.5 bg-white"></textarea>
+            <button type="submit" class="w-full py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded font-bold">Save Follow-up</button>
+          </form>
+
+          <!-- Timeline -->
+          <div class="p-3 border border-slate-200 rounded-lg">
+            <div class="font-black text-slate-800 mb-2">Follow-up History</div>
+            <div id="qd-timeline" class="space-y-2 max-h-64 overflow-y-auto"></div>
+          </div>
+        </div>
+
+        <!-- Items -->
+        <div class="border border-slate-200 rounded-lg overflow-hidden">
+          <table class="w-full">
+            <thead class="bg-slate-100 text-slate-700 font-semibold">
+              <tr><th class="p-2 text-left">Item</th><th class="p-2 text-right">Qty</th><th class="p-2 text-right">Rate</th><th class="p-2 text-right">GST</th><th class="p-2 text-right">Amount</th></tr>
+            </thead>
+            <tbody id="qd-items" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script src="ext/auth-bridge.js"></script>
   <script src="ext/invoice-compose.js"></script>
   <script src="app.js"></script>
@@ -3286,5 +3858,6 @@ TOTAL PAYABLE: Rs. 53,100.00"
   <script src="ext/voice.js"></script>
   <script src="ext/search.js"></script>
   <script src="ext/accounts.js"></script>
+  <script src="quotations.js"></script>
 </body>
 </html>

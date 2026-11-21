@@ -170,7 +170,31 @@ async function main() {
   const forgedRole = (() => { const p = Buffer.from(JSON.stringify({ userId: 1, username: 'admin', role: 'Owner', expiresAt: Date.now() + 1e7 })).toString('base64url'); return `rre_${p}.AAAA`; })();
   assert((await req('GET', '/api/auth/users', { token: forgedRole })).status === 401, 'A token with a self-written role is refused (signature check)');
 
-  console.log('\n--- 9. Nothing sensitive in the frontend or documents ---');
+  console.log('\n--- 9. Quotations and the report centre obey the same roles and approval rules ---');
+  const qBody = (extra = {}) => ({ customer_name: 'Role Test Customer', party_ledger_id: (null), subject: 'role test', items: [{ item_name: 'Test Service', quantity: 2, rate: 1500, gst_rate: 18 }], ...extra });
+  const post = (token, p, body) => req('POST', p, { token, body });
+  assert((await post(viewerT, '/api/quotations', qBody())).status === 403 && (await post(audT, '/api/quotations', qBody())).status === 403, 'Viewer and Auditor cannot create quotations (they cannot post vouchers)');
+  assert((await post(null, '/api/quotations', qBody())).status === 401, 'Quotations need a login');
+  const q1 = await post(deT, '/api/quotations', qBody());
+  assert(q1.status === 200 && /^QT-/.test(q1.json.quote_no), 'Data Entry can create a quotation');
+  assert((await req('GET', `/api/quotations/${q1.json.id}`, { token: viewerT })).status === 200, 'Read-only roles can still read quotations');
+  assert((await post(viewerT, `/api/quotations/${q1.json.id}/convert`, {})).status === 403, 'A Viewer cannot convert a quotation into a Sales invoice');
+  const stockItem = await get('SELECT id FROM stock_items LIMIT 1');
+  const sold = (await get("SELECT COUNT(*) c FROM vouchers WHERE voucher_type = 'Sales'")).c;
+  await post(adminTok2, '/api/approvals/rules', { name: 'Discount cap (quote test)', kind: 'sales_discount', threshold: 10 });
+  const q2 = await post(deT, '/api/quotations', qBody({ items: [{ item_name: 'Discounted', stock_item_id: stockItem.id, quantity: 1, rate: 1000, discount_pct: 25, gst_rate: 18 }] }));
+  assert(q2.status === 200, 'Quotation with a 25% discount created');
+  const cv = await post(deT, `/api/quotations/${q2.json.id}/convert`, {});
+  assert(cv.status === 403 && /needs approval/i.test(cv.json.error || '') && (await get("SELECT COUNT(*) c FROM vouchers WHERE voucher_type = 'Sales'")).c === sold, 'Converting it as Data Entry is held by the approval rule: nothing is posted');
+  const cvOwner = await post(adminTok2, `/api/quotations/${q2.json.id}/convert`, {});
+  assert(cvOwner.status === 200 && (await get("SELECT COUNT(*) c FROM vouchers WHERE voucher_type = 'Sales'")).c === sold + 1, 'The Owner (exempt) can convert it; one Sales voucher is posted');
+  assert((await get('SELECT direction FROM inventory_entries ORDER BY id DESC LIMIT 1')).direction === 'OUT', 'The invoice takes stock OUT');
+  assert((await req('GET', '/api/report-center', { token: deT })).status === 403 && (await req('GET', '/api/report-center/sales-register', { token: deT })).status === 403, 'Data Entry cannot open the report centre (sales analytics need the financial-view permission)');
+  assert((await req('GET', '/api/report-center', { token: accT })).status === 200, 'Accountant can open the report centre');
+  assert((await req('GET', '/api/documents/capabilities', { token: viewerT })).status === 200, 'Printing documents stays available to signed-in users');
+
+
+  console.log('\n--- 10. Nothing sensitive in the frontend or documents ---');
   const roots = ['public/app.js', 'public/index.html', 'README.md', 'main.js', 'start-tally.bat', 'Launch-TallyPrime.vbs', 'build-installer.bat', 'Install-Desktop-App.bat', '.env.example'].concat(fs.readdirSync(path.join(__dirname, 'public', 'ext')).map((f) => 'public/ext/' + f));
   const bad = [];
   for (const f of roots) {

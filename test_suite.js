@@ -380,6 +380,36 @@ async function runTests() {
     });
     assert(aiQuery.statusCode === 200 && aiQuery.data.success && typeof aiQuery.data.data?.answer === 'string', 'AI Financial Agent answers balance queries dynamically from SQLite');
 
+    // 8c-1: Profit & Loss Query
+    const aiProfit = await httpPost('/api/ai/query', {
+      query: 'What is our net profit and margins?'
+    });
+    assert(aiProfit.statusCode === 200 && aiProfit.data.success && typeof aiProfit.data.data?.answer === 'string' && /net (profit|loss)/i.test(aiProfit.data.data.answer), 'AI Financial Agent calculates Net Profit & margins from trading books');
+
+    // 8c-2: Purchases Overview Query
+    const aiPurchases = await httpPost('/api/ai/query', {
+      query: 'Show total purchases and vendor bills'
+    });
+    assert(aiPurchases.statusCode === 200 && aiPurchases.data.success && typeof aiPurchases.data.data?.answer === 'string' && aiPurchases.data.data.answer.includes('Purchases'), 'AI Financial Agent answers purchase inquiries');
+
+    // 8c-3: Stock Valuation Query
+    const aiStock = await httpPost('/api/ai/query', {
+      query: 'What is our total stock valuation?'
+    });
+    assert(aiStock.statusCode === 200 && aiStock.data.success && typeof aiStock.data.data?.answer === 'string' && aiStock.data.data.answer.includes('Stock Valuation'), 'AI Financial Agent computes live weighted inventory valuation');
+
+    // 8c-4: Working Capital Query
+    const aiWC = await httpPost('/api/ai/query', {
+      query: 'What is our working capital and solvency?'
+    });
+    assert(aiWC.statusCode === 200 && aiWC.data.success && typeof aiWC.data.data?.answer === 'string' && aiWC.data.data.answer.includes('Working Capital'), 'AI Financial Agent computes working capital ratio metrics');
+
+    // 8c-5: Specific Stock Item Query
+    const aiItem = await httpPost('/api/ai/query', {
+      query: 'How many Compressors in stock?'
+    });
+    assert(aiItem.statusCode === 200 && aiItem.data.success && typeof aiItem.data.data?.answer === 'string', 'AI Financial Agent answers specific stock item query');
+
     // 8d: Anomaly & Audit Diagnostic Scanner
     const aiInsights = await httpGet('/api/ai/insights');
     assert(aiInsights.statusCode === 200 && typeof aiInsights.data.health_score === 'number', `AI Anomaly Scanner audits company health (Score: ${aiInsights.data.health_score}%)`);
@@ -400,6 +430,89 @@ Total Amount Payable: 29500.00`;
     assert(docParseRes.data.document_parsed.draft_voucher.voucher_type === 'Purchase', 'AI identifies supplier bill as Purchase voucher');
   } catch (err) {
     assert(false, 'AI Copilot and Engine verification failed', err.message);
+  }
+
+  // TEST 8B: Quotations, Follow-ups, Documents & Report Center
+  // Everything created here is deleted again so the company books are unchanged.
+  console.log('\n--- 8B. Quotations, Follow-ups, PDF Documents & Report Center ---');
+  try {
+    const { computeTotals } = require('./modules/quotations/quotationsApi');
+    const { amountInWords } = require('./core/documentTemplates');
+
+    const intra = computeTotals([{ item_name: 'A', quantity: 2, rate: 1000, gst_rate: 18 }, { item_name: 'B', quantity: 1, rate: 500, discount_pct: 10, gst_rate: 5 }], { discount_pct: 0, interState: false });
+    assert(intra.subtotal === 2450 && intra.cgst === 191.25 && intra.sgst === 191.25 && intra.igst === 0, 'Quote totals split per-line GST into CGST/SGST for intra-state', JSON.stringify(intra));
+    assert(intra.total === Math.round(2450 + 382.5) && Math.abs(intra.total - (2450 + 382.5) - intra.round_off) < 0.001, 'Quote total is rounded with matching round-off');
+    const inter = computeTotals([{ item_name: 'A', quantity: 10, rate: 100, gst_rate: 18 }], { discount_pct: 10, shipping_charges: 50, interState: true });
+    assert(inter.taxable_amount === 900 && inter.igst === 162 && inter.total === 1112, 'Quote discount applied before IGST for inter-state supply', JSON.stringify(inter));
+    assert(amountInWords(1234567.5) === 'Indian Rupee Twelve Lakh Thirty Four Thousand Five Hundred Sixty Seven and Fifty Paise Only', 'Amount in words uses Indian Lakh/Crore system');
+
+    const httpReq = (method, p, payload) => new Promise((resolve, reject) => {
+      const body = payload ? JSON.stringify(payload) : '';
+      const req = http.request(`${baseUrl}${p}`, { method, headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body), Authorization: 'Bearer ' + testToken } }, (res) => {
+        let data = '';
+        res.on('data', (c) => { data += c; });
+        res.on('end', () => {
+          let parsed = data;
+          try { parsed = JSON.parse(data); } catch (e) {}
+          resolve({ statusCode: res.statusCode, headers: res.headers, data: parsed });
+        });
+      });
+      req.on('error', reject);
+      if (body) req.write(body);
+      req.end();
+    });
+
+    const debtor = await get("SELECT l.id FROM ledgers l JOIN account_groups g ON l.group_id = g.id WHERE g.name = 'Sundry Debtors' LIMIT 1");
+    const created = await httpReq('POST', '/api/quotations', {
+      customer_name: 'Automated Test Prospect',
+      party_ledger_id: debtor ? debtor.id : null,
+      subject: 'Automated verification quote',
+      items: [{ item_name: 'Test Service', quantity: 2, rate: 1500, gst_rate: 18 }]
+    });
+    assert(created.statusCode === 200 && /^QT-/.test(created.data.quote_no), 'POST /api/quotations creates a numbered quotation', created.data.quote_no || created.data.error);
+    const qid = created.data.id;
+
+    const rejected = await httpReq('POST', '/api/quotations', { customer_name: 'X', items: [] });
+    assert(rejected.statusCode === 400, 'Quotation without line items is rejected');
+
+    const fu = await httpReq('POST', `/api/quotations/${qid}/followups`, { mode: 'Call', outcome: 'Interested', notes: 'Automated follow-up', next_followup_date: '2099-01-01' });
+    assert(fu.statusCode === 200 && fu.data.data.status === 'Sent' && fu.data.data.next_followup_date === '2099-01-01', 'Logging a follow-up moves Draft to Sent and schedules next follow-up');
+
+    const stats = await httpReq('GET', '/api/quotations/stats');
+    assert(stats.statusCode === 200 && typeof stats.data.data.conversion_rate === 'number', 'GET /api/quotations/stats returns pipeline & follow-up counts');
+
+    const doc = await httpReq('GET', `/api/documents/quotation/${qid}`);
+    assert(doc.statusCode === 200 && String(doc.data).includes(created.data.quote_no) && String(doc.data).includes('Total In Words'), 'Quotation renders as Zoho-style printable document');
+
+    let voucherId = null;
+    if (debtor) {
+      const conv = await httpReq('POST', `/api/quotations/${qid}/convert`, {});
+      assert(conv.statusCode === 200 && conv.data.voucher && conv.data.data.status === 'Invoiced', 'Accepted quote converts into a posted Sales voucher', conv.data.error);
+      voucherId = conv.data.voucher && conv.data.voucher.id;
+      const again = await httpReq('POST', `/api/quotations/${qid}/convert`, {});
+      assert(again.statusCode === 409, 'Quote cannot be invoiced twice');
+      const tbAfter = await httpReq('GET', '/api/reports/trial-balance');
+      assert(tbAfter.data.data.is_balanced, 'Trial Balance stays balanced after quote conversion');
+      const inv = await httpReq('GET', `/api/documents/invoice/${voucherId}`);
+      assert(inv.statusCode === 200 && String(inv.data).includes('Tax Invoice'), 'Converted Sales voucher renders as Tax Invoice document');
+    }
+
+    const catalogue = await httpReq('GET', '/api/report-center');
+    assert(catalogue.statusCode === 200 && catalogue.data.data.length >= 8, 'Report Center lists available reports', `${catalogue.data.data.length} reports`);
+    for (const r of catalogue.data.data) {
+      const rr = await httpReq('GET', `/api/report-center/${r.id}`);
+      if (rr.statusCode !== 200 || !Array.isArray(rr.data.data.rows)) assert(false, `Report ${r.id} generates`, rr.data.error);
+    }
+    assert(true, 'Every Report Center report generates without error');
+    const csv = await httpReq('GET', '/api/report-center/sales-register?format=csv');
+    assert(csv.statusCode === 200 && /text\/csv/.test(csv.headers['content-type']) && String(csv.data).includes('Invoice #'), 'Report exports to CSV');
+
+    // Cleanup: remove the test invoice (re-opens the quote) and the quote itself
+    if (voucherId) await httpReq('DELETE', `/api/vouchers/${voucherId}`);
+    const del = await httpReq('DELETE', `/api/quotations/${qid}`);
+    assert(del.statusCode === 200, 'Test quotation and follow-ups cleaned up');
+  } catch (err) {
+    assert(false, 'Quotation module verification failed', err.message);
   }
 
   // TEST 9: Master Observability & Structured Logging (Pillars 6, 7 & 13)
