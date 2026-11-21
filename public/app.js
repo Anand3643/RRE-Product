@@ -1681,7 +1681,11 @@ async function handleVoucherAiAutoFill() {
       narr.value = inter.narration || prompt;
     }
 
-    alert(`✨ AI Assistant auto-filled voucher as ${inter.voucher_type} (${formatCurrency(inter.total_amount)})! Mathematical double-entry balanced.`);
+    // Auto-focus save button so hitting Enter immediately posts voucher to books!
+    const saveBtn = document.getElementById('btn-save-voucher') || document.querySelector('#voucher-form button[type="submit"]') || document.querySelector('#view-voucher button[type="submit"]');
+    if (saveBtn) {
+      saveBtn.focus();
+    }
   } catch (err) {
     alert(`AI Voucher Assist error: ${err.message}`);
   } finally {
@@ -2892,6 +2896,85 @@ function sendCopilotQuick(prompt) {
   }
 }
 
+// AI Voice Synthesis & Natural Audio Output
+let aiVoiceEnabled = false;
+
+function toggleAiVoice() {
+  aiVoiceEnabled = !aiVoiceEnabled;
+  updateAiVoiceUi();
+  if (aiVoiceEnabled) {
+    speakAiText("AI voice output enabled. Answers will be spoken aloud.");
+  } else {
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  }
+}
+
+function updateAiVoiceUi() {
+  const wsBtn = document.getElementById('btn-toggle-ai-voice-ws');
+  const copilotBtn = document.getElementById('btn-toggle-ai-voice-copilot');
+  [wsBtn, copilotBtn].forEach(b => {
+    if (b) {
+      if (aiVoiceEnabled) {
+        b.className = 'px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 shadow-sm bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400';
+        b.innerHTML = '<i data-lucide="volume-2" class="w-3.5 h-3.5 text-white"></i><span>Voice: ON</span>';
+      } else {
+        b.className = 'px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center space-x-1.5 shadow-sm bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700';
+        b.innerHTML = '<i data-lucide="volume-x" class="w-3.5 h-3.5 text-slate-400"></i><span>Voice: OFF</span>';
+      }
+    }
+  });
+  if (window.lucide) window.lucide.createIcons();
+}
+
+function speakAiText(text) {
+  if (!('speechSynthesis' in window) || !text) return;
+  window.speechSynthesis.cancel();
+  const clean = text
+    .replace(/[*#_`]/g, '')
+    .replace(/[•-]\s+/g, ', ')
+    .replace(/₹/g, 'Rupees ')
+    .replace(/\n+/g, '. ')
+    .replace(/✅|⚠️|📊|🛒|💸|📦|🏛️|⚖️|📒|🏢|💰|👥|🛡️|✨|✓/g, '');
+  const utterance = new SpeechSynthesisUtterance(clean);
+  utterance.rate = 1.0;
+  utterance.pitch = 1.0;
+  window.speechSynthesis.speak(utterance);
+}
+
+function isFinancialQuestion(query) {
+  if (!query || typeof query !== 'string') return false;
+  const q = query.trim().toLowerCase();
+  if (q.endsWith('?')) return true;
+  if (/^(what|how|who|show|list|view|check|tell|get|find|can|explain|is there|do we|audit|query|summary|details)\b/i.test(q)) {
+    return true;
+  }
+  if (/(?:net\s+)?profit|margin|earnings|gross\s+profit|cogs|purchases|expenses|stock|inventory|valuation|debtors|creditors|receivables|payables|working\s+capital|current\s+ratio|quick\s+ratio|solvency|gst|tax|cgst|sgst|company|gstin|pan|daybook|recent\s+vouchers|health\s+score|anomal/i.test(q)) {
+    if (!/^(sold|bought|paid|received|deposited|withdrew|transfer|purchased)\s+\d+/i.test(q)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function getActionReportButton(action) {
+  if (action === 'view-profit-loss') {
+    return `<button type="button" onclick="showReport('view-profit-loss')" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold text-xs flex items-center space-x-1"><i data-lucide="pie-chart" class="w-3.5 h-3.5"></i><span>Open P&amp;L Statement</span></button>`;
+  } else if (action === 'view-balance-sheet') {
+    return `<button type="button" onclick="showReport('view-balance-sheet')" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold text-xs flex items-center space-x-1"><i data-lucide="scale" class="w-3.5 h-3.5"></i><span>Open Balance Sheet</span></button>`;
+  } else if (action === 'view-stock' || action === 'view-stock-summary') {
+    return `<button type="button" onclick="showReport('view-stock-summary')" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold text-xs flex items-center space-x-1"><i data-lucide="boxes" class="w-3.5 h-3.5"></i><span>Open Stock Summary</span></button>`;
+  } else if (action === 'view-daybook') {
+    return `<button type="button" onclick="showReport('view-daybook')" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold text-xs flex items-center space-x-1"><i data-lucide="book-open" class="w-3.5 h-3.5"></i><span>Open Day Book</span></button>`;
+  } else if (action === 'view-ledger' || action === 'view-chart-accounts') {
+    return `<button type="button" onclick="openReport('chart-accounts')" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold text-xs flex items-center space-x-1"><i data-lucide="list" class="w-3.5 h-3.5"></i><span>Chart of Accounts</span></button>`;
+  } else if (action === 'view-sales') {
+    return `<button type="button" onclick="openVoucherScreen('Sales')" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold text-xs flex items-center space-x-1"><i data-lucide="plus-circle" class="w-3.5 h-3.5"></i><span>New Sales Voucher</span></button>`;
+  } else if (action === 'view-purchases') {
+    return `<button type="button" onclick="openVoucherScreen('Purchase')" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold text-xs flex items-center space-x-1"><i data-lucide="plus-circle" class="w-3.5 h-3.5"></i><span>New Purchase Voucher</span></button>`;
+  }
+  return '';
+}
+
 async function handleCopilotSubmit(e) {
   if (e) e.preventDefault();
   const input = document.getElementById('copilot-user-input');
@@ -2905,9 +2988,9 @@ async function handleCopilotSubmit(e) {
   appendChatMessage('assistant', `<div id="${loadingId}" class="flex items-center space-x-2 text-indigo-300 font-mono text-[11px]"><i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Analyzing business prompt...</span></div>`);
 
   try {
-    const isVoucherPrompt = /sold|sales|invoice|bought|purchase|procured|paid|payment|received|receipt|deposited|withdrew|rent|salary|contra/i.test(query);
+    const isQuestion = isFinancialQuestion(query);
 
-    if (isVoucherPrompt) {
+    if (!isQuestion) {
       const res = await fetchApi('/ai/parse-voucher', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2924,7 +3007,24 @@ async function handleCopilotSubmit(e) {
       });
       const data = await res.json();
       const el = document.getElementById(loadingId);
-      if (el) el.parentElement.innerHTML = formatCopilotAnswer(data.data?.answer || 'Query processed.');
+      const answer = data.data?.answer || 'Query processed.';
+      const encodedAnswer = encodeURIComponent(answer);
+      if (el) {
+        el.parentElement.innerHTML = `
+          <div class="space-y-2">
+            <div>${formatCopilotAnswer(answer)}</div>
+            <div class="pt-1.5 flex items-center justify-between border-t border-slate-800">
+              <button type="button" onclick="speakAiText(decodeURIComponent('${encodedAnswer}'))" class="text-[10px] text-indigo-300 hover:text-white flex items-center space-x-1 transition">
+                <i data-lucide="volume-2" class="w-3 h-3 text-amber-300"></i>
+                <span>🔊 Say Answer</span>
+              </button>
+            </div>
+          </div>
+        `;
+      }
+      if (aiVoiceEnabled) {
+        speakAiText(answer);
+      }
     }
   } catch (err) {
     const el = document.getElementById(loadingId);
@@ -3176,73 +3276,155 @@ async function handleAiWorkspaceSubmit(e) {
 
   const btn = document.getElementById('btn-ai-ws-submit');
   const container = document.getElementById('ai-ws-draft-container');
-  if (btn) { btn.disabled = true; btn.innerHTML = '<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Drafting...</span>'; }
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Analyzing...</span>';
+  }
 
   try {
-    const res = await fetchApi('/ai/parse-voucher', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt })
-    });
-    const data = await res.json();
+    const isQuestion = isFinancialQuestion(prompt);
 
-    if (!data.success) {
-      alert(`AI parsing note: ${data.error || 'Please provide more details.'}`);
-      return;
-    }
+    if (isQuestion) {
+      // 1. Universal Database Financial Query
+      const res = await fetchApi('/ai/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: prompt })
+      });
+      const data = await res.json();
 
-    const v = data.interpreted;
-    const jsonStr = encodeURIComponent(JSON.stringify(v));
+      if (!data.success) {
+        alert(`AI query notice: ${data.error || 'Could not process database question.'}`);
+        return;
+      }
 
-    if (container) {
-      container.classList.remove('hidden');
-      container.innerHTML = `
-        <div class="p-3.5 bg-slate-900 border border-indigo-500/40 rounded-xl space-y-3">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center space-x-2">
-              <span class="px-2 py-0.5 rounded text-[11px] font-black bg-indigo-600 text-white">${v.voucher_type} Voucher</span>
-              <span class="text-xs text-slate-300 font-mono">${v.voucher_no} (${v.date})</span>
+      const answer = data.data?.answer || 'No answer returned from financial agent.';
+      const action = data.data?.action || '';
+      const encodedAnswer = encodeURIComponent(answer);
+
+      if (container) {
+        container.classList.remove('hidden');
+        container.innerHTML = `
+          <div class="p-4 bg-slate-900 border border-indigo-500/50 rounded-xl space-y-3 shadow-lg">
+            <div class="flex items-center justify-between border-b border-indigo-500/20 pb-2">
+              <div class="flex items-center space-x-2">
+                <span class="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-gradient-to-r from-purple-600 to-indigo-600 text-white flex items-center space-x-1">
+                  <i data-lucide="bot" class="w-3 h-3 text-amber-300"></i>
+                  <span>AI Database Insight</span>
+                </span>
+                <span class="text-xs text-slate-400 font-mono">100% Offline SQLite</span>
+              </div>
+              <div class="flex items-center space-x-2">
+                <button type="button" onclick="speakAiText(decodeURIComponent('${encodedAnswer}'))" class="px-2.5 py-1 bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-500/40 text-indigo-200 rounded text-xs font-bold flex items-center space-x-1 shadow-sm transition" title="Speak Answer Aloud">
+                  <i data-lucide="volume-2" class="w-3.5 h-3.5 text-amber-300"></i>
+                  <span>🔊 Say Answer</span>
+                </button>
+                <button type="button" onclick="document.getElementById('ai-ws-draft-container').classList.add('hidden')" class="text-slate-400 hover:text-white p-1 rounded">
+                  <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+              </div>
             </div>
-            <span class="text-xs font-bold ${v.is_balanced ? 'text-emerald-400' : 'text-rose-400'}">${v.is_balanced ? '✓ Double-Entry Verified' : '⚠️ Unbalanced'}</span>
-          </div>
 
-          <div class="bg-slate-950 rounded-lg p-2.5 border border-slate-800">
-            <table class="w-full text-xs font-mono">
-              <thead>
-                <tr class="text-slate-500 border-b border-slate-800">
-                  <th class="text-left pb-1 font-sans">Ledger Account</th>
-                  <th class="text-right pb-1 font-sans">Debit (Dr)</th>
-                  <th class="text-right pb-1 font-sans">Credit (Cr)</th>
-                </tr>
-              </thead>
-              <tbody class="divide-y divide-slate-800/60">
-                ${v.entries.map(e => `
-                  <tr>
-                    <td class="py-1 text-slate-300">${e.ledger_name}</td>
-                    <td class="py-1 text-right text-amber-300">${e.debit_amount > 0 ? formatCurrency(e.debit_amount) : '-'}</td>
-                    <td class="py-1 text-right text-emerald-400">${e.credit_amount > 0 ? formatCurrency(e.credit_amount) : '-'}</td>
+            <div class="bg-slate-950/80 rounded-lg p-3.5 border border-slate-800 text-slate-200 text-xs leading-relaxed font-sans space-y-2">
+              ${formatCopilotAnswer(answer)}
+            </div>
+
+            <div class="flex items-center justify-between pt-1">
+              <div class="text-[11px] text-slate-400 flex items-center space-x-1.5">
+                <i data-lucide="check-circle" class="w-3.5 h-3.5 text-emerald-400"></i>
+                <span>Directly queried from active company database</span>
+              </div>
+              <div class="space-x-2 flex items-center">
+                ${getActionReportButton(action)}
+                <button type="button" onclick="document.getElementById('ai-ws-draft-container').classList.add('hidden')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded font-bold text-xs transition">
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+
+        if (aiVoiceEnabled) {
+          speakAiText(answer);
+        }
+      }
+    } else {
+      // 2. Voucher Parsing & Auto-Drafting
+      const res = await fetchApi('/ai/parse-voucher', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt })
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        alert(`AI parsing note: ${data.error || 'Please provide more details.'}`);
+        return;
+      }
+
+      const v = data.interpreted;
+      const jsonStr = encodeURIComponent(JSON.stringify(v));
+
+      if (container) {
+        container.classList.remove('hidden');
+        container.innerHTML = `
+          <div id="ai-ws-draft-card" class="p-3.5 bg-slate-900 border border-indigo-500/40 rounded-xl space-y-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-2">
+                <span class="px-2 py-0.5 rounded text-[11px] font-black bg-indigo-600 text-white">${v.voucher_type} Voucher</span>
+                <span class="text-xs text-slate-300 font-mono">${v.voucher_no} (${v.date})</span>
+              </div>
+              <span class="text-xs font-bold ${v.is_balanced ? 'text-emerald-400' : 'text-rose-400'}">${v.is_balanced ? '✓ Double-Entry Verified' : '⚠️ Unbalanced'}</span>
+            </div>
+
+            <div class="bg-slate-950 rounded-lg p-2.5 border border-slate-800">
+              <table class="w-full text-xs font-mono">
+                <thead>
+                  <tr class="text-slate-500 border-b border-slate-800">
+                    <th class="text-left pb-1 font-sans">Ledger Account</th>
+                    <th class="text-right pb-1 font-sans">Debit (Dr)</th>
+                    <th class="text-right pb-1 font-sans">Credit (Cr)</th>
                   </tr>
-                `).join('')}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody class="divide-y divide-slate-800/60">
+                  ${v.entries.map(e => `
+                    <tr>
+                      <td class="py-1 text-slate-300">${e.ledger_name}</td>
+                      <td class="py-1 text-right text-amber-300">${e.debit_amount > 0 ? formatCurrency(e.debit_amount) : '-'}</td>
+                      <td class="py-1 text-right text-emerald-400">${e.credit_amount > 0 ? formatCurrency(e.credit_amount) : '-'}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
 
-          <div class="flex items-center justify-between pt-1">
-            <div class="text-[11px] text-slate-400">Total: <strong class="text-white">${formatCurrency(v.total_amount)}</strong></div>
-            <div class="space-x-2">
-              <button type="button" onclick="document.getElementById('ai-ws-draft-container').classList.add('hidden')" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded font-bold text-xs">Dismiss</button>
-              <button type="button" onclick="saveAiDraftFromChat('${jsonStr}')" class="px-4 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded font-black text-xs shadow-md">
-                💾 Confirm &amp; Save Voucher
-              </button>
+            <div class="flex items-center justify-between pt-1">
+              <div class="text-[11px] text-slate-400">Total: <strong class="text-white">${formatCurrency(v.total_amount)}</strong></div>
+              <div class="space-x-2 flex items-center">
+                <button type="button" onclick="document.getElementById('ai-ws-draft-container').classList.add('hidden')" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded font-bold text-xs">Dismiss</button>
+                <button type="button" id="btn-save-ai-ws-draft" onclick="saveAiDraftFromChat('${jsonStr}')" class="px-4 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-lg font-black text-xs shadow-md transition flex items-center space-x-1.5 focus:ring-2 focus:ring-emerald-400 focus:outline-none">
+                  <i data-lucide="check" class="w-3.5 h-3.5"></i>
+                  <span>💾 Confirm &amp; Save Voucher (Enter)</span>
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      `;
+        `;
+
+        // Auto-focus the Confirm & Save button so hitting Enter again immediately saves!
+        setTimeout(() => {
+          const saveBtn = document.getElementById('btn-save-ai-ws-draft');
+          if (saveBtn) saveBtn.focus();
+        }, 80);
+      }
     }
   } catch (err) {
-    alert(`AI drafting error: ${err.message}`);
+    alert(`AI analysis error: ${err.message}`);
   } finally {
-    if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-300"></i><span>Draft</span>'; }
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-300"></i><span>Draft (Enter)</span>';
+    }
     if (window.lucide) window.lucide.createIcons();
   }
 }
@@ -3977,3 +4159,6 @@ window.handleOmniSearchInput = handleOmniSearchInput;
 window.executeOmniAction = executeOmniAction;
 window.openAiDocParserModal = openAiDocParserModal;
 window.handleAiDocParse = handleAiDocParse;
+window.toggleAiVoice = toggleAiVoice;
+window.speakAiText = speakAiText;
+window.isFinancialQuestion = isFinancialQuestion;

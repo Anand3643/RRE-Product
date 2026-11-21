@@ -410,6 +410,36 @@ async function runTests() {
     });
     assert(aiQuery.statusCode === 200 && aiQuery.data.success && typeof aiQuery.data.data?.answer === 'string', 'AI Financial Agent answers balance queries dynamically from SQLite');
 
+    // 8c-1: Profit & Loss Query
+    const aiProfit = await httpPost('/api/ai/query', {
+      query: 'What is our net profit and margins?'
+    });
+    assert(aiProfit.statusCode === 200 && aiProfit.data.success && typeof aiProfit.data.data?.answer === 'string' && aiProfit.data.data.answer.includes('Net Profit'), 'AI Financial Agent calculates Net Profit & margins from trading books');
+
+    // 8c-2: Purchases Overview Query
+    const aiPurchases = await httpPost('/api/ai/query', {
+      query: 'Show total purchases and vendor bills'
+    });
+    assert(aiPurchases.statusCode === 200 && aiPurchases.data.success && typeof aiPurchases.data.data?.answer === 'string' && aiPurchases.data.data.answer.includes('Purchases'), 'AI Financial Agent answers purchase inquiries');
+
+    // 8c-3: Stock Valuation Query
+    const aiStock = await httpPost('/api/ai/query', {
+      query: 'What is our total stock valuation?'
+    });
+    assert(aiStock.statusCode === 200 && aiStock.data.success && typeof aiStock.data.data?.answer === 'string' && aiStock.data.data.answer.includes('Stock Valuation'), 'AI Financial Agent computes live weighted inventory valuation');
+
+    // 8c-4: Working Capital Query
+    const aiWC = await httpPost('/api/ai/query', {
+      query: 'What is our working capital and solvency?'
+    });
+    assert(aiWC.statusCode === 200 && aiWC.data.success && typeof aiWC.data.data?.answer === 'string' && aiWC.data.data.answer.includes('Working Capital'), 'AI Financial Agent computes working capital ratio metrics');
+
+    // 8c-5: Specific Stock Item Query
+    const aiItem = await httpPost('/api/ai/query', {
+      query: 'How many Compressors in stock?'
+    });
+    assert(aiItem.statusCode === 200 && aiItem.data.success && typeof aiItem.data.data?.answer === 'string', 'AI Financial Agent answers specific stock item query');
+
     // 8d: Anomaly & Audit Diagnostic Scanner
     const aiInsights = await httpGet('/api/ai/insights');
     assert(aiInsights.statusCode === 200 && typeof aiInsights.data.health_score === 'number', `AI Anomaly Scanner audits company health (Score: ${aiInsights.data.health_score}%)`);
