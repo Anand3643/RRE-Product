@@ -3,16 +3,22 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const { hashPassword, verifyPassword, createSessionToken } = require('./security');
+const { checkPassword } = require('./passwordPolicy');
 
-// Determine writable data directory mirroring TallyPrime Data path (e.g. data/100000)
-const isPackaged = __dirname.includes('app.asar');
+// Determine the active company's data directory (see core/paths.js). One folder + database per company.
+const paths = require('./paths');
+let activeCompany = paths.DEFAULT_COMPANY;
 let dataDir;
+let dbPath;
 
-if (isPackaged) {
-  const appDataRoot = process.env.APPDATA || (process.env.USERPROFILE ? path.join(process.env.USERPROFILE, 'AppData', 'Roaming') : '.');
-  dataDir = path.join(appDataRoot, 'TallyPrimeGold', 'data', '100000');
+// Single-folder override (used by tests): the folder IS the company; no other companies can be created.
+const singleFolderMode = !!process.env.RRE_DATA_DIR;
+if (singleFolderMode) {
+  dataDir = path.resolve(process.env.RRE_DATA_DIR);
 } else {
-  dataDir = path.resolve(__dirname, '..', 'data', '100000');
+  const reg = paths.readRegistry();
+  if (reg && reg.active && fs.existsSync(paths.companyDir(reg.active))) activeCompany = String(reg.active);
+  dataDir = paths.companyDir(activeCompany);
 }
 
 try {
@@ -21,14 +27,14 @@ try {
   }
 } catch (mErr) {
   console.warn('[Tally Core DB] Could not create dataDir, falling back to temp:', mErr.message);
-  dataDir = path.join(process.env.TEMP || '.', 'TallyPrimeGold', 'data', '100000');
+  dataDir = path.join(process.env.TEMP || '.', 'TallyPrimeGold', 'data', activeCompany);
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 }
 
-const dbPath = path.resolve(dataDir, 'company.db');
+dbPath = path.resolve(dataDir, 'company.db');
 
-// If packaged and db doesn't exist or is empty, copy pre-seeded db from candidate resources
-const needsSeed = !fs.existsSync(dbPath) || (fs.existsSync(dbPath) && fs.statSync(dbPath).size < 1000);
+// If the original company's database is missing or empty, copy a pre-seeded one from candidate resources
+const needsSeed = activeCompany === paths.DEFAULT_COMPANY && (!fs.existsSync(dbPath) || (fs.existsSync(dbPath) && fs.statSync(dbPath).size < 1000));
 if (needsSeed) {
   const candidateSeeds = [
     process.resourcesPath ? path.join(process.resourcesPath, 'data', '100000', 'company.db') : null,
@@ -38,7 +44,7 @@ if (needsSeed) {
   ].filter(Boolean);
 
   for (const seedCandidate of candidateSeeds) {
-    if (fs.existsSync(seedCandidate)) {
+    if (fs.existsSync(seedCandidate) && path.resolve(seedCandidate) !== dbPath) {
       try {
         fs.copyFileSync(seedCandidate, dbPath);
         console.log(`[Tally Core DB] Pre-seeded company database copied from ${seedCandidate} to: ${dbPath}`);
@@ -49,6 +55,9 @@ if (needsSeed) {
     }
   }
 }
+
+// Session tokens are bound to the company they were issued in (see core/security.js)
+require('./security').setCompanyProvider(() => activeCompany);
 
 let db = null;
 
@@ -84,6 +93,21 @@ function reopenDb() {
     resolve();
   });
 }
+
+/** Points this process at another company's database. Callers (core/companies.js) coordinate the rest. */
+async function switchDatabase(number) {
+  if (singleFolderMode) throw new Error('Company switching is unavailable when RRE_DATA_DIR is set.');
+  const dir = paths.companyDir(number);
+  fs.mkdirSync(dir, { recursive: true });
+  await closeDb();
+  activeCompany = String(number);
+  dataDir = dir;
+  dbPath = path.resolve(dir, 'company.db');
+  connectDb();
+}
+const getDbPath = () => dbPath;
+const getDataDir = () => dataDir;
+const getCompanyNumber = () => activeCompany;
 
 // Promisified query wrappers
 const run = (sql, params = []) => {
@@ -374,6 +398,7 @@ async function initDb() {
   await run('CREATE INDEX IF NOT EXISTS idx_user_logins_time ON user_logins(login_time)');
 
   await seedTallyMasters();
+  await seedDefaultUsers(); // security columns, first-run administrator, and account hardening for existing databases
 }
 
 async function seedTallyMasters(force = false) {
@@ -690,136 +715,120 @@ async function seedTallyMasters(force = false) {
 // TALLY SECURITY CONTROL & MULTI-USER FUNCTIONS
 // ========================================================
 
+// Marker stored in place of a password while the first administrator has not chosen one yet. It is never a valid password:
+// authenticateUser() checks for it before comparing anything.
+const SETUP_MARKER = '!setup-required!';
+
+// Passwords that earlier versions shipped for the demo accounts. They are listed ONLY so existing installations can be
+// detected and forced to choose a new password; no new account is ever created with any of them.
+const LEGACY_DEMO_PASSWORDS = {
+  admin: ['admin123', 'admin'], accountant: ['acc123', 'acc'], dataentry: ['data123', 'data'],
+  auditor: ['audit123', 'audit'], viewer: ['view123', 'view'], guest: ['guest', 'guest123']
+};
+
+async function ensureSecurityColumns() {
+  const cols = (await all('PRAGMA table_info(users)')).map((c) => c.name);
+  if (!cols.length) return;
+  if (!cols.includes('must_change_password')) await run('ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0');
+  if (!cols.includes('password_changed_at')) await run('ALTER TABLE users ADD COLUMN password_changed_at TEXT');
+}
+
+let hardenedFor = null;
+/**
+ * Brings existing accounts up to the current security rules WITHOUT deleting or renaming anything:
+ *  - the Guest account is switched off (its history and records stay);
+ *  - any account still using a shipped demo password must choose a new one at next login.
+ * Runs once per company database per process.
+ */
+async function hardenAccounts(force = false) {
+  if (!force && hardenedFor === dbPath) return;
+  await ensureSecurityColumns();
+  const users = await all('SELECT id, username, role, password, status, must_change_password, password_changed_at FROM users');
+  for (const u of users) {
+    if (u.role === 'Guest' || String(u.username).toLowerCase() === 'guest') {
+      if (u.status !== 'Inactive') {
+        await run("UPDATE users SET status = 'Inactive' WHERE id = ?", [u.id]);
+        console.log(`[Security] Guest account "${u.username}" was switched off (records kept).`);
+      }
+      continue;
+    }
+    if (u.password === SETUP_MARKER || u.must_change_password || u.password_changed_at) continue;
+    const defaults = LEGACY_DEMO_PASSWORDS[String(u.username).toLowerCase()] || [];
+    if (defaults.some((d) => verifyPassword(d, u.password).valid)) {
+      await run('UPDATE users SET must_change_password = 1 WHERE id = ?', [u.id]);
+      console.log(`[Security] Account "${u.username}" still uses a shipped demo password: a new password will be required at next login.`);
+    }
+  }
+  hardenedFor = dbPath;
+}
+
 async function seedDefaultUsers() {
   const userTableExists = await get("SELECT count(*) as c FROM sqlite_master WHERE type='table' AND name='users'");
   if (userTableExists.c === 0) return;
+  await ensureSecurityColumns();
 
   const userCount = await get('SELECT COUNT(*) as count FROM users');
   if (userCount.count === 0) {
-    const defaultUsers = [
-      {
-        username: 'admin',
-        password: 'admin123',
-        full_name: 'System Administrator (Owner)',
-        role: 'Owner',
-        email: 'admin@rretally.com',
-        phone: '9840012345',
-        allow_backdated_entries: 1
-      },
-      {
-        username: 'accountant',
-        password: 'acc123',
-        full_name: 'S. Ramanathan (Senior Accountant)',
-        role: 'Accountant',
-        email: 'accountant@rretally.com',
-        phone: '9840012346',
-        allow_backdated_entries: 1
-      },
-      {
-        username: 'dataentry',
-        password: 'data123',
-        full_name: 'K. Priya (Accounts Clerk)',
-        role: 'Data Entry',
-        email: 'dataentry@rretally.com',
-        phone: '9840012347',
-        allow_backdated_entries: 0
-      },
-      {
-        username: 'auditor',
-        password: 'audit123',
-        full_name: 'CA M. Venkatesh (Statutory Auditor)',
-        role: 'Auditor',
-        email: 'venkatesh@ca-associates.in',
-        phone: '9840012348',
-        allow_backdated_entries: 0
-      },
-      {
-        username: 'viewer',
-        password: 'view123',
-        full_name: 'Executive Director (Viewer)',
-        role: 'Viewer',
-        email: 'director@rretally.com',
-        phone: '9840012349',
-        allow_backdated_entries: 0
-      },
-      {
-        username: 'guest',
-        password: 'guest',
-        full_name: 'Guest User (Inspection & Demo)',
-        role: 'Guest',
-        email: 'guest@rretally.com',
-        phone: '',
-        allow_backdated_entries: 0
-      }
-    ];
-
-    for (const u of defaultUsers) {
-      const hashed = hashPassword(u.password);
-      await run(
-        `INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries)
-         VALUES (?, ?, ?, ?, ?, ?, 'Active', ?)`,
-        [u.username, hashed, u.full_name, u.role, u.email, u.phone, u.allow_backdated_entries]
-      );
-    }
-    console.log('[Tally Core DB] Initialized standard multi-user security profiles including Guest with PBKDF2 hashing.');
-  } else {
-    // Ensure guest user exists for existing databases
-    const guestExists = await get("SELECT id FROM users WHERE username = 'guest' COLLATE NOCASE");
-    if (!guestExists) {
-      await run(
-        `INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries)
-         VALUES ('guest', ?, 'Guest User (Inspection & Demo)', 'Guest', 'guest@rretally.com', '', 'Active', 0)`,
-        [hashPassword('guest')]
-      );
-    }
+    // A fresh installation gets ONE administrator account with no password. The person installing the application chooses
+    // its password on first start (see isSetupRequired / setupAdmin). No demo accounts, no default passwords.
+    await run(
+      `INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries, must_change_password)
+       VALUES ('admin', ?, 'Administrator', 'Owner', '', '', 'Active', 1, 1)`, [SETUP_MARKER]);
+    console.log('[Security] First start: the administrator password must be chosen in the application before anyone can log in.');
   }
+  await hardenAccounts();
+}
+
+async function isSetupRequired() {
+  await seedDefaultUsers();
+  const r = await get('SELECT COUNT(*) AS c FROM users WHERE password = ? AND role = ?', [SETUP_MARKER, 'Owner']);
+  return r.c > 0;
+}
+
+/** Sets the first administrator's password. Only possible while setup is still pending. */
+async function setupAdmin(password, clientMeta = {}) {
+  await seedDefaultUsers();
+  const owner = await get('SELECT * FROM users WHERE password = ? AND role = ? ORDER BY id LIMIT 1', [SETUP_MARKER, 'Owner']);
+  if (!owner) { const e = new Error('Setup has already been completed.'); e.status = 409; throw e; }
+  const weak = checkPassword(password, { username: owner.username });
+  if (weak) { const e = new Error(weak); e.status = 400; throw e; }
+  const r = await run('UPDATE users SET password = ?, must_change_password = 0, password_changed_at = ? WHERE id = ? AND password = ?',
+    [hashPassword(password.trim()), new Date().toISOString(), owner.id, SETUP_MARKER]);
+  if (!r.changes) { const e = new Error('Setup has already been completed.'); e.status = 409; throw e; }
+  return handleLoginSuccess(await get('SELECT * FROM users WHERE id = ?', [owner.id]), clientMeta);
+}
+
+/** A signed-in person changes their own password (also the way out of "must change password"). */
+async function changePassword(userId, currentPassword, newPassword, clientMeta = {}) {
+  const user = await get('SELECT * FROM users WHERE id = ?', [userId]);
+  if (!user || user.status !== 'Active') { const e = new Error('Account not available.'); e.status = 403; throw e; }
+  if (user.password === SETUP_MARKER || !verifyPassword(currentPassword || '', user.password).valid) { const e = new Error('The current password is not correct.'); e.status = 400; throw e; }
+  const weak = checkPassword(newPassword, { username: user.username });
+  if (weak) { const e = new Error(weak); e.status = 400; throw e; }
+  if (verifyPassword(newPassword || '', user.password).valid) { const e = new Error('The new password must be different from the current one.'); e.status = 400; throw e; }
+  await run('UPDATE users SET password = ?, must_change_password = 0, password_changed_at = ? WHERE id = ?', [hashPassword(newPassword.trim()), new Date().toISOString(), user.id]);
+  return handleLoginSuccess(await get('SELECT * FROM users WHERE id = ?', [user.id]), clientMeta);
 }
 
 async function authenticateUser(username, password, clientMeta = {}) {
   await seedDefaultUsers();
   const u = (username || '').trim();
-  const user = await get('SELECT * FROM users WHERE username = ? COLLATE NOCASE', [u]);
-  
-  if (!user) {
-    if (u.toLowerCase() === 'administrator') {
-      const adminUser = await get("SELECT * FROM users WHERE role = 'Owner' LIMIT 1");
-      if (adminUser) {
-        return handleLoginSuccess(adminUser, clientMeta);
-      }
-    }
-    return { success: false, error: 'User does not exist in Tally Security Control.' };
-  }
-
-  if (user.status !== 'Active') {
-    return { success: false, error: 'User account is deactivated. Contact Company Administrator.' };
-  }
+  const generic = { success: false, error: 'Incorrect username or password.' };
+  const user = u ? await get('SELECT * FROM users WHERE username = ? COLLATE NOCASE', [u]) : null;
+  if (!user) return generic;
+  if (user.role === 'Guest') return { success: false, error: 'Guest access is turned off.' };
+  if (user.status !== 'Active') return { success: false, error: 'User account is deactivated. Contact Company Administrator.' };
+  if (user.password === SETUP_MARKER) return { success: false, error: 'First-time setup is not finished. Open RRE Tally on this computer and choose the administrator password.' };
 
   const p = (password || '').trim();
+  if (!p) return generic;
   const verifyResult = verifyPassword(p, user.password);
+  if (!verifyResult.valid) return generic;
 
-  const isAliasMatch = 
-    (user.username.toLowerCase() === 'admin' && (p === 'admin' || p === 'admin123' || p === '')) ||
-    (user.username.toLowerCase() === 'guest' && (p === 'guest' || p === 'guest123' || p === '')) ||
-    (user.username.toLowerCase() === 'accountant' && (p === 'acc' || p === 'acc123')) ||
-    (user.username.toLowerCase() === 'dataentry' && (p === 'data' || p === 'data123')) ||
-    (user.username.toLowerCase() === 'auditor' && (p === 'audit' || p === 'audit123')) ||
-    (user.username.toLowerCase() === 'viewer' && (p === 'view' || p === 'view123'));
-
-  if (!verifyResult.valid && !isAliasMatch) {
-    return { success: false, error: 'Incorrect password for user "' + user.username + '".' };
-  }
-
-  // Transparent cryptographic migration: Upgrade legacy plaintext to salted PBKDF2 hash on the fly
+  // Transparent cryptographic migration: upgrade a legacy plaintext password to a salted PBKDF2 hash on the fly
   if (verifyResult.needsMigration || !user.password.startsWith('pbkdf2$')) {
-    try {
-      const effectivePassword = p || (user.username.toLowerCase() === 'admin' ? 'admin123' : user.username);
-      const newHash = hashPassword(effectivePassword);
-      await run('UPDATE users SET password = ? WHERE id = ?', [newHash, user.id]);
-    } catch (migErr) {
-      console.warn('[Security] Password migration notice:', migErr.message);
-    }
+    try { await run('UPDATE users SET password = ? WHERE id = ?', [hashPassword(p), user.id]); } catch (migErr) { console.warn('[Security] Password migration notice:', migErr.message); }
   }
-
   return handleLoginSuccess(user, clientMeta);
 }
 
@@ -850,7 +859,8 @@ async function handleLoginSuccess(user, clientMeta = {}) {
         allow_backdated_entries: user.allow_backdated_entries
       },
       permissions,
-      token
+      token,
+      must_change_password: !!user.must_change_password
     }
   };
 }
@@ -951,23 +961,30 @@ async function getAllUsers() {
   return await all('SELECT id, username, full_name, role, email, phone, status, allow_backdated_entries, auth_provider, google_id, created_at, last_login FROM users ORDER BY id ASC');
 }
 
+const ASSIGNABLE_ROLES = ['Owner', 'Accountant', 'Data Entry', 'Auditor', 'Viewer'];
+
 async function createUser(userData) {
   await seedDefaultUsers();
   const { username, password, full_name, role, email, phone, allow_backdated_entries } = userData;
   if (!username || !password || !full_name) {
     throw new Error('Username, password, and full name are required.');
   }
+  const assigned = role || 'Data Entry';
+  if (!ASSIGNABLE_ROLES.includes(assigned)) throw new Error(`Role must be one of: ${ASSIGNABLE_ROLES.join(', ')}.`);
+  const weak = checkPassword(password, { username });
+  if (weak) throw new Error(weak);
   const existing = await get('SELECT id FROM users WHERE username = ? COLLATE NOCASE', [username.trim()]);
   if (existing) {
     throw new Error(`Username "${username}" already exists.`);
   }
   const hashedPassword = hashPassword(password.trim());
+  // the password an administrator types is temporary: the person must choose their own at first login
   const res = await run(
-    `INSERT INTO users (username, password, full_name, role, email, phone, allow_backdated_entries, status)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'Active')`,
-    [username.trim(), hashedPassword, full_name.trim(), role || 'Data Entry', email || '', phone || '', allow_backdated_entries ? 1 : 0]
+    `INSERT INTO users (username, password, full_name, role, email, phone, allow_backdated_entries, status, must_change_password)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'Active', 1)`,
+    [username.trim(), hashedPassword, full_name.trim(), assigned, email || '', phone || '', allow_backdated_entries ? 1 : 0]
   );
-  return { success: true, id: res.lastID, message: `User "${username}" created successfully.` };
+  return { success: true, id: res.lastID, message: `User "${username}" created successfully. They must choose a new password at first login.` };
 }
 
 async function updateUser(id, userData) {
@@ -975,6 +992,7 @@ async function updateUser(id, userData) {
   const user = await get('SELECT * FROM users WHERE id = ?', [id]);
   if (!user) throw new Error('User not found.');
 
+  if (role && !ASSIGNABLE_ROLES.includes(role)) throw new Error(`Role must be one of: ${ASSIGNABLE_ROLES.join(', ')}.`);
   if (user.role === 'Owner' && role && role !== 'Owner') {
     const ownerCount = await get("SELECT COUNT(*) as c FROM users WHERE role = 'Owner' AND status = 'Active'");
     if (ownerCount.c <= 1) {
@@ -991,7 +1009,9 @@ async function updateUser(id, userData) {
   }
 
   if (password && password.trim()) {
-    sql += ', password = ?';
+    const weak = checkPassword(password.trim(), { username: user.username });
+    if (weak) throw new Error(weak);
+    sql += ', password = ?, must_change_password = 1, password_changed_at = NULL';
     params.push(hashPassword(password.trim()));
   }
   sql += ' WHERE id = ?';
@@ -1140,108 +1160,47 @@ async function updateCompanyInfo(info) {
 
 async function registerUser(userData, clientMeta = {}) {
   await seedDefaultUsers();
-  const { full_name, email, username, password, role } = userData;
-
-  if (!full_name || !email || !password) {
-    throw new Error('Full name, email address, and password are required.');
+  // Public self-registration is OFF unless the administrator turns it on for this computer (RRE_ALLOW_SELF_REGISTRATION=1).
+  // Even then, the person cannot choose a role and cannot sign in until an administrator approves the account.
+  if (process.env.RRE_ALLOW_SELF_REGISTRATION !== '1') {
+    const e = new Error('Self-registration is turned off. Please ask the administrator to create your account.'); e.status = 403; throw e;
   }
+  const { full_name, email, username, password } = userData;
+  if (!full_name || !email || !password) throw new Error('Full name, email address, and password are required.');
 
   const cleanEmail = email.trim().toLowerCase();
   const cleanName = full_name.trim();
   let cleanUsername = (username || cleanEmail.split('@')[0] || 'user').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
-
   if (!cleanUsername) cleanUsername = 'user_' + Date.now().toString().slice(-4);
+  const weak = checkPassword(password, { username: cleanUsername });
+  if (weak) throw new Error(weak);
 
-  // Check for conflicts
-  const existing = await get(
-    'SELECT id, username, email FROM users WHERE username = ? COLLATE NOCASE OR (email != "" AND email = ? COLLATE NOCASE)',
-    [cleanUsername, cleanEmail]
-  );
-
+  const existing = await get('SELECT id, username, email FROM users WHERE username = ? COLLATE NOCASE OR (email != "" AND email = ? COLLATE NOCASE)', [cleanUsername, cleanEmail]);
   if (existing) {
-    if (existing.email && existing.email.toLowerCase() === cleanEmail) {
-      throw new Error(`An account with email "${cleanEmail}" already exists. Please log in.`);
-    }
-    // If username is taken, append suffix
+    if (existing.email && existing.email.toLowerCase() === cleanEmail) throw new Error(`An account with email "${cleanEmail}" already exists. Please log in.`);
     cleanUsername = `${cleanUsername}_${Date.now().toString().slice(-3)}`;
   }
-
-  const hashedPassword = hashPassword(password.trim());
-  const assignedRole = role || 'Data Entry';
-
-  const res = await run(
-    `INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries, auth_provider)
-     VALUES (?, ?, ?, ?, ?, '', 'Active', 1, 'email')`,
-    [cleanUsername, hashedPassword, cleanName, assignedRole, cleanEmail]
-  );
-
-  const newUser = await get('SELECT * FROM users WHERE id = ?', [res.lastID]);
-  console.log(`[Authenticator] Registered new email user "${cleanUsername}" (${cleanEmail}) with role ${assignedRole}.`);
-
-  return handleLoginSuccess(newUser, clientMeta);
+  await run(
+    `INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries, auth_provider, password_changed_at)
+     VALUES (?, ?, ?, 'Viewer', ?, '', 'Inactive', 0, 'email', ?)`,
+    [cleanUsername, hashPassword(password.trim()), cleanName, cleanEmail, new Date().toISOString()]);
+  console.log(`[Authenticator] Self-registration received from "${cleanUsername}": waiting for administrator approval.`);
+  return { success: true, data: { pending: true, message: 'Your account request was received. An administrator must approve it and assign a role before you can sign in.' } };
 }
 
-async function loginWithGoogle(googleData, clientMeta = {}) {
-  await seedDefaultUsers();
-  const { email, name, google_id, role, avatar_url } = googleData;
-
-  if (!email) {
-    throw new Error('Valid Google account email is required.');
-  }
-
-  const cleanEmail = email.trim().toLowerCase();
-  const cleanName = (name || cleanEmail.split('@')[0] || 'Google User').trim();
-  const cleanGoogleId = (google_id || `g_${Date.now()}`).trim();
-
-  // 1. Look up existing user by google_id or email
-  let user = await get(
-    'SELECT * FROM users WHERE google_id = ? OR (email != "" AND email = ? COLLATE NOCASE)',
-    [cleanGoogleId, cleanEmail]
-  );
-
-  if (user) {
-    // Update Google credentials & metadata
-    await run(
-      'UPDATE users SET google_id = COALESCE(google_id, ?), auth_provider = ?, avatar_url = COALESCE(?, avatar_url) WHERE id = ?',
-      [cleanGoogleId, user.auth_provider === 'local' ? 'hybrid' : 'google', avatar_url || null, user.id]
-    );
-    user = await get('SELECT * FROM users WHERE id = ?', [user.id]);
-    console.log(`[Authenticator] Google login authenticated for user "${user.username}" (${cleanEmail}).`);
-    return handleLoginSuccess(user, clientMeta);
-  }
-
-  // 2. User does not exist -> Auto-provision in Authenticator
-  let baseUsername = cleanEmail.split('@')[0].replace(/[^a-z0-9_]/gi, '').toLowerCase();
-  if (!baseUsername) baseUsername = 'google_user';
-  let candidateUsername = baseUsername;
-  let counter = 1;
-
-  while (await get('SELECT id FROM users WHERE username = ? COLLATE NOCASE', [candidateUsername])) {
-    candidateUsername = `${baseUsername}_${counter++}`;
-  }
-
-  // Generate cryptographically secure random password
-  const randomSecret = crypto.randomBytes(24).toString('hex');
-  const hashedPassword = hashPassword(randomSecret);
-  const assignedRole = role || 'Accountant'; // Default high privilege for user-added Google profile
-
-  const res = await run(
-    `INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries, auth_provider, google_id, avatar_url)
-     VALUES (?, ?, ?, ?, ?, '', 'Active', 1, 'google', ?, ?)`,
-    [candidateUsername, hashedPassword, cleanName, assignedRole, cleanEmail, cleanGoogleId, avatar_url || '']
-  );
-
-  const newUser = await get('SELECT * FROM users WHERE id = ?', [res.lastID]);
-  console.log(`[Authenticator] Auto-provisioned new Google user "${candidateUsername}" (${cleanEmail}) in database.`);
-
-  return handleLoginSuccess(newUser, clientMeta);
+async function loginWithGoogle() {
+  // The application runs offline and cannot verify a Google identity, so a client-supplied email must never be trusted:
+  // it would let anyone claim any account, including the administrator's.
+  const e = new Error('Google sign-in is turned off: an offline installation cannot verify a Google account.'); e.status = 403; throw e;
 }
 
 module.exports = {
-  db,
-  dbPath,
-  dataDir,
   closeDb,
+  switchDatabase,
+  getDbPath,
+  getDataDir,
+  getCompanyNumber,
+  singleFolderMode,
   reopenDb,
   run,
   get,
@@ -1253,6 +1212,10 @@ module.exports = {
   authenticateUser,
   registerUser,
   loginWithGoogle,
+  hardenAccounts,
+  isSetupRequired,
+  setupAdmin,
+  changePassword,
   getAllUsers,
   createUser,
   updateUser,
@@ -1260,3 +1223,8 @@ module.exports = {
   getLoginAuditTrail,
   getRolePermissions
 };
+
+// Values that depend on the active company are exposed as live getters so existing code that reads them keeps working after a switch.
+Object.defineProperty(module.exports, 'db', { enumerable: true, get: () => db });
+Object.defineProperty(module.exports, 'dbPath', { enumerable: true, get: () => dbPath });
+Object.defineProperty(module.exports, 'dataDir', { enumerable: true, get: () => dataDir });

@@ -20,7 +20,7 @@ const ENDPOINTS = [
   { method: 'GET', path: '/api/reports/profit-loss' },
   { method: 'GET', path: '/api/reports/trial-balance' },
   { method: 'GET', path: '/api/vouchers' },
-  { method: 'POST', path: '/api/auth/login', body: JSON.stringify({ username: 'guest', password: 'guest' }) }
+  { method: 'GET', path: '/api/auth/setup-status' }
 ];
 
 function makeRequest(port, endpoint) {
@@ -33,7 +33,8 @@ function makeRequest(port, endpoint) {
       method: endpoint.method,
       headers: {
         'User-Agent': 'RRE-Tally-Load-Tester',
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + require('../core/security').createSessionToken({ id: 1, username: 'load-test', role: 'Viewer' })
       },
       timeout: 5000
     };

@@ -12,13 +12,16 @@ const {
   all,
   closeDb,
   reopenDb,
-  dbPath,
+  getDbPath,
   resetCleanCompany,
   loadDemoCompany,
   updateCompanyInfo,
   authenticateUser,
   registerUser,
   loginWithGoogle,
+  isSetupRequired,
+  setupAdmin,
+  changePassword,
   getAllUsers,
   createUser,
   updateUser,
@@ -35,7 +38,7 @@ const {
   createBackup,
   listBackups,
   restoreBackup,
-  BACKUP_DIR
+  getBackupDir
 } = require('./core/backupEngine');
 const {
   parseVoucherPrompt,
@@ -44,6 +47,11 @@ const {
   parseInvoiceDocument
 } = require('./core/aiEngine');
 const logger = require('./core/logger');
+const { runMigrations } = require('./core/migrations');
+const { activityCaptureMiddleware } = require('./core/auth');
+const { startScheduler } = require('./core/scheduler');
+const { xmlEsc } = require('./core/xml');
+const { routeGuard } = require('./core/routeGuard');
 
 // Modular Routers
 const dashboardRouter = require('./modules/dashboard/dashboardApi');
@@ -51,6 +59,28 @@ const mastersRouter = require('./modules/masters/mastersApi');
 const vouchersRouter = require('./modules/vouchers/vouchersApi');
 const reportsRouter = require('./modules/reports/reportsApi');
 const tallyXmlGateway = require('./modules/gateway/tallyXmlGateway');
+const platformRouter = require('./modules/platform/platformApi');
+const gstRouter = require('./modules/gst/gstApi');
+const bankRouter = require('./modules/bank/bankApi');
+const inventoryRouter = require('./modules/inventory/inventoryApi');
+const automationRouter = require('./modules/automation/automationApi');
+const { recurringRouter, importRouter } = require('./modules/bulk/bulkApi');
+const attachmentsRouter = require('./modules/attachments/attachmentsApi');
+const trackingRouter = require('./modules/tracking/trackingApi');
+const insightsRouter = require('./modules/insights/insightsApi');
+const ocrRouter = require('./modules/ocr/ocrApi');
+const companiesRouter = require('./modules/companies/companiesApi');
+const orgRouter = require('./modules/org/orgApi');
+const approvalsRouter = require('./modules/approvals/approvalsApi');
+const yearEndRouter = require('./modules/yearend/yearEndApi');
+const voiceRouter = require('./modules/voice/voiceApi');
+const searchRouter = require('./modules/search/searchApi');
+const approvals = require('./core/approvals');
+const orgTools = require('./core/orgTools');
+const companies = require('./core/companies');
+const { forLegacyParser } = require('./core/invoiceExtract');
+const assistant = require('./core/assistant');
+const { getRolePermissions: rolePerms } = require('./core/db');
 
 const app = express();
 const WEB_PORT = process.env.PORT || 4000;
@@ -85,10 +115,28 @@ app.use((req, res, next) => {
   }
 });
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' })); // GSTR-2B / bank statement uploads exceed the 100kb default
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(logger.requestMiddleware);
+app.use(companies.gate); // briefly refuses /api calls while the database is swapped during a company switch
+app.use(routeGuard);
+// Vouchers that trigger an approval rule are held for an approver instead of being posted
+app.use(approvals.gate);
+// A newly posted voucher is tagged with the poster's default branch/department (if they set one). The response waits for the tag
+// so the voucher is never visible untagged; a tagging problem never blocks or fails the posting.
+app.use((req, res, next) => {
+  if (req.method === 'POST' && req.originalUrl.split('?')[0] === '/api/vouchers' && req.user) {
+    const original = res.json.bind(res);
+    res.json = (body) => {
+      if (body && body.success && body.id) orgTools.applyDefaults(req.user.username, body.id).catch(() => {}).finally(() => original(body));
+      else original(body);
+      return res;
+    };
+  }
+  next();
+}); // server-side authorisation (signed token + role permissions) for /api/*
+app.use(activityCaptureMiddleware); // audit trail for mutating calls (additive, read-only on existing routers)
 
 // ========================================================
 // 1. HEALTH & SYSTEM MONITORING API (Pillars 6, 7 & 13)
@@ -108,8 +156,8 @@ app.get('/api/health', async (req, res) => {
     try {
       const integrityRow = await get('PRAGMA integrity_check');
       integrityCheck = integrityRow ? Object.values(integrityRow)[0] : 'ok';
-      if (fs.existsSync(dbPath)) {
-        dbSizeBytes = fs.statSync(dbPath).size;
+      if (fs.existsSync(getDbPath())) {
+        dbSizeBytes = fs.statSync(getDbPath()).size;
       }
     } catch (e) {
       dbStatus = 'degraded';
@@ -145,7 +193,7 @@ app.get('/api/health', async (req, res) => {
       },
       database: {
         status: dbStatus,
-        path: dbPath,
+        path: getDbPath(),
         size_bytes: dbSizeBytes,
         size_mb: (dbSizeBytes / (1024 * 1024)).toFixed(2),
         journal_mode: 'wal',
@@ -228,6 +276,7 @@ app.post('/api/backup/restore', async (req, res) => {
       afterRestoreHook: async () => {
         await reopenDb();
         await initDb();
+        await runMigrations();
       }
     });
 
@@ -240,7 +289,7 @@ app.post('/api/backup/restore', async (req, res) => {
 app.get('/api/backup/download/:filename', (req, res) => {
   try {
     const safeFilename = path.basename(req.params.filename);
-    const filePath = path.join(BACKUP_DIR, safeFilename);
+    const filePath = path.join(getBackupDir(), safeFilename);
     if (!fs.existsSync(filePath)) {
       return res.status(404).json({ success: false, error: 'Backup file not found.' });
     }
@@ -331,6 +380,44 @@ app.post('/api/auth/login', rateLimitLoginMiddleware, async (req, res) => {
   }
 });
 
+// First-time setup: the person installing the application chooses the administrator password. Only possible on this computer,
+// and only while no administrator password has been set. There are no default credentials.
+app.get('/api/auth/setup-status', async (req, res) => {
+  try { res.json({ success: true, data: { setup_required: await isSetupRequired() } }); }
+  catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+
+app.post('/api/auth/setup', rateLimitLoginMiddleware, async (req, res) => {
+  const ip = req.socket && req.socket.remoteAddress;
+  if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(ip)) {
+    return res.status(403).json({ success: false, error: 'First-time setup can only be completed on the computer where RRE Tally is installed.' });
+  }
+  const clientMeta = { ip, agent: req.headers['user-agent'] || 'TallyClient' };
+  try {
+    const result = await setupAdmin(String((req.body && req.body.password) || ''), clientMeta);
+    loginRateLimiter.recordSuccess(clientMeta.ip);
+    res.json(result);
+  } catch (err) {
+    loginRateLimiter.recordFailure(clientMeta.ip);
+    res.status(err.status || 400).json({ success: false, error: err.message });
+  }
+});
+
+// A signed-in person changes their own password. This is the only route open to someone who must change it first.
+app.post('/api/auth/change-password', rateLimitLoginMiddleware, async (req, res) => {
+  if (!req.user) return res.status(401).json({ success: false, error: 'Authentication required. Please log in again.', code: 'AUTH_REQUIRED' });
+  const clientMeta = { ip: req.ip || req.connection?.remoteAddress || '127.0.0.1', agent: req.headers['user-agent'] || 'TallyClient' };
+  try {
+    const b = req.body || {};
+    const result = await changePassword(req.user.userId, String(b.current_password || ''), String(b.new_password || ''), clientMeta);
+    loginRateLimiter.recordSuccess(clientMeta.ip);
+    res.json(result);
+  } catch (err) {
+    loginRateLimiter.recordFailure(clientMeta.ip);
+    res.status(err.status || 400).json({ success: false, error: err.message });
+  }
+});
+
 // Create / Register Account via Email
 app.post('/api/auth/register', rateLimitLoginMiddleware, async (req, res) => {
   const clientMeta = {
@@ -344,7 +431,7 @@ app.post('/api/auth/register', rateLimitLoginMiddleware, async (req, res) => {
     res.json(result);
   } catch (err) {
     loginRateLimiter.recordFailure(clientMeta.ip);
-    res.status(400).json({ success: false, error: err.message });
+    res.status(err.status || 400).json({ success: false, error: err.message });
   }
 });
 
@@ -361,7 +448,7 @@ app.post('/api/auth/google', rateLimitLoginMiddleware, async (req, res) => {
     res.json(result);
   } catch (err) {
     loginRateLimiter.recordFailure(clientMeta.ip);
-    res.status(400).json({ success: false, error: err.message });
+    res.status(err.status || 400).json({ success: false, error: err.message });
   }
 });
 
@@ -420,6 +507,23 @@ app.use('/api/dashboard', dashboardRouter);
 app.use('/api/masters', mastersRouter);
 app.use('/api/vouchers', vouchersRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api/search', searchRouter); // new: smart search and quick look (read-only)
+app.use('/api/voice', voiceRouter); // new: multilingual voice assistant (understanding, replies, consent)
+app.use('/api/yearend', yearEndRouter); // new: read-only year-end readiness, snapshot and opening-balance pack
+app.use('/api/approvals', approvalsRouter); // new: approval rules and held vouchers
+app.use('/api/org', orgRouter); // new: branches, departments, budgets, credit limits, supplier performance
+app.use('/api/companies', companiesRouter); // new: list / create / switch companies
+app.use('/api/ocr', ocrRouter); // new: offline invoice scanning (OCR) -> reviewed draft
+app.use('/api/insights', insightsRouter); // new: assistant, forecasts, trends, health score, daily summary
+app.use('/api/tracking', trackingRouter); // new: batch / expiry / serial tracking, barcode lookup
+app.use('/api/attachments', attachmentsRouter); // new: documents attached to vouchers (stored in the company DB)
+app.use('/api/recurring', recurringRouter); // new: recurring voucher drafts (human-confirmed)
+app.use('/api/import', importRouter); // new: previewed, all-or-nothing CSV voucher import
+app.use('/api/automation', automationRouter); // new: duplicates, suggestions, unusual transactions, reminders
+app.use('/api/inventory', inventoryRouter); // new: reorder, demand, dead stock, godown, supplier prices
+app.use('/api/bank', bankRouter); // new: statement import, smart reconciliation
+app.use('/api/gst', gstRouter); // new: GSTIN/HSN validation, tax checks, GSTR-2B reconciliation
+app.use('/api/platform', platformRouter); // new: notifications, search, export, activity log, backup verify
 
 // 3. Tally XML Protocol (for external connectors and ERP bridges)
 app.use('/', tallyXmlGateway);
@@ -444,32 +548,32 @@ app.get('/api/export/tally-xml', async (req, res) => {
       <REQUESTDATA>
         <TALLYMESSAGE xmlns:UDF="TallyUDF">
           <COMPANY>
-            <NAME>${comp.name}</NAME>
-            <GSTIN>${comp.gstin}</GSTIN>
+            <NAME>${xmlEsc(comp.name)}</NAME>
+            <GSTIN>${xmlEsc(comp.gstin)}</GSTIN>
           </COMPANY>
 `;
 
     for (const l of ledgers) {
-      xml += `          <LEDGER NAME="${l.name}">
-            <PARENT>${l.group_name}</PARENT>
-            <OPENINGBALANCE>${l.opening_balance_type === 'Cr' ? '-' : ''}${l.opening_balance}</OPENINGBALANCE>
-            <GSTIN>${l.gstin || ''}</GSTIN>
+      xml += `          <LEDGER NAME="${xmlEsc(l.name)}">
+            <PARENT>${xmlEsc(l.group_name)}</PARENT>
+            <OPENINGBALANCE>${l.opening_balance_type === 'Cr' ? '-' : ''}${xmlEsc(l.opening_balance)}</OPENINGBALANCE>
+            <GSTIN>${xmlEsc(l.gstin || '')}</GSTIN>
           </LEDGER>
 `;
     }
 
     for (const v of vouchers) {
       const entries = await all('SELECT e.*, l.name as ledger_name FROM ledger_entries e JOIN ledgers l ON e.ledger_id = l.id WHERE e.voucher_id = ?', [v.id]);
-      xml += `          <VOUCHER VCHTYPE="${v.voucher_type}">
-            <DATE>${v.date.replace(/-/g, '')}</DATE>
-            <VOUCHERNUMBER>${v.voucher_no}</VOUCHERNUMBER>
-            <NARRATION>${v.narration || ''}</NARRATION>
+      xml += `          <VOUCHER VCHTYPE="${xmlEsc(v.voucher_type)}">
+            <DATE>${xmlEsc(v.date.replace(/-/g, ''))}</DATE>
+            <VOUCHERNUMBER>${xmlEsc(v.voucher_no)}</VOUCHERNUMBER>
+            <NARRATION>${xmlEsc(v.narration || '')}</NARRATION>
 `;
       for (const e of entries) {
         xml += `            <ALLLEDGERENTRIES.LIST>
-              <LEDGERNAME>${e.ledger_name}</LEDGERNAME>
+              <LEDGERNAME>${xmlEsc(e.ledger_name)}</LEDGERNAME>
               <ISDEEMEDPOSITIVE>${e.entry_type === 'Dr' ? 'Yes' : 'No'}</ISDEEMEDPOSITIVE>
-              <AMOUNT>${e.entry_type === 'Dr' ? '-' : ''}${e.debit_amount || e.credit_amount}</AMOUNT>
+              <AMOUNT>${e.entry_type === 'Dr' ? '-' : ''}${xmlEsc(e.debit_amount || e.credit_amount)}</AMOUNT>
             </ALLLEDGERENTRIES.LIST>
 `;
       }
@@ -505,6 +609,10 @@ app.post('/api/ai/parse-voucher', async (req, res) => {
 
 app.post('/api/ai/query', async (req, res) => {
   try {
+    // Richer, data-backed answers first (sales, profit, top products, expense drivers, forecasts, health score...).
+    // Anything it does not recognise falls through to the original assistant below, unchanged.
+    const smart = await assistant.ask(req.body && req.body.query, { perms: rolePerms((req.user || {}).role) });
+    if (smart) return res.json({ success: true, data: { answer: smart.answer, data: smart } });
     const result = await queryFinancialAgent(req.body.query);
     res.json({ success: true, data: result });
   } catch (err) {
@@ -523,6 +631,10 @@ app.get('/api/ai/insights', async (req, res) => {
 
 app.post('/api/ai/parse-document', async (req, res) => {
   try {
+    // Better field extraction first (supplier GSTIN, invoice no., date, taxes, total, ledger matching, duplicate check).
+    // If the text has no usable total it falls through to the original parser, unchanged.
+    const smart = await forLegacyParser(req.body && req.body.text);
+    if (smart) return res.json(smart);
     const result = await parseInvoiceDocument(req.body.text);
     res.json(result);
   } catch (err) {
@@ -686,6 +798,8 @@ function startServer(preferredPort = WEB_PORT, preferredHost = '127.0.0.1') {
   startServerPromise = new Promise(async (resolve) => {
     try {
       await initDb();
+      await runMigrations();
+      startScheduler();
     } catch (err) {
       console.error('[Tally Core DB] Database warning during startup:', err.message);
     }

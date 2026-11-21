@@ -161,46 +161,30 @@ let appState = {
 const QUICK_USERS = {
   admin: {
     username: 'admin',
-    password: 'admin123',
     role: 'Owner',
     desc: '<strong>Owner Permissions:</strong> Full Administrative access to all vouchers, financial reports, user security & company alteration.'
   },
   accountant: {
     username: 'accountant',
-    password: 'acc123',
     role: 'Accountant',
     desc: '<strong>Accountant Permissions:</strong> Create & edit all vouchers, view Balance Sheet, P&L, BRS, GST. Restricted from security and company alteration.'
   },
   dataentry: {
     username: 'dataentry',
-    password: 'data123',
     role: 'Data Entry',
     desc: '<strong>Data Entry Permissions:</strong> Operational entry only (Sales, Purchases, Payments, Receipts, Contra). Financial statements restricted.'
   },
   auditor: {
     username: 'auditor',
-    password: 'audit123',
     role: 'Auditor',
     desc: '<strong>Auditor Permissions:</strong> Statutory inspection mode. Complete read-only view of Ledgers, Day Book, Balance Sheet, GST. Cannot record vouchers.'
   },
   viewer: {
     username: 'viewer',
-    password: 'view123',
     role: 'Viewer',
     desc: '<strong>Viewer Permissions:</strong> Executive summary of Dashboard, key ratios, and financial statements. Read-only; cannot record transactions.'
-  },
-  guest: {
-    username: 'guest',
-    password: 'guest',
-    role: 'Guest',
-    desc: '<strong>Guest Permissions:</strong> Instant read-only guest inspection. Safely explore Gateway, Live Dashboard, Ledgers, Stock Summary, and Financial Reports without any password.'
   }
 };
-
-function loginAsGuest() {
-  selectQuickUser('guest');
-  handleLogin();
-}
 
 function selectQuickUser(roleKey) {
   const profile = QUICK_USERS[roleKey];
@@ -220,7 +204,6 @@ function selectQuickUser(roleKey) {
     else if (roleKey === 'dataentry') activeBtn.classList.add('active', 'border-amber-400', 'bg-amber-50');
     else if (roleKey === 'auditor') activeBtn.classList.add('active', 'border-emerald-400', 'bg-emerald-50');
     else if (roleKey === 'viewer') activeBtn.classList.add('active', 'border-slate-400', 'bg-slate-100');
-    else if (roleKey === 'guest') activeBtn.classList.add('active', 'border-teal-400', 'bg-teal-50');
   }
 
   // Populate inputs
@@ -231,8 +214,8 @@ function selectQuickUser(roleKey) {
   const errEl = document.getElementById('login-error-msg');
 
   if (uInput) uInput.value = profile.username;
-  if (pInput) pInput.value = profile.password;
-  if (hintEl) hintEl.textContent = `Password: ${profile.password}`;
+  if (pInput) pInput.value = '';
+  if (hintEl) hintEl.textContent = 'Enter your password';
   if (descEl) descEl.innerHTML = profile.desc;
   if (errEl) errEl.classList.add('hidden');
 }
@@ -543,65 +526,9 @@ async function handleLogin(e) {
 
     loginData = data.data;
   } catch (netErr) {
-    console.warn('[Tally Auth] Network connection notice, using resilient offline security fallback:', netErr.message);
-
-    // Resilient Offline Security Fallback: Validate against standard QUICK_USERS
-    const matchedQuickKey = Object.keys(QUICK_USERS).find(k => {
-      const q = QUICK_USERS[k];
-      return q.username.toLowerCase() === username.toLowerCase();
-    });
-
-    if (matchedQuickKey) {
-      const q = QUICK_USERS[matchedQuickKey];
-      const p = password.trim();
-      const isMatch = (p === q.password) ||
-        (q.username === 'admin' && (p === 'admin' || p === 'admin123' || p === '')) ||
-        (q.username === 'accountant' && (p === 'acc' || p === 'acc123')) ||
-        (q.username === 'dataentry' && (p === 'data' || p === 'data123')) ||
-        (q.username === 'auditor' && (p === 'audit' || p === 'audit123')) ||
-        (q.username === 'viewer' && (p === 'view' || p === 'view123')) ||
-        (q.username === 'guest' && (p === 'guest' || p === 'guest123' || p === ''));
-
-      if (!isMatch) {
-        if (errEl) errEl.classList.remove('hidden');
-        if (errText) errText.textContent = `Incorrect password for user "${username}".`;
-        return;
-      }
-
-      loginData = {
-        user: {
-          id: matchedQuickKey === 'admin' ? 1 : 2,
-          username: q.username,
-          full_name: q.username.toUpperCase() + ' (Offline Security)',
-          role: q.role,
-          status: 'Active'
-        },
-        permissions: getOfflineRolePermissions(q.role),
-        token: 'offline_token_' + Date.now()
-      };
-    } else {
-      // Check cached custom users from localStorage
-      let cachedMatch = null;
-      try {
-        const cachedUsersStr = localStorage.getItem('tally_cached_users');
-        if (cachedUsersStr) {
-          const list = JSON.parse(cachedUsersStr);
-          cachedMatch = list.find(u => u.username.toLowerCase() === username.toLowerCase());
-        }
-      } catch (cErr) {}
-
-      if (cachedMatch && (cachedMatch.password === password || password === 'admin123')) {
-        loginData = {
-          user: cachedMatch,
-          permissions: getOfflineRolePermissions(cachedMatch.role),
-          token: 'offline_token_' + Date.now()
-        };
-      } else {
-        if (errEl) errEl.classList.remove('hidden');
-        if (errText) errText.textContent = `User "${username}" not recognized. (Quick logins: admin, acc, entry, auditor, viewer)`;
-        return;
-      }
-    }
+    if (errEl) errEl.classList.remove('hidden');
+    if (errText) errText.textContent = 'Cannot reach the RRE Tally server. Please make sure the application is running, then try again.';
+    return;
   }
 
   if (loginData) {
@@ -622,6 +549,7 @@ async function handleLogin(e) {
     updateUserDisplay();
     applyRolePermissions();
     showGateway();
+    if (loginData.must_change_password && window.RREAccounts) window.RREAccounts.promptPasswordChange();
   }
 }
 
@@ -694,23 +622,15 @@ async function handleRegister(e) {
       return;
     }
     authData = data.data;
+    if (authData && authData.pending) {
+      authData = null;
+      closeModal('registerModal');
+      alert(data.data.message);
+    }
   } catch (err) {
-    console.warn('[Authenticator] Offline fallback registration:', err.message);
-    const fallbackUsername = username || email.split('@')[0] || 'user';
-    authData = {
-      user: {
-        id: Date.now(),
-        username: fallbackUsername,
-        full_name,
-        role,
-        email,
-        auth_provider: 'email',
-        status: 'Active'
-      },
-      permissions: getOfflineRolePermissions(role),
-      token: 'offline_token_' + Date.now()
-    };
-  } finally {
+    if (errEl) errEl.classList.remove('hidden');
+    if (errText) errText.textContent = 'Cannot reach the RRE Tally server. Please make sure the application is running, then try again.';
+    } finally {
     if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = origBtnText; }
   }
 
@@ -778,22 +698,9 @@ async function handleGoogleAuthSubmit(e) {
     }
     authData = data.data;
   } catch (err) {
-    console.warn('[Authenticator] Offline fallback Google auth:', err.message);
-    const googleUsername = email.split('@')[0].replace(/[^a-z0-9_]/gi, '').toLowerCase() || 'google_user';
-    authData = {
-      user: {
-        id: Date.now(),
-        username: googleUsername,
-        full_name: name || email.split('@')[0],
-        role,
-        email,
-        auth_provider: 'google',
-        status: 'Active'
-      },
-      permissions: getOfflineRolePermissions(role),
-      token: 'offline_token_' + Date.now()
-    };
-  } finally {
+    if (errEl) errEl.classList.remove('hidden');
+    if (errText) errText.textContent = 'Cannot reach the RRE Tally server. Please make sure the application is running, then try again.';
+    } finally {
     if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = origBtnText; }
   }
 
@@ -1667,7 +1574,16 @@ async function handleSaveVoucher(e) {
     const igstLedger = appState.ledgers.find(l => l.name === (isSales ? 'Output IGST 18%' : 'Input IGST 18%'));
     const roundLedger = appState.ledgers.find(l => l.name === 'Round Off A/c');
 
-    if (isSales) {
+    const isReturn = ['Credit Note', 'Debit Note'].includes(voucherType);
+    if (isReturn) {
+      // Credit / Debit Notes REVERSE the original sale / purchase (see ext/invoice-compose.js)
+      if (!window.RRECompose) { alert('The return-voucher module failed to load. Please reload the application.'); return; }
+      try {
+        window.RRECompose.returnEntries({
+          voucherType, party, partyLedgerId, subtotal, cgst, sgst, igst, grandTotal, roundOff, isInterState, ledgers: appState.ledgers
+        }).forEach(e => entries.push(e));
+      } catch (composeErr) { alert(composeErr.message); return; }
+    } else if (isSales) {
       // Dr. Party (Grand Total)
       entries.push({ ledger_id: partyLedgerId, debit_amount: grandTotal, credit_amount: 0, particulars: party.name });
       // Cr. Sales (Subtotal)
@@ -1700,8 +1616,13 @@ async function handleSaveVoucher(e) {
     }
 
     // Bill Allocation
-    const billType = document.getElementById('bill-ref-type').value;
-    const billRef = document.getElementById('bill-ref-name').value || voucherNo;
+    let billType = document.getElementById('bill-ref-type').value;
+    const enteredBillRef = document.getElementById('bill-ref-name').value;
+    const billRef = enteredBillRef || voucherNo;
+    if (isReturn) {
+      if (billType === 'New Ref') billType = 'Agst Ref'; // a return settles an existing bill; it never opens a new one
+      if (!enteredBillRef && !confirm('No original invoice number was entered in "Bill Reference Name".\n\nWithout it this note will not reduce any outstanding bill. Continue anyway?')) return;
+    }
     const dueDate = document.getElementById('bill-due-date').value;
     billAllocations.push({
       ledger_id: partyLedgerId,
@@ -3051,7 +2972,7 @@ function handleResolveAnomaly(type) {
   if (type === 'NEGATIVE_CASH') {
     openVoucherScreen('Receipt');
   } else if (type === 'UNBALANCED_VOUCHER') {
-    showReport('view-daybook');
+    openReport('daybook');
   } else if (type === 'LOW_STOCK') {
     openVoucherScreen('Purchase');
   } else {
@@ -3154,12 +3075,12 @@ const OMNI_COMMANDS = [
   { title: 'Create Receipt Voucher', category: 'Vouchers', hotkey: 'F6', action: () => openVoucherScreen('Receipt') },
   { title: 'Create Contra Voucher', category: 'Vouchers', hotkey: 'F4', action: () => openVoucherScreen('Contra') },
   { title: 'Create Journal Voucher', category: 'Vouchers', hotkey: 'F7', action: () => openVoucherScreen('Journal') },
-  { title: 'Balance Sheet', category: 'Reports', hotkey: 'B', action: () => showReport('view-balance-sheet') },
-  { title: 'Profit & Loss Statement', category: 'Reports', hotkey: 'P', action: () => showReport('view-profit-loss') },
-  { title: 'Trial Balance', category: 'Reports', hotkey: 'T', action: () => showReport('view-trial-balance') },
-  { title: 'Day Book Journal', category: 'Reports', hotkey: 'D', action: () => showReport('view-daybook') },
-  { title: 'Ratio Analysis', category: 'Reports', hotkey: 'R', action: () => showReport('view-ratio-analysis') },
-  { title: 'GST Statutory Returns (GSTR-1 & 3B)', category: 'Reports', hotkey: 'O', action: () => showReport('view-gst-reports') },
+  { title: 'Balance Sheet', category: 'Reports', hotkey: 'B', action: () => openReport('balance-sheet') },
+  { title: 'Profit & Loss Statement', category: 'Reports', hotkey: 'P', action: () => openReport('profit-loss') },
+  { title: 'Trial Balance', category: 'Reports', hotkey: 'T', action: () => openReport('trial-balance') },
+  { title: 'Day Book Journal', category: 'Reports', hotkey: 'D', action: () => openReport('daybook') },
+  { title: 'Ratio Analysis', category: 'Reports', hotkey: 'R', action: () => openReport('ratio-analysis') },
+  { title: 'GST Statutory Returns (GSTR-1 & 3B)', category: 'Reports', hotkey: 'O', action: () => openReport('gst') },
   { title: 'Create Ledger Account', category: 'Masters', hotkey: 'Alt+C', action: () => openModal('createLedgerModal') },
   { title: 'Create Stock Item', category: 'Masters', hotkey: 'I', action: () => openModal('createStockModal') },
   { title: 'AI Copilot Assistant', category: 'AI', hotkey: 'Alt+A', action: () => toggleAiCopilot(true) },
@@ -3820,7 +3741,6 @@ async function loadAuditTrail() {
 window.showLoginView = showLoginView;
 window.startWithFreshLogin = startWithFreshLogin;
 window.toggleFreshLoginStartup = toggleFreshLoginStartup;
-window.loginAsGuest = loginAsGuest;
 window.handleLogin = handleLogin;
 window.handleLogout = handleLogout;
 window.openRegisterModal = openRegisterModal;

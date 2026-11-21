@@ -12,7 +12,34 @@
 const crypto = require('crypto');
 
 // Environment or runtime secret for session signatures
-const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
+// Persisted next to the company data so sessions survive an app restart (still never leaves the PC).
+function loadOrCreateSessionSecret() {
+  if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET;
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const paths = require('./paths');
+    // Test override first; otherwise the data ROOT (shared by all companies on this PC). An existing secret in the
+    // original company folder (created by earlier versions) is reused so current sessions' signing key does not change.
+    const dirs = process.env.RRE_DATA_DIR ? [path.resolve(process.env.RRE_DATA_DIR)] : [paths.companyDir(paths.DEFAULT_COMPANY), paths.ROOT];
+    for (const d of dirs) {
+      const f = path.join(d, '.session_secret');
+      if (fs.existsSync(f)) { const existing = fs.readFileSync(f, 'utf8').trim(); if (existing.length >= 32) return existing; }
+    }
+    const dir = dirs[0];
+    fs.mkdirSync(dir, { recursive: true });
+    const fresh = crypto.randomBytes(32).toString('hex');
+    fs.writeFileSync(path.join(dir, '.session_secret'), fresh, { encoding: 'utf8', mode: 0o600 });
+    return fresh;
+  } catch (e) {
+    return crypto.randomBytes(32).toString('hex'); // fall back to per-process secret
+  }
+}
+const SESSION_SECRET = loadOrCreateSessionSecret();
+
+// db.js registers a function returning the active company number, so tokens can be bound to a company
+let companyProvider = null;
+function setCompanyProvider(fn) { companyProvider = fn; }
 const PBKDF2_ITERATIONS = 10000;
 const PBKDF2_KEYLEN = 64;
 const PBKDF2_DIGEST = 'sha512';
@@ -97,6 +124,8 @@ function createSessionToken(user, expiresInHours = 24) {
     userId: user.id,
     username: user.username,
     role: user.role,
+    ...(user.must_change_password ? { pwc: 1 } : {}),
+    ...(companyProvider ? { company: companyProvider() } : {}),
     expiresAt
   });
 
@@ -231,7 +260,7 @@ function securityHeadersMiddleware(req, res, next) {
   // Privacy referrer policy
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   // Restrict sensitive browser APIs
-  res.setHeader('Permissions-Policy', 'geolocation=(), camera=(), microphone=()');
+  res.setHeader('Permissions-Policy', 'geolocation=(), camera=(), microphone=(self)');
   // Content Security Policy adapted for offline Tally desktop application
   res.setHeader(
     'Content-Security-Policy',
@@ -267,7 +296,20 @@ function sanitizeInput(str) {
   return str.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '').trim();
 }
 
+/** Pass proving a voucher replay was authorised by the approval workflow (valid only together with the stored request). */
+function signApprovalPass(id) {
+  return crypto.createHmac('sha256', SESSION_SECRET).update(`approval:${id}`).digest('hex');
+}
+function verifyApprovalPass(id, sig) {
+  const expected = signApprovalPass(id);
+  const a = Buffer.from(String(sig)), b = Buffer.from(expected);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
+
 module.exports = {
+  signApprovalPass,
+  verifyApprovalPass,
+  setCompanyProvider,
   hashPassword,
   verifyPassword,
   createSessionToken,

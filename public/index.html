@@ -202,7 +202,7 @@
             <label class="text-[10px] font-black text-slate-500 uppercase tracking-wider">Select User Account (Tally Security Control)</label>
             <span class="text-[10px] text-blue-600 font-semibold cursor-pointer hover:underline" onclick="selectQuickUser('admin')">Default: admin</span>
           </div>
-          <div class="grid grid-cols-6 gap-1.5" id="quick-user-selector">
+          <div class="grid grid-cols-5 gap-1.5" id="quick-user-selector">
             <button type="button" onclick="selectQuickUser('admin')" id="qu-admin" class="qu-btn active p-2 rounded-lg border border-purple-400 bg-purple-50 text-purple-900 text-center hover:bg-purple-100 transition shadow-sm">
               <div class="text-xs font-black">👑 admin</div>
               <div class="text-[9px] font-bold text-purple-700">Owner</div>
@@ -222,10 +222,6 @@
             <button type="button" onclick="selectQuickUser('viewer')" id="qu-viewer" class="qu-btn p-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-center hover:bg-slate-100 hover:text-slate-900 hover:border-slate-400 transition">
               <div class="text-xs font-black">👁️ viewer</div>
               <div class="text-[9px] font-bold text-slate-500">Viewer</div>
-            </button>
-            <button type="button" onclick="selectQuickUser('guest')" id="qu-guest" class="qu-btn p-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-center hover:bg-teal-50 hover:text-teal-900 hover:border-teal-300 transition">
-              <div class="text-xs font-black">👤 guest</div>
-              <div class="text-[9px] font-bold text-slate-500">Guest</div>
             </button>
           </div>
           <div id="role-desc-box" class="mt-2 px-3 py-1.5 bg-purple-50/70 border border-purple-200/80 rounded text-[11px] text-purple-900 flex items-center justify-between">
@@ -247,10 +243,10 @@
           <div class="space-y-1">
             <div class="flex items-center justify-between">
               <label class="block text-xs font-bold text-slate-700">Password</label>
-              <span id="pwd-hint" class="text-[10px] text-slate-400 font-mono">Password: admin123</span>
+              <span id="pwd-hint" class="text-[10px] text-slate-400 font-mono">Enter your password</span>
             </div>
             <div class="relative">
-              <input type="password" id="login-password" value="admin123" placeholder="Enter password"
+              <input type="password" id="login-password" value="" placeholder="Enter password" autocomplete="current-password"
                      class="w-full border border-slate-300 rounded-lg p-2.5 text-xs text-slate-800 pl-9 pr-9 focus:ring-2 focus:ring-blue-500 focus:outline-none">
               <i data-lucide="lock" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
               <button type="button" onclick="togglePasswordVisibility('login-password')" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600">
@@ -280,12 +276,6 @@
             <button type="submit" id="btn-login-submit" class="w-full py-3 bg-[#1f3a52] hover:bg-[#162a3b] text-white rounded-lg font-bold text-xs uppercase tracking-wider shadow-md transition flex items-center justify-center space-x-2">
               <span>Login &amp; Enter Gateway (Enter)</span>
               <i data-lucide="arrow-right" class="w-4 h-4 text-amber-400"></i>
-            </button>
-
-            <!-- 1-Click Guest Login for Instant Fresh Install Access -->
-            <button type="button" onclick="loginAsGuest()" class="w-full py-2.5 bg-gradient-to-r from-teal-700 to-cyan-800 hover:from-teal-800 hover:to-cyan-900 text-white rounded-lg font-bold text-xs uppercase tracking-wider shadow-sm transition flex items-center justify-center space-x-2">
-              <i data-lucide="user-check" class="w-4 h-4 text-teal-300"></i>
-              <span>Continue as Guest (1-Click Instant Entry)</span>
             </button>
 
             <button type="button" onclick="startWithFreshLogin()" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-xs border border-slate-300 transition flex items-center justify-center space-x-1.5 shadow-sm">
@@ -658,21 +648,21 @@
 
         <!-- 4. Quick Execution Hub -->
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-xs">
-          <button onclick="showReport('view-balance-sheet')" class="p-2.5 bg-slate-950 border border-slate-800 hover:border-indigo-500/50 rounded-lg text-left transition flex items-center space-x-2">
+          <button onclick="openReport('balance-sheet')" class="p-2.5 bg-slate-950 border border-slate-800 hover:border-indigo-500/50 rounded-lg text-left transition flex items-center space-x-2">
             <i data-lucide="scale" class="w-4 h-4 text-blue-400"></i>
             <div>
               <div class="font-bold text-slate-200">Balance Sheet</div>
               <div class="text-[10px] text-slate-500">Schedule III</div>
             </div>
           </button>
-          <button onclick="showReport('view-profit-loss')" class="p-2.5 bg-slate-950 border border-slate-800 hover:border-indigo-500/50 rounded-lg text-left transition flex items-center space-x-2">
+          <button onclick="openReport('profit-loss')" class="p-2.5 bg-slate-950 border border-slate-800 hover:border-indigo-500/50 rounded-lg text-left transition flex items-center space-x-2">
             <i data-lucide="pie-chart" class="w-4 h-4 text-emerald-400"></i>
             <div>
               <div class="font-bold text-slate-200">Profit &amp; Loss</div>
               <div class="text-[10px] text-slate-500">Trading Statement</div>
             </div>
           </button>
-          <button onclick="showReport('view-trial-balance')" class="p-2.5 bg-slate-950 border border-slate-800 hover:border-indigo-500/50 rounded-lg text-left transition flex items-center space-x-2">
+          <button onclick="openReport('trial-balance')" class="p-2.5 bg-slate-950 border border-slate-800 hover:border-indigo-500/50 rounded-lg text-left transition flex items-center space-x-2">
             <i data-lucide="check-circle" class="w-4 h-4 text-amber-400"></i>
             <div>
               <div class="font-bold text-slate-200">Trial Balance</div>
@@ -3277,6 +3267,24 @@ TOTAL PAYABLE: Rs. 53,100.00"
     </div>
   </footer>
 
+  <script src="ext/auth-bridge.js"></script>
+  <script src="ext/invoice-compose.js"></script>
   <script src="app.js"></script>
+  <script src="ext/platform.js"></script>
+  <script src="ext/gst.js"></script>
+  <script src="ext/bank.js"></script>
+  <script src="ext/inventory.js"></script>
+  <script src="ext/automation.js"></script>
+  <script src="ext/bulk.js"></script>
+  <script src="ext/tracking.js"></script>
+  <script src="ext/insights.js"></script>
+  <script src="ext/ocr.js"></script>
+  <script src="ext/companies.js"></script>
+  <script src="ext/org.js"></script>
+  <script src="ext/approvals.js"></script>
+  <script src="ext/yearend.js"></script>
+  <script src="ext/voice.js"></script>
+  <script src="ext/search.js"></script>
+  <script src="ext/accounts.js"></script>
 </body>
 </html>

@@ -19,9 +19,10 @@ async function calculateGSTReports() {
 
   for (const v of salesVouchers) {
     const entries = await all(`
-      SELECT e.*, l.name as ledger_name
+      SELECT e.*, l.name as ledger_name, g.name as group_name
       FROM ledger_entries e
       JOIN ledgers l ON e.ledger_id = l.id
+      JOIN account_groups g ON l.group_id = g.id
       WHERE e.voucher_id = ?
     `, [v.id]);
 
@@ -30,12 +31,24 @@ async function calculateGSTReports() {
     let sgst = 0;
     let igst = 0;
 
+    // Net = credit - debit. A Sales invoice only credits these lines (unchanged result); a Credit Note
+    // debits them, so it reduces outward supplies and output tax. The party's own line is never counted.
+    // Lines are classified by their LEDGER GROUP, not by label text: taxable value = ledgers in "Sales Accounts";
+    // tax = CGST/SGST/IGST ledgers in "Duties & Taxes". (Matching on text such as "IGST" wrongly counted the taxable
+    // value of sales booked to a ledger called "Interstate Sales (IGST)" as IGST, and missed vouchers without labels.)
     entries.forEach((e) => {
-      if (e.particulars.includes('Sales')) taxable += e.credit_amount;
-      if (e.particulars.includes('CGST')) cgst += e.credit_amount;
-      if (e.particulars.includes('SGST')) sgst += e.credit_amount;
-      if (e.particulars.includes('IGST')) igst += e.credit_amount;
+      if (e.ledger_id === v.party_ledger_id) return;
+      const net = e.credit_amount - e.debit_amount;
+      if (e.group_name === 'Sales Accounts') {
+        taxable += net;
+      } else if (e.group_name === 'Duties & Taxes') {
+        const n = e.ledger_name.toUpperCase();
+        if (n.includes('CGST')) cgst += net;
+        else if (n.includes('SGST')) sgst += net; // also covers UTGST
+        else if (n.includes('IGST')) igst += net;
+      }
     });
+    const isCreditNoteReduction = v.voucher_type === 'Credit Note' && taxable < 0;
 
     outwardTaxable += taxable;
     outwardCGST += cgst;
@@ -44,6 +57,7 @@ async function calculateGSTReports() {
 
     const record = {
       voucher_id: v.id,
+      voucher_type: v.voucher_type,
       voucher_no: v.voucher_no,
       date: v.date,
       party_name: v.party_name,
@@ -53,7 +67,7 @@ async function calculateGSTReports() {
       cgst,
       sgst,
       igst,
-      total_invoice_value: v.total_amount
+      total_invoice_value: isCreditNoteReduction ? -v.total_amount : v.total_amount
     };
 
     if (v.party_gstin && v.party_gstin.trim().length > 5) {
@@ -65,12 +79,15 @@ async function calculateGSTReports() {
 
   // 2. GSTR-3B: Inward Supplies / Eligible Input Tax Credit (ITC) from Purchases
   const purchaseEntries = await all(`
-    SELECT e.particulars, SUM(e.debit_amount) as total_tax
+    SELECT l.name AS particulars, SUM(e.debit_amount - e.credit_amount) as total_tax
     FROM ledger_entries e
     JOIN vouchers v ON e.voucher_id = v.id
+    JOIN ledgers l ON e.ledger_id = l.id
+    JOIN account_groups g ON l.group_id = g.id
     WHERE v.voucher_type IN ('Purchase', 'Debit Note')
-    AND e.particulars LIKE 'Input %'
-    GROUP BY e.particulars
+    AND g.name = 'Duties & Taxes'
+    AND l.name LIKE 'Input %'
+    GROUP BY l.name
   `);
 
   let itcCGST = 0;

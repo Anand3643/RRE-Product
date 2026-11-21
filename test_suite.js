@@ -111,29 +111,24 @@ async function runTests() {
 
   // TEST 3: Multi-User Authentication Engine Verification
   console.log('\n--- 3. Multi-User Authentication Engine Verification (Pillars 2 & 3) ---');
-  const testRoles = [
-    { username: 'admin', pass: 'admin123', expectedRole: 'Owner' },
-    { username: 'admin', pass: '', expectedRole: 'Owner' }, // Passwordless admin shortcut
-    { username: 'accountant', pass: 'acc123', expectedRole: 'Accountant' },
-    { username: 'dataentry', pass: 'data123', expectedRole: 'Data Entry' },
-    { username: 'auditor', pass: 'audit123', expectedRole: 'Auditor' },
-    { username: 'viewer', pass: 'view123', expectedRole: 'Viewer' },
-    { username: 'guest', pass: 'guest', expectedRole: 'Guest' },
-    { username: 'guest', pass: '', expectedRole: 'Guest' } // 1-Click Guest entry
-  ];
-
-  for (const t of testRoles) {
-    const res = await authenticateUser(t.username, t.pass);
-    assert(
-      res.success && res.data.user.role === t.expectedRole,
-      `Login: "${t.username}" (pwd: "${t.pass}") -> Role: ${t.expectedRole}`,
-      res.error
-    );
+  // Installations created before account hardening still hold the old demo passwords. Those accounts keep working, but only
+  // to choose a new password: the login result says so, and the token is restricted until they do.
+  const LEGACY = { admin: ['admin123', 'Owner'], accountant: ['acc123', 'Accountant'], dataentry: ['data123', 'Data Entry'], auditor: ['audit123', 'Auditor'], viewer: ['view123', 'Viewer'] };
+  for (const [username, [pass, expectedRole]] of Object.entries(LEGACY)) {
+    const res = await authenticateUser(username, pass);
+    if (res.success) {
+      assert(res.data.user.role === expectedRole && res.data.must_change_password === true, `Existing account "${username}" still signs in (${expectedRole}) but must choose a new password`, res.error);
+    } else {
+      assert(true, `Account "${username}" is not on a demo password in this database (nothing to migrate)`);
+    }
   }
 
   // Negative Auth Tests
   const badAuth = await authenticateUser('admin', 'wrong_password_999');
   assert(!badAuth.success, 'Reject incorrect password for admin');
+  assert(!(await authenticateUser('admin', '')).success, 'An empty password is never accepted (no passwordless admin shortcut)');
+  assert(!(await authenticateUser('administrator', 'anything-at-all-123')).success, 'The "administrator" alias no longer logs in as the Owner');
+  assert(!(await authenticateUser('guest', 'guest')).success && !(await authenticateUser('guest', '')).success, 'Guest access is turned off');
 
   const nonExistent = await authenticateUser('non_existent_user_xyz', 'pwd');
   assert(!nonExistent.success, 'Reject non-existent user');
@@ -164,7 +159,7 @@ async function runTests() {
 
     // Verify SHA-256 checksum integrity
     const latest = backupsList[0];
-    const fullBackupPath = path.join(__dirname, 'data', '100000', 'backups', latest.filename);
+    const fullBackupPath = path.join(process.env.RRE_DATA_DIR || path.join(__dirname, 'data', '100000'), 'backups', latest.filename);
     const checksum = calculateChecksum(fullBackupPath);
     assert(checksum.length === 64, 'SHA-256 cryptographic checksum verified for backup file', checksum.slice(0, 16) + '...');
   } catch (err) {
@@ -173,12 +168,14 @@ async function runTests() {
 
   // TEST 6: Backend Web Server & REST API Verification
   console.log('\n--- 6. Backend Web Server, Security Headers & Health Checks (Pillars 6, 7 & 13) ---');
+  // API routes now require a signed session token (server-side authorisation)
+  const testToken = createSessionToken({ id: 1, username: 'admin', role: 'Owner' });
   const serverInfo = await startServer(4005, '127.0.0.1');
   const baseUrl = `http://${serverInfo.host}:${serverInfo.port}`;
 
   function httpGet(path) {
     return new Promise((resolve, reject) => {
-      http.get(`${baseUrl}${path}`, (res) => {
+      http.get(`${baseUrl}${path}`, { headers: { Authorization: 'Bearer ' + testToken } }, (res) => {
         let body = '';
         res.on('data', chunk => { body += chunk; });
         res.on('end', () => {
@@ -209,6 +206,7 @@ async function runTests() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': 'Bearer ' + testToken,
           'Content-Length': Buffer.byteLength(postData)
         }
       }, (res) => {
@@ -286,76 +284,48 @@ async function runTests() {
     const vListRes = await httpGet('/api/vouchers');
     assert(vListRes.statusCode === 200 && vListRes.data.success && Array.isArray(vListRes.data.data), 'GET /api/vouchers returns recorded accounting vouchers');
 
-    // Test POST login API for guest
+    // Guest access is switched off
     const guestLoginApi = await httpPost('/api/auth/login', { username: 'guest', password: 'guest' });
-    assert(guestLoginApi.statusCode === 200 && guestLoginApi.data.success && guestLoginApi.data.data.user.role === 'Guest', 'POST /api/auth/login succeeds for Guest');
+    assert(guestLoginApi.statusCode === 401 && guestLoginApi.data.success === false, 'POST /api/auth/login refuses the Guest account');
 
-    // Test POST login API for admin
+    // Test POST login API for admin: an account on an old demo password may sign in only to choose a new one
     const adminLoginApi = await httpPost('/api/auth/login', { username: 'admin', password: 'admin123' });
-    assert(adminLoginApi.statusCode === 200 && adminLoginApi.data.success && adminLoginApi.data.data.user.role === 'Owner', 'POST /api/auth/login succeeds for Admin');
+    assert(adminLoginApi.statusCode === 200 || adminLoginApi.statusCode === 401, 'POST /api/auth/login answers for Admin');
+    if (adminLoginApi.statusCode === 200) {
+      assert(adminLoginApi.data.data.user.role === 'Owner' && adminLoginApi.data.data.must_change_password === true, 'Admin on an old demo password must change it');
+    }
 
-    // Test POST /api/auth/register (Email User Creation in Authenticator DB)
+    // Public self-registration is off by default: nobody can register themselves (least of all as an administrator)
     const testEmail = `cfo_${Date.now().toString().slice(-4)}@example.com`;
     const regRes = await httpPost('/api/auth/register', {
       full_name: 'Chief Financial Officer',
       email: testEmail,
       username: `cfo_${Date.now().toString().slice(-4)}`,
       password: 'CFO_Password_2026!',
-      role: 'Accountant'
+      role: 'Owner'
     });
-    assert(regRes.statusCode === 200 && regRes.data.success, 'POST /api/auth/register creates user account via Email');
-    assert(regRes.data.data.user.email === testEmail, 'Registered user stores correct email address in DB');
+    assert(regRes.statusCode === 403 && regRes.data.success === false, 'POST /api/auth/register is refused (self-registration is off)');
+    assert(!(await get('SELECT id FROM users WHERE email = ?', [testEmail])), 'No account was created by the refused registration');
 
-    // Verify stored user in SQLite Authenticator with PBKDF2 hash
-    const storedUser = await get('SELECT * FROM users WHERE email = ?', [testEmail]);
-    assert(storedUser && storedUser.auth_provider === 'email', 'User record saved in Authenticator table with auth_provider = "email"');
-    assert(storedUser && storedUser.password.startsWith('pbkdf2$10000$'), 'Registered user password cryptographically hashed with PBKDF2');
+    // Accounts are created by an administrator, with a temporary password the person must change
+    const newName = `cfo_${Date.now().toString().slice(-6)}`;
+    const mkRes = await httpPost('/api/auth/users', { username: newName, full_name: 'Chief Financial Officer', email: testEmail, password: 'Temp_Pass_2026x', role: 'Accountant' });
+    assert(mkRes.statusCode === 200 && mkRes.data.success, 'An administrator can create an account');
+    assert((await httpPost('/api/auth/users', { username: newName + 'b', full_name: 'Weak', password: 'short1', role: 'Accountant' })).statusCode === 400, 'A weak password is refused');
+    assert((await httpPost('/api/auth/users', { username: newName + 'c', full_name: 'Guest Try', password: 'Another_Pass_2026x', role: 'Guest' })).statusCode === 400, 'A Guest account cannot be created');
+    const storedUser = await get('SELECT * FROM users WHERE username = ?', [newName]);
+    assert(storedUser && storedUser.password.startsWith('pbkdf2$10000$') && storedUser.must_change_password === 1, 'New account is stored with a PBKDF2 hash and must change its password');
+    const regLoginRes = await httpPost('/api/auth/login', { username: newName, password: 'Temp_Pass_2026x' });
+    assert(regLoginRes.statusCode === 200 && regLoginRes.data.data.must_change_password === true, 'The new person can sign in with the temporary password, and is told to change it');
 
-    // Test Login with newly registered user
-    const regLoginRes = await httpPost('/api/auth/login', {
-      username: storedUser.username,
-      password: 'CFO_Password_2026!'
-    });
-    assert(regLoginRes.statusCode === 200 && regLoginRes.data.success, 'New email user can authenticate via POST /api/auth/login');
+    // Google sign-in cannot be verified offline, so it is switched off (a typed-in email must never prove identity)
+    const googleRes = await httpPost('/api/auth/google', { email: 'admin@rretally.com', name: 'Someone', role: 'Owner', google_id: 'g_1' });
+    assert(googleRes.statusCode === 403 && googleRes.data.success === false, 'POST /api/auth/google is refused');
 
-    // Test duplicate registration rejection
-    const dupRes = await httpPost('/api/auth/register', {
-      full_name: 'Duplicate Test',
-      email: testEmail,
-      password: 'somepassword'
-    });
-    assert(dupRes.statusCode === 400 && dupRes.data.success === false, 'Duplicate email registration safely rejected with 400 error');
-
-    // Test POST /api/auth/google (Google Account Provisioning in Authenticator DB)
-    const googleEmail = `auditor_${Date.now().toString().slice(-4)}@gmail.com`;
-    const googleId = `g_${Date.now()}`;
-    const googleRes = await httpPost('/api/auth/google', {
-      email: googleEmail,
-      name: 'Google External Auditor',
-      role: 'Auditor',
-      google_id: googleId
-    });
-    assert(googleRes.statusCode === 200 && googleRes.data.success, 'POST /api/auth/google provisions & logs in Google account');
-    assert(googleRes.data.data.user.role === 'Auditor', 'Google authenticated user receives selected RBAC role');
-
-    // Verify Google user stored in SQLite Authenticator
-    const storedGoogleUser = await get('SELECT * FROM users WHERE google_id = ?', [googleId]);
-    assert(storedGoogleUser && storedGoogleUser.auth_provider === 'google', 'Google user stored in Authenticator with auth_provider = "google"');
-    assert(storedGoogleUser && storedGoogleUser.google_id === googleId, 'Google identifier securely preserved in database');
-
-    // Test subsequent Google sign-in for existing user
-    const repeatGoogleRes = await httpPost('/api/auth/google', {
-      email: googleEmail,
-      name: 'Google External Auditor Updated',
-      google_id: googleId
-    });
-    assert(repeatGoogleRes.statusCode === 200 && repeatGoogleRes.data.success, 'Existing Google user successfully re-authenticates');
-
-    // Test GET /api/auth/users returns auth_provider
+    // Test GET /api/auth/users returns the directory without ever exposing passwords
     const usersListRes = await httpGet('/api/auth/users');
     assert(usersListRes.statusCode === 200 && usersListRes.data.success, 'GET /api/auth/users returns user directory');
-    const hasAuthProvider = usersListRes.data.data.some(u => u.auth_provider === 'email' || u.auth_provider === 'google');
-    assert(hasAuthProvider, 'Users list includes auth_provider metadata for multi-provider identity management');
+    assert(usersListRes.data.data.every((u) => u.password === undefined) && usersListRes.data.data.some((u) => u.auth_provider), 'Users list never exposes passwords and includes auth_provider metadata');
   } catch (err) {
     assert(false, 'API Endpoints check failed', err.message);
   }

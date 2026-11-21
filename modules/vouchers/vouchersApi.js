@@ -165,7 +165,8 @@ router.post('/', async (req, res) => {
           const qty = parseFloat(item.quantity) || 0;
           const rate = parseFloat(item.rate) || 0;
           const amt = qty * rate;
-          const direction = ['Purchase', 'Debit Note'].includes(voucher_type) ? 'IN' : 'OUT';
+          // Purchase and Credit Note (sales return) bring stock IN; Sales and Debit Note (purchase return) send it OUT
+          const direction = ['Purchase', 'Credit Note'].includes(voucher_type) ? 'IN' : 'OUT';
 
           if (item.stock_item_id && qty > 0) {
             await run(
@@ -181,10 +182,13 @@ router.post('/', async (req, res) => {
       if (bill_allocations && Array.isArray(bill_allocations)) {
         for (const b of bill_allocations) {
           if (b.ledger_id && b.amount) {
+            // A Credit/Debit Note settles an existing bill; it can never open a new receivable/payable
+            const isReturnNote = ['Credit Note', 'Debit Note'].includes(voucher_type);
+            const billType = isReturnNote && (!b.bill_type || b.bill_type === 'New Ref') ? 'Agst Ref' : (b.bill_type || 'New Ref');
             await run(
               `INSERT INTO bill_allocations (voucher_id, ledger_id, bill_type, bill_ref, amount, due_date)
                VALUES (?, ?, ?, ?, ?, ?)`,
-              [voucherId, b.ledger_id, b.bill_type || 'New Ref', b.bill_ref || vNo, parseFloat(b.amount) || 0, b.due_date || null]
+              [voucherId, b.ledger_id, billType, b.bill_ref || vNo, parseFloat(b.amount) || 0, b.due_date || null]
             );
           }
         }

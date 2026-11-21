@@ -13,14 +13,16 @@ const path = require('path');
 const crypto = require('crypto');
 
 // Resolve backup directory: data/100000/backups
-const DATA_DIR = path.resolve(__dirname, '..', 'data', '100000');
-const BACKUP_DIR = path.resolve(DATA_DIR, 'backups');
-const DB_PATH = path.resolve(DATA_DIR, 'company.db');
+// Use the exact directory the live database uses (handles dev, packaged app and test overrides)
+const dbModule = require('./db');
+// Resolved at call time so they follow the ACTIVE company after a switch
+const getBackupDir = () => path.resolve(dbModule.getDataDir(), 'backups');
+const getDbFile = () => path.resolve(dbModule.getDataDir(), 'company.db');
 const MAX_BACKUP_RETENTION = 30;
 
 function ensureBackupDir() {
-  if (!fs.existsSync(BACKUP_DIR)) {
-    fs.mkdirSync(BACKUP_DIR, { recursive: true });
+  if (!fs.existsSync(getBackupDir())) {
+    fs.mkdirSync(getBackupDir(), { recursive: true });
   }
 }
 
@@ -34,6 +36,24 @@ function calculateChecksum(filePath) {
   const data = fs.readFileSync(filePath);
   hash.update(data);
   return hash.digest('hex');
+}
+
+
+/**
+ * Writes a transactionally consistent copy of the live database (including any
+ * data still sitting in the WAL) to destPath. Copying company.db alone would omit
+ * recent commits when the database runs in WAL mode.
+ */
+async function snapshotDatabaseTo(destPath) {
+  try { if (fs.existsSync(destPath)) fs.unlinkSync(destPath); } catch (e) {}
+  try {
+    await dbModule.run(`VACUUM INTO '${destPath.replace(/'/g, "''")}'`);
+    if (fs.existsSync(destPath) && fs.statSync(destPath).size > 0) return;
+  } catch (e) {
+    console.warn('[Backup Engine] VACUUM INTO unavailable, falling back to WAL checkpoint:', e.message);
+  }
+  await dbModule.run('PRAGMA wal_checkpoint(TRUNCATE)');
+  fs.copyFileSync(getDbFile(), destPath);
 }
 
 /**
@@ -90,19 +110,22 @@ function decryptBuffer(packedBuffer, secretKey) {
 async function createBackup(options = {}) {
   ensureBackupDir();
 
-  if (!fs.existsSync(DB_PATH)) {
-    throw new Error(`Database file not found at: ${DB_PATH}`);
+  if (!fs.existsSync(getDbFile())) {
+    throw new Error(`Database file not found at: ${getDbFile()}`);
   }
 
   const timestamp = getTimestampString();
   const isEncrypted = Boolean(options.encrypt && options.password);
   const extension = isEncrypted ? '.sqlite.enc' : '.sqlite.bak';
   const filename = `backup_${timestamp}${extension}`;
-  const targetPath = path.join(BACKUP_DIR, filename);
-  const metaPath = path.join(BACKUP_DIR, `backup_${timestamp}.meta.json`);
+  const targetPath = path.join(getBackupDir(), filename);
+  const metaPath = path.join(getBackupDir(), `backup_${timestamp}.meta.json`);
 
   // Read current DB file bytes
-  let dbBytes = fs.readFileSync(DB_PATH);
+  const tmpSnap = path.join(getBackupDir(), `.snapshot_${timestamp}.tmp`);
+  await snapshotDatabaseTo(tmpSnap);
+  let dbBytes = fs.readFileSync(tmpSnap);
+  try { fs.unlinkSync(tmpSnap); } catch (e) {}
   const unencryptedChecksum = crypto.createHash('sha256').update(dbBytes).digest('hex');
 
   if (isEncrypted) {
@@ -143,10 +166,10 @@ async function createBackup(options = {}) {
 function pruneBackups() {
   try {
     ensureBackupDir();
-    const files = fs.readdirSync(BACKUP_DIR)
+    const files = fs.readdirSync(getBackupDir())
       .filter(f => f.endsWith('.bak') || f.endsWith('.enc'))
       .map(f => {
-        const full = path.join(BACKUP_DIR, f);
+        const full = path.join(getBackupDir(), f);
         return { name: f, time: fs.statSync(full).mtimeMs, path: full };
       })
       .sort((a, b) => b.time - a.time);
@@ -174,16 +197,16 @@ function pruneBackups() {
 function listBackups() {
   ensureBackupDir();
 
-  const files = fs.readdirSync(BACKUP_DIR)
+  const files = fs.readdirSync(getBackupDir())
     .filter(f => f.endsWith('.bak') || f.endsWith('.enc'))
     .sort()
     .reverse();
 
   return files.map(filename => {
-    const fullPath = path.join(BACKUP_DIR, filename);
+    const fullPath = path.join(getBackupDir(), filename);
     const stat = fs.statSync(fullPath);
     const baseName = filename.replace(/\.(sqlite\.(bak|enc))$/, '');
-    const metaPath = path.join(BACKUP_DIR, `${baseName}.meta.json`);
+    const metaPath = path.join(getBackupDir(), `${baseName}.meta.json`);
 
     let meta = {};
     if (fs.existsSync(metaPath)) {
@@ -219,7 +242,7 @@ async function restoreBackup(filename, options = {}) {
 
   // Prevent directory traversal attacks
   const safeFilename = path.basename(filename);
-  const targetBackupPath = path.join(BACKUP_DIR, safeFilename);
+  const targetBackupPath = path.join(getBackupDir(), safeFilename);
 
   if (!fs.existsSync(targetBackupPath)) {
     throw new Error(`Backup file "${safeFilename}" does not exist in backup archive.`);
@@ -228,10 +251,10 @@ async function restoreBackup(filename, options = {}) {
   // 1. Point-in-Time Safety: Take pre-restore rollback snapshot of active database
   const rollbackTimestamp = getTimestampString();
   const rollbackName = `rollback_pre_restore_${rollbackTimestamp}.sqlite.bak`;
-  const rollbackPath = path.join(BACKUP_DIR, rollbackName);
+  const rollbackPath = path.join(getBackupDir(), rollbackName);
 
-  if (fs.existsSync(DB_PATH)) {
-    fs.copyFileSync(DB_PATH, rollbackPath);
+  if (fs.existsSync(getDbFile())) {
+    await snapshotDatabaseTo(rollbackPath);
     console.log(`[Backup Engine] Pre-restore safety rollback created: ${rollbackName}`);
   }
 
@@ -256,11 +279,11 @@ async function restoreBackup(filename, options = {}) {
     }
 
     // 3. Atomically overwrite company.db
-    fs.writeFileSync(DB_PATH, backupBytes);
+    fs.writeFileSync(getDbFile(), backupBytes);
 
     // Remove WAL & SHM files if present so DB opens freshly
-    const walPath = `${DB_PATH}-wal`;
-    const shmPath = `${DB_PATH}-shm`;
+    const walPath = `${getDbFile()}-wal`;
+    const shmPath = `${getDbFile()}-shm`;
     if (fs.existsSync(walPath)) try { fs.unlinkSync(walPath); } catch (e) {}
     if (fs.existsSync(shmPath)) try { fs.unlinkSync(shmPath); } catch (e) {}
 
@@ -279,7 +302,7 @@ async function restoreBackup(filename, options = {}) {
     // If restore failed, try to recover from rollback snapshot
     if (fs.existsSync(rollbackPath)) {
       try {
-        fs.copyFileSync(rollbackPath, DB_PATH);
+        fs.copyFileSync(rollbackPath, getDbFile());
         if (typeof options.afterRestoreHook === 'function') {
           await options.afterRestoreHook();
         }
@@ -296,6 +319,10 @@ module.exports = {
   listBackups,
   restoreBackup,
   calculateChecksum,
-  BACKUP_DIR,
-  DB_PATH
+  getBackupDir,
+  getDbFile
 };
+
+// Backwards-compatible live values for code that still reads BACKUP_DIR / DB_PATH
+Object.defineProperty(module.exports, 'BACKUP_DIR', { enumerable: true, get: getBackupDir });
+Object.defineProperty(module.exports, 'DB_PATH', { enumerable: true, get: getDbFile });

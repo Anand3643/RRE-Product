@@ -5,6 +5,12 @@ const { get, all } = require('./db');
  * 100% Offline Standalone Intelligence
  */
 
+// Opening balance as a signed number: Dr positive, Cr negative (honours opening_balance_type)
+function signedOpening(l) {
+  const ob = Number(l.opening_balance) || 0;
+  return l.opening_balance_type === 'Cr' ? -ob : ob;
+}
+
 // Helper to format currency
 function formatCurrency(val) {
   const num = Number(val) || 0;
@@ -210,14 +216,14 @@ async function queryFinancialAgent(queryText) {
 
   // 1. Cash Balance Query
   if (query.includes('cash') && (query.includes('balance') || query.includes('how much') || query.includes('have'))) {
-    const cashLedger = await get("SELECT id, name, opening_balance FROM ledgers WHERE name LIKE '%Cash%' LIMIT 1");
+    const cashLedger = await get("SELECT id, name, opening_balance, opening_balance_type FROM ledgers WHERE name LIKE '%Cash%' LIMIT 1");
     if (!cashLedger) return { answer: "No Cash Account found in your Chart of Accounts.", cards: [] };
 
     const flow = await get(
       "SELECT COALESCE(SUM(debit_amount), 0) as dr, COALESCE(SUM(credit_amount), 0) as cr FROM ledger_entries WHERE ledger_id = ?",
       [cashLedger.id]
     );
-    const balance = (cashLedger.opening_balance || 0) + (flow.dr - flow.cr);
+    const balance = signedOpening(cashLedger) + (flow.dr - flow.cr);
 
     return {
       answer: `Your current **Cash-in-Hand** balance is **${formatCurrency(balance)}**. ${balance < 0 ? '⚠️ **Warning:** Negative cash balance detected. Please record capital introduction or cash receipts.' : 'Cash balance is healthy.'}`,
@@ -228,14 +234,14 @@ async function queryFinancialAgent(queryText) {
 
   // 2. Bank Balance Query
   if (query.includes('bank') && (query.includes('balance') || query.includes('how much') || query.includes('have'))) {
-    const bankLedgers = await all("SELECT id, name, opening_balance FROM ledgers WHERE name LIKE '%Bank%' OR name LIKE '%HDFC%' OR name LIKE '%SBI%'");
+    const bankLedgers = await all("SELECT id, name, opening_balance, opening_balance_type FROM ledgers WHERE name LIKE '%Bank%' OR name LIKE '%HDFC%' OR name LIKE '%SBI%'");
     if (!bankLedgers || bankLedgers.length === 0) return { answer: "No active Bank Accounts found in the Chart of Accounts.", cards: [] };
 
     let totalBank = 0;
     const bankDetails = [];
     for (const b of bankLedgers) {
       const flow = await get("SELECT COALESCE(SUM(debit_amount), 0) as dr, COALESCE(SUM(credit_amount), 0) as cr FROM ledger_entries WHERE ledger_id = ?", [b.id]);
-      const bal = (b.opening_balance || 0) + (flow.dr - flow.cr);
+      const bal = signedOpening(b) + (flow.dr - flow.cr);
       totalBank += bal;
       bankDetails.push({ name: b.name, balance: bal });
     }
@@ -263,7 +269,7 @@ async function queryFinancialAgent(queryText) {
   // 4. Debtors / Who owes money
   if (query.includes('debtor') || query.includes('owes us') || query.includes('receivable') || query.includes('customers')) {
     const debtors = await all(`
-      SELECT l.id, l.name, l.opening_balance,
+      SELECT l.id, l.name, l.opening_balance, l.opening_balance_type,
              COALESCE(SUM(le.debit_amount), 0) as total_dr,
              COALESCE(SUM(le.credit_amount), 0) as total_cr
       FROM ledgers l
@@ -275,7 +281,7 @@ async function queryFinancialAgent(queryText) {
 
     const outstanding = debtors.map(d => ({
       name: d.name,
-      balance: (d.opening_balance || 0) + (d.total_dr - d.total_cr)
+      balance: signedOpening(d) + (d.total_dr - d.total_cr)
     })).filter(d => d.balance > 0).sort((a, b) => b.balance - a.balance);
 
     const totalReceivable = outstanding.reduce((s, d) => s + d.balance, 0);
@@ -294,7 +300,7 @@ async function queryFinancialAgent(queryText) {
   // 5. Creditors / Payables
   if (query.includes('creditor') || query.includes('we owe') || query.includes('payable') || query.includes('suppliers') || query.includes('vendors')) {
     const creditors = await all(`
-      SELECT l.id, l.name, l.opening_balance,
+      SELECT l.id, l.name, l.opening_balance, l.opening_balance_type,
              COALESCE(SUM(le.debit_amount), 0) as total_dr,
              COALESCE(SUM(le.credit_amount), 0) as total_cr
       FROM ledgers l
@@ -306,7 +312,7 @@ async function queryFinancialAgent(queryText) {
 
     const outstanding = creditors.map(c => ({
       name: c.name,
-      balance: (c.opening_balance || 0) + (c.total_cr - c.total_dr)
+      balance: -signedOpening(c) + (c.total_cr - c.total_dr)
     })).filter(c => c.balance > 0).sort((a, b) => b.balance - a.balance);
 
     const totalPayable = outstanding.reduce((s, c) => s + c.balance, 0);
@@ -348,11 +354,11 @@ async function scanFinancialAnomalies() {
   const issues = [];
 
   // Check 1: Negative Cash
-  const cashLedger = await get("SELECT id, name, opening_balance FROM ledgers WHERE name LIKE '%Cash%' LIMIT 1");
+  const cashLedger = await get("SELECT id, name, opening_balance, opening_balance_type FROM ledgers WHERE name LIKE '%Cash%' LIMIT 1");
   let cashBal = 0;
   if (cashLedger) {
     const cashFlow = await get("SELECT COALESCE(SUM(debit_amount - credit_amount), 0) as net FROM ledger_entries WHERE ledger_id = ?", [cashLedger.id]);
-    cashBal = (cashLedger.opening_balance || 0) + cashFlow.net;
+    cashBal = signedOpening(cashLedger) + cashFlow.net;
     if (cashBal < 0) {
       issues.push({
         severity: 'CRITICAL',
@@ -384,11 +390,11 @@ async function scanFinancialAnomalies() {
   }
 
   // Check 3: Total Bank Liquidity
-  const bankLedgers = await all("SELECT id, name, opening_balance FROM ledgers WHERE name LIKE '%Bank%' OR name LIKE '%HDFC%' OR name LIKE '%SBI%'");
+  const bankLedgers = await all("SELECT id, name, opening_balance, opening_balance_type FROM ledgers WHERE name LIKE '%Bank%' OR name LIKE '%HDFC%' OR name LIKE '%SBI%'");
   let totalBank = 0;
   for (const b of bankLedgers) {
     const flow = await get("SELECT COALESCE(SUM(debit_amount - credit_amount), 0) as net FROM ledger_entries WHERE ledger_id = ?", [b.id]);
-    totalBank += (b.opening_balance || 0) + flow.net;
+    totalBank += signedOpening(b) + flow.net;
   }
 
   // Check 4: Stock Items with zero or low quantity

@@ -102,7 +102,7 @@ RRE Tally implements the 13 enterprise system pillars designed for high-reliabil
 
 1. **Secrets Management**: Zero API keys or hardcoded secrets. Server reads from `.env` or system environment with zero-config safe offline defaults. No secrets exposed to frontend.
 2. **Security & Parameterized SQL**: 100% parameterized SQLite queries preventing SQL injection. Strict HTTP security headers (`X-Content-Type-Options: nosniff`, `X-Frame-Options: SAMEORIGIN`, CSP, Referrer-Policy).
-3. **Authentication & RBAC**: Role-Based Access Control with 6 security tiers (Owner, Accountant, Data Entry, Auditor, Viewer, Guest). PBKDF2 password hashing with 10,000 iterations & cryptographic salt. Brute-force rate limiting on `/api/auth/login`.
+3. **Authentication & RBAC**: Role-Based Access Control with 5 security tiers (Owner, Accountant, Data Entry, Auditor, Viewer), enforced on the server for every API route. There are no default passwords and no guest access: on first start the person installing the application chooses the administrator password; accounts created by an administrator (or still on a temporary password) must choose their own at first login; passwords need at least 10 characters with letters and numbers; self-registration and Google sign-in are off. PBKDF2 password hashing with 10,000 iterations & cryptographic salt. Brute-force rate limiting on `/api/auth/login`.
 4. **Encryption**: Passwords cryptographically hashed at rest. HMAC-SHA256 session token generation and verification. Optional AES-256-GCM encrypted database backup archives.
 5. **Disaster Recovery & Point-in-Time Backups**: Automated snapshot backups (`data/100000/backups/`) with SHA-256 checksum integrity verification. Automatic rollback snapshots taken prior to restore drills or data resets. 1-click backup and restore from the UI (`Alt+Y: Data`).
 6. **Monitoring & Health Checks**: Comprehensive diagnostic endpoint (`GET /api/health`) reporting system uptime, SQLite WAL status, integrity check, disk usage, memory telemetry, and active record counts.
@@ -143,3 +143,9 @@ Open in browser:
 - Web Application: **[http://localhost:4000](http://localhost:4000)**
 - Tally Native XML Gateway: **[http://localhost:9000](http://localhost:9000)**
 - Tally Configuration: [tally.ini](file:///c:/Users/Admin/Desktop/RRE%20PRoduct/tally.ini)
+
+## Voice assistant (multilingual)
+
+A mic button (bottom-left, or `Alt+Shift+V`) lets you open screens and ask questions in many languages, including mixed-language speech. It understands 18 languages (English, Tamil, Hindi, Telugu, Malayalam, Kannada, Bengali, Marathi, Gujarati, Punjabi, Urdu, Arabic, French, German, Spanish, Chinese, Japanese, Korean); more can be added with JSON files. Voice only opens screens and reads answers; it never saves accounting entries, and sensitive commands wait for you to check and confirm the recognised text.
+
+Speech recognition runs **on this computer**: the Owner installs a Whisper model once from the Voice panel (downloaded from huggingface.co, no account or key), after which it works offline and the language is detected automatically. Accuracy depends on the model size and the language: English and Hindi are good with the recommended `small` model, Tamil is fair, and Telugu, Malayalam and Kannada are often wrong at this size. Typing a command always works. Optional online transcription (an Owner-configured service) is off unless configured and needs each user's consent.

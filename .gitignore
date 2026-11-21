@@ -16,3 +16,18 @@ build/
 *.log
 .DS_Store
 Thumbs.db
+
+# Browser/Electron profile created when running the app locally (never commit)
+.tally-profile/
+
+# Credentials, keys and local secrets (never commit)
+*.pem
+*.key
+*.p12
+*.pfx
+.session_secret
+.env.production
+.env.*.local
+
+# On-device speech model files (large, downloaded on demand)
+models/

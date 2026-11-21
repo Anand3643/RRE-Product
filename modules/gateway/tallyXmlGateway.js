@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const xml2js = require('xml2js');
 const { get, all } = require('../../core/db');
+const { xmlEsc } = require('../../core/xml');
 const { calculateBalanceSheet, calculateProfitLoss, calculateAllLedgerBalances, calculateClosingStockValuation } = require('../../core/accountingEngine');
 
 // Handle Tally XML Protocol (Standard Tally 9000 Port Request)
@@ -49,8 +50,8 @@ router.post(['/', '/tally-xml'], async (req, res) => {
     <DATA>
       <TALLYMESSAGE xmlns:UDF="TallyUDF">
         <COMPANY>
-          <NAME>${compName}</NAME>
-          <GSTIN>${compGstin}</GSTIN>
+          <NAME>${xmlEsc(compName)}</NAME>
+          <GSTIN>${xmlEsc(compGstin)}</GSTIN>
         </COMPANY>
 `;
 
@@ -75,8 +76,8 @@ router.post(['/', '/tally-xml'], async (req, res) => {
       // Trial Balance / All Accounts
       const ledgers = await calculateAllLedgerBalances();
       for (const l of ledgers) {
-        xmlResponse += `        <LEDGER NAME="${l.name}">
-          <PARENT>${l.group_name}</PARENT>
+        xmlResponse += `        <LEDGER NAME="${xmlEsc(l.name)}">
+          <PARENT>${xmlEsc(l.group_name)}</PARENT>
           <CLOSINGBALANCE>${l.closing_type === 'Cr' ? '-' : ''}${l.closing_balance}</CLOSINGBALANCE>
           <NETDEBIT>${l.net_debit}</NETDEBIT>
           <NETCREDIT>${l.net_credit}</NETCREDIT>
@@ -93,7 +94,7 @@ router.post(['/', '/tally-xml'], async (req, res) => {
     res.setHeader('Content-Type', 'text/xml');
     res.send(xmlResponse);
   } catch (err) {
-    res.status(500).send(`<ENVELOPE><HEADER><STATUS>0</STATUS><ERROR>${err.message}</ERROR></HEADER></ENVELOPE>`);
+    res.status(500).send(`<ENVELOPE><HEADER><STATUS>0</STATUS><ERROR>${xmlEsc(err.message)}</ERROR></HEADER></ENVELOPE>`);
   }
 });
 
