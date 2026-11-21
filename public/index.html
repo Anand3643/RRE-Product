@@ -357,8 +357,38 @@
           <p class="text-xs text-slate-500">Real-time financial telemetry with instant drill-down reporting</p>
         </div>
         <div class="flex items-center space-x-2">
+          <button onclick="toggleAiCopilot()" class="px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded text-xs font-bold transition flex items-center space-x-1 shadow-sm">
+            <i data-lucide="bot" class="w-3.5 h-3.5 text-amber-300"></i>
+            <span>AI Copilot (Alt+A)</span>
+          </button>
           <button onclick="showGateway()" class="px-3 py-1.5 bg-[#1f3a52] hover:bg-[#162a3b] text-white rounded text-xs font-bold transition">
             Gateway of Tally (Esc)
+          </button>
+        </div>
+      </div>
+
+      <!-- AI Assistance & Anomaly Insights Banner -->
+      <div class="bg-gradient-to-r from-slate-950 via-indigo-950 to-slate-900 border border-indigo-500/40 rounded-lg p-3.5 text-white shadow-md flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div class="flex items-center space-x-3">
+          <div class="w-8 h-8 rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-500 flex items-center justify-center shadow-md shrink-0">
+            <i data-lucide="sparkles" class="w-4 h-4 text-white"></i>
+          </div>
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="font-bold text-xs text-white">RRE AI Financial Intelligence &amp; Anomaly Audit</span>
+              <span id="dash-ai-score-badge" class="px-2 py-0.2 rounded-full text-[10px] font-black bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono">100% Health</span>
+            </div>
+            <p id="dash-ai-summary" class="text-[11px] text-slate-300">Continuous double-entry verification active. Zero mathematical discrepancies detected.</p>
+          </div>
+        </div>
+        <div class="flex items-center space-x-2 shrink-0">
+          <button onclick="toggleAiCopilot()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-bold transition flex items-center space-x-1 shadow-sm">
+            <i data-lucide="bot" class="w-3.5 h-3.5 text-amber-300"></i>
+            <span>Ask AI Copilot</span>
+          </button>
+          <button onclick="toggleAiWorkspaceView()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-indigo-500/40 rounded text-xs font-bold transition flex items-center space-x-1">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-emerald-300"></i>
+            <span>AI Workspace</span>
           </button>
         </div>
       </div>
@@ -748,10 +778,77 @@
               <span>Go To (Alt+G)</span>
             </button>
           </div>
+
+          <!-- Gateway Left: AI Assistance & Copilot Portion -->
+          <div class="mt-3 p-3 bg-gradient-to-br from-indigo-950 via-slate-900 to-purple-950 rounded-lg border border-indigo-500/40 text-white shadow-md space-y-2">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center space-x-1.5">
+                <div class="w-6 h-6 rounded-md bg-gradient-to-tr from-purple-500 to-indigo-500 flex items-center justify-center shadow-sm">
+                  <i data-lucide="sparkles" class="w-3.5 h-3.5 text-white"></i>
+                </div>
+                <div>
+                  <span class="text-xs font-black tracking-tight text-white block">AI Copilot &amp; Assistance</span>
+                  <span class="text-[9px] text-indigo-300 font-mono">100% Offline NLP Engine</span>
+                </div>
+              </div>
+              <span class="px-1.5 py-0.5 rounded text-[9px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center space-x-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>Active</span>
+              </span>
+            </div>
+            <p class="text-[11px] text-slate-300 leading-snug">Draft balanced vouchers from plain English, query balances, or run automated compliance audits.</p>
+            <div class="grid grid-cols-2 gap-1.5 pt-0.5">
+              <button onclick="toggleAiCopilot()" class="py-1.5 px-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded font-bold text-[11px] flex items-center justify-center space-x-1 transition shadow-sm" title="AI Assistant Chat Drawer (Alt+A)">
+                <i data-lucide="bot" class="w-3 h-3 text-amber-300"></i>
+                <span>Copilot (Alt+A)</span>
+              </button>
+              <button onclick="toggleAiWorkspaceView()" class="py-1.5 px-2 bg-purple-900/90 hover:bg-purple-800 text-purple-200 border border-purple-500/40 rounded font-bold text-[11px] flex items-center justify-center space-x-1 transition shadow-sm" title="AI Executive Workspace (W)">
+                <i data-lucide="layout-grid" class="w-3 h-3 text-emerald-300"></i>
+                <span>Workspace (W)</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         <!-- Right Panel: Gateway Menu List (Masters, Transactions, Utilities, Reports, Quit) -->
         <div class="p-5 space-y-3.5">
+          <!-- AI ASSISTANCE MENU PORTION -->
+          <div>
+            <div class="text-[10px] font-black text-indigo-700 uppercase tracking-widest px-3 mb-1 flex items-center justify-between">
+              <span>AI Assistance &amp; Copilot</span>
+              <span class="text-[9px] bg-gradient-to-r from-purple-100 to-indigo-100 text-indigo-900 px-1.5 py-0.2 rounded font-extrabold border border-indigo-200">Smart NLP</span>
+            </div>
+            <div class="space-y-0.5">
+              <div onclick="toggleAiWorkspaceView()" class="gateway-item font-bold text-indigo-950 bg-gradient-to-r from-indigo-50/80 to-purple-50/80 border border-indigo-200/60 hover:bg-indigo-600 hover:text-white">
+                <span class="flex items-center space-x-1.5">
+                  <i data-lucide="sparkles" class="w-3.5 h-3.5 text-purple-600 group-hover:text-amber-300"></i>
+                  <span>AI <span class="hotkey">W</span>orkspace</span>
+                </span>
+                <span class="text-[10px] font-mono text-indigo-600 font-bold">Executive Hub</span>
+              </div>
+              <div onclick="toggleAiCopilot()" class="gateway-item">
+                <span class="flex items-center space-x-1.5">
+                  <i data-lucide="bot" class="w-3.5 h-3.5 text-indigo-600"></i>
+                  <span>AI C<span class="hotkey">o</span>pilot Drafter</span>
+                </span>
+                <span class="text-[10px] text-slate-400 font-mono">Alt+A</span>
+              </div>
+              <div onclick="openOmniSearchModal()" class="gateway-item">
+                <span class="flex items-center space-x-1.5">
+                  <i data-lucide="search" class="w-3.5 h-3.5 text-indigo-600"></i>
+                  <span>As<span class="hotkey">k</span> AI / Omni-Search</span>
+                </span>
+                <span class="text-[10px] text-slate-400 font-mono">Ctrl+K</span>
+              </div>
+              <div onclick="openAiDocParserModal()" class="gateway-item">
+                <span class="flex items-center space-x-1.5">
+                  <i data-lucide="file-text" class="w-3.5 h-3.5 text-purple-600"></i>
+                  <span>AI <span class="hotkey">I</span>nvoice / Bill Parser</span>
+                </span>
+                <span class="text-[10px] text-slate-400 font-mono">OCR Text</span>
+              </div>
+            </div>
+          </div>
           <!-- MASTERS -->
           <div>
             <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">Masters</div>
@@ -963,11 +1060,39 @@
               As Voucher (Dr/Cr)
             </button>
           </div>
+          <button type="button" onclick="toggleVoucherAiAssistBar()" class="px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded text-[11px] font-bold flex items-center space-x-1 shadow-sm transition" title="Auto-fill with AI Assistant">
+            <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-300"></i>
+            <span>AI Assist</span>
+          </button>
           <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs text-white">Esc: Quit</button>
         </div>
       </div>
 
-      <form id="form-voucher" onsubmit="handleSaveVoucher(event)" class="p-6 space-y-5 text-xs">
+      <form id="form-voucher" onsubmit="handleSaveVoucher(event)" class="p-6 space-y-4 text-xs">
+        <!-- AI Voucher Assistant Quick Bar -->
+        <div id="voucher-ai-assist-bar" class="p-3 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 border border-indigo-500/40 rounded-lg text-white shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <div class="flex items-center space-x-2 shrink-0">
+            <div class="w-6 h-6 rounded bg-gradient-to-tr from-purple-500 to-indigo-500 flex items-center justify-center shadow">
+              <i data-lucide="sparkles" class="w-3.5 h-3.5 text-white"></i>
+            </div>
+            <div>
+              <span class="font-black text-xs text-white">AI Voucher Auto-Fill</span>
+              <span class="hidden md:inline text-[10px] text-indigo-300 ml-1.5 font-normal">Type natural English to auto-draft</span>
+            </div>
+          </div>
+          <div class="flex-1 flex items-center space-x-1.5">
+            <input type="text" id="voucher-ai-prompt-input"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();handleVoucherAiAutoFill();}"
+                   placeholder="e.g. Paid Office Rent 15000 via Bank, or Sold 5 Compressors to Apex Tech at 45000 with 18% GST..."
+                   class="flex-1 bg-slate-900 border border-indigo-500/50 rounded px-3 py-1.5 text-xs text-white placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-indigo-400 font-sans shadow-inner">
+            <button type="button" onclick="handleVoucherAiAutoFill()" id="btn-v-ai-autofill"
+                    class="px-3.5 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded font-bold text-xs transition flex items-center space-x-1 shadow-md shrink-0">
+              <i data-lucide="wand-2" class="w-3 h-3 text-amber-300"></i>
+              <span>Auto-Fill</span>
+            </button>
+          </div>
+        </div>
+
         <!-- Header Metadata: Type, Number, Date, Reference -->
         <div class="grid grid-cols-1 sm:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-lg border border-slate-200">
           <div>
@@ -1689,6 +1814,17 @@
     <button onclick="openF12ConfigModal()" class="tally-v-btn" title="Configuration (F12)">
       <span class="fn-badge bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-300 shrink-0">F12</span>
       <span class="truncate">Configure</span>
+    </button>
+
+    <div class="h-[1px] bg-slate-300 my-1"></div>
+    <div class="text-[9px] font-black text-indigo-700 uppercase tracking-widest px-1 pt-0.5">AI Assistance</div>
+    <button onclick="toggleAiCopilot()" class="tally-v-btn bg-indigo-50 hover:bg-indigo-600 hover:text-white border-indigo-200 text-indigo-950 font-bold transition" title="AI Copilot Assistant (Alt+A)">
+      <span class="fn-badge bg-gradient-to-tr from-purple-600 to-indigo-600 text-white px-1 py-0.5 rounded text-[9px] font-mono font-bold shrink-0">AI</span>
+      <span class="truncate">Copilot (Alt+A)</span>
+    </button>
+    <button onclick="toggleAiWorkspaceView()" class="tally-v-btn bg-purple-50 hover:bg-purple-700 hover:text-white border-purple-200 text-purple-950 font-bold transition" title="AI Executive Workspace (Alt+W)">
+      <span class="fn-badge bg-purple-700 text-white px-1 py-0.5 rounded text-[9px] font-mono font-bold shrink-0">⚡</span>
+      <span class="truncate">Workspace (W)</span>
     </button>
   </aside>
 </div>
@@ -3249,6 +3385,20 @@ TOTAL PAYABLE: Rs. 53,100.00"
       </div>
     </div>
   </div>
+
+  <!-- ============================================== -->
+  <!-- FLOATING AI ASSISTANT QUICK TRIGGER BUBBLE     -->
+  <!-- ============================================== -->
+  <button id="floating-ai-assistant-btn" onclick="toggleAiCopilot()"
+          title="AI Assistant (Alt+A)"
+          class="fixed bottom-10 right-6 z-40 px-3.5 py-2.5 bg-gradient-to-r from-purple-600 via-indigo-600 to-blue-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-full shadow-2xl border border-indigo-400/50 flex items-center space-x-2 transition-all transform hover:scale-105 active:scale-95 group cursor-pointer">
+    <div class="relative flex items-center justify-center">
+      <i data-lucide="sparkles" class="w-4 h-4 text-amber-300 animate-pulse"></i>
+      <span class="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-400"></span>
+    </div>
+    <span class="font-extrabold text-xs tracking-wide">AI Assistant</span>
+    <span class="px-1.5 py-0.2 rounded text-[9px] font-mono bg-black/40 border border-white/20 text-slate-200">Alt+A</span>
+  </button>
 
   <!-- ============================================== -->
   <!-- TALLY BOTTOM STATUS BAR                        -->

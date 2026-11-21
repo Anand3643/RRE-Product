@@ -1171,6 +1171,25 @@ async function loadDashboard() {
       </div>
     `).join('') || '<div class="text-slate-400">No stock items</div>';
 
+    // AI Financial Intelligence & Anomaly Banner update
+    try {
+      const aiRes = await fetchApi('/ai/insights');
+      const aiJson = await aiRes.json();
+      if (aiJson.success) {
+        const badge = document.getElementById('dash-ai-score-badge');
+        const summary = document.getElementById('dash-ai-summary');
+        if (badge) {
+          badge.textContent = `${aiJson.health_score}% Compliance`;
+          badge.className = `px-2 py-0.2 rounded-full text-[10px] font-black font-mono ${aiJson.health_score >= 80 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40' : 'bg-amber-500/20 text-amber-300 border border-amber-500/40'}`;
+        }
+        if (summary) {
+          summary.textContent = aiJson.issues?.length > 0
+            ? `${aiJson.issues.length} anomaly detected: ${aiJson.issues[0].title}. Click Ask AI Copilot to resolve.`
+            : `Continuous double-entry verification active: ${aiJson.metrics?.voucher_count || 0} balanced vouchers, zero discrepancies.`;
+        }
+      }
+    } catch (e) {}
+
   } catch (err) {
     console.error('Failed to load Dashboard tiles:', err);
   }
@@ -1495,7 +1514,7 @@ function addDoubleEntryRow(defaultType = 'Dr', defaultLedger = '', defaultAmt = 
   const tbody = document.getElementById('voucher-entries-tbody');
   const rowId = `entry-row-${Date.now()}-${Math.floor(Math.random()*1000)}`;
 
-  const ledgerOptions = appState.ledgers.map(l => `<option value="${l.id}" ${l.name === defaultLedger ? 'selected' : ''}>${l.name} (${l.group_name})</option>`).join('');
+  const ledgerOptions = appState.ledgers.map(l => `<option value="${l.id}" ${l.name === defaultLedger || String(l.id) === String(defaultLedger) ? 'selected' : ''}>${l.name} (${l.group_name})</option>`).join('');
   const costCentreOptions = `<option value="">None</option>` + (appState.costCentres || []).map(c => `<option value="${c.id}">${c.name}</option>`).join('');
 
   const tr = document.createElement('tr');
@@ -1589,6 +1608,88 @@ function recalculateAccountingTotals() {
   } else {
     ind.className = 'text-xs font-bold px-3 py-1 rounded bg-red-100 text-red-800';
     ind.textContent = `Out of Balance! Difference: ${formatCurrency(diff)}`;
+  }
+}
+
+// ----------------------------------------------------
+// AI VOUCHER ASSISTANT AUTO-FILL
+// ----------------------------------------------------
+function toggleVoucherAiAssistBar() {
+  const bar = document.getElementById('voucher-ai-assist-bar');
+  if (!bar) return;
+  bar.classList.toggle('hidden');
+  const inp = document.getElementById('voucher-ai-prompt-input');
+  if (inp && !bar.classList.contains('hidden')) {
+    setTimeout(() => inp.focus(), 50);
+  }
+}
+
+async function handleVoucherAiAutoFill() {
+  const input = document.getElementById('voucher-ai-prompt-input');
+  const prompt = (input?.value || '').trim();
+  if (!prompt) {
+    alert('Please enter a business transaction sentence (e.g. "Paid Office Rent 15000 via Bank" or "Sold 5 Compressors to Apex Tech at 45000 with 18% GST")');
+    if (input) input.focus();
+    return;
+  }
+
+  const btn = document.getElementById('btn-v-ai-autofill');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader-2" class="w-3.5 h-3.5 animate-spin"></i><span>Auto-filling...</span>';
+    if (window.lucide) window.lucide.createIcons();
+  }
+
+  try {
+    const res = await fetchApi('/ai/parse-voucher', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt })
+    });
+    const data = await res.json();
+    if (!data.success || !data.interpreted) {
+      throw new Error(data.error || 'AI could not interpret the voucher prompt');
+    }
+
+    const inter = data.interpreted;
+    // Set voucher type
+    if (inter.voucher_type && inter.voucher_type !== appState.currentVoucherType) {
+      appState.currentVoucherType = inter.voucher_type;
+      const sel = document.getElementById('v-select-type');
+      if (sel) sel.value = inter.voucher_type;
+      updateVoucherMeta(inter.voucher_type);
+    }
+
+    // Switch to manual mode for strict balanced double-entry
+    setVoucherMode('manual');
+
+    // Populate entries table
+    const tbody = document.getElementById('voucher-entries-tbody');
+    if (tbody && Array.isArray(inter.entries) && inter.entries.length > 0) {
+      tbody.innerHTML = '';
+      inter.entries.forEach(e => {
+        const type = e.debit_amount > 0 ? 'Dr' : 'Cr';
+        const amt = e.debit_amount > 0 ? e.debit_amount : e.credit_amount;
+        addDoubleEntryRow(type, e.ledger_id, amt);
+      });
+      recalculateAccountingTotals();
+    }
+
+    // Set narration
+    const narr = document.getElementById('v-narration');
+    if (narr) {
+      narr.value = inter.narration || prompt;
+    }
+
+    alert(`✨ AI Assistant auto-filled voucher as ${inter.voucher_type} (${formatCurrency(inter.total_amount)})! Mathematical double-entry balanced.`);
+  } catch (err) {
+    alert(`AI Voucher Assist error: ${err.message}`);
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.innerHTML = '<i data-lucide="wand-2" class="w-3 h-3 text-amber-300"></i><span>Auto-Fill</span>';
+      if (window.lucide) window.lucide.createIcons();
+    }
   }
 }
 
@@ -3358,6 +3459,13 @@ function setupKeyboardShortcuts() {
       return;
     }
 
+    // Alt+W: AI Executive Workspace Toggle
+    if (e.altKey && (e.key === 'w' || e.key === 'W')) {
+      e.preventDefault();
+      toggleAiWorkspaceView();
+      return;
+    }
+
     // Ctrl+N: Calculator
     if (e.ctrlKey && (e.key === 'n' || e.key === 'N')) {
       e.preventDefault();
@@ -3468,6 +3576,9 @@ function setupKeyboardShortcuts() {
     // Gateway Single-Key Shortcuts (when on Gateway screen and not typing)
     if (!isInput && appState.currentView === 'view-gateway') {
       const k = e.key.toUpperCase();
+      if (k === 'W') { e.preventDefault(); toggleAiWorkspaceView(); return; }
+      if (k === 'O') { e.preventDefault(); toggleAiCopilot(); return; }
+      if (k === 'I') { e.preventDefault(); openAiDocParserModal(); return; }
       if (k === 'C') { e.preventDefault(); openMasterCreateModal(); return; }
       if (k === 'A') { e.preventDefault(); openMasterAlterModal(); return; }
       if (k === 'H') { e.preventDefault(); openReport('chart-accounts'); return; }
