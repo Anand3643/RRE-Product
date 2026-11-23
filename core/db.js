@@ -499,7 +499,7 @@ async function seedTallyMasters(force = false) {
   if (comp.count === 0) {
     await run(`
       INSERT INTO company_info (company_number, name, formal_name, financial_year_from, books_beginning_from, gstin, pan, address, state, state_code, pin_code)
-      VALUES ('100000', 'RRE Tally', 'M/s. RRE TALLY', '2026-04-01', '2026-04-01', '', '', '', 'Tamil Nadu', '33', '')
+      VALUES ('100000', 'RRE Entries', 'M/s. RRE ENTRIES', '2026-04-01', '2026-04-01', '', '', '', 'Tamil Nadu', '33', '')
     `);
   }
 
