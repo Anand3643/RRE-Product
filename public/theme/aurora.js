@@ -62,21 +62,38 @@
     ['sep'],
     ['Inventory', 'boxes', () => (window.RREInventoryGo ? window.RREInventoryGo('/admin') : null), ['__inventory'], 'inv']
   ];
+  // Inventory lives in the rail only: its features open from this list (the screens themselves are the original inventory application)
+  const INV_SUB = [['Dashboard', '/admin'], ['Items', '/products'], ['Stock levels', '/inventory'], ['Warehouses', '/warehouses'], ['Transfers', '/transfers'], ['Adjustments', '/adjustments'], ['Sales Orders', '/sales-orders'], ['Purchase Orders', '/purchase-orders'],
+    ['Customers', '/customers'], ['Vendors', '/vendors'], ['Packages', '/packages'], ['Shipments', '/shipments'], ['Reports', '/reports'], ['AI Insights', '/insights'], ['Users', '/team'], ['Settings', '/settings']];
+  const railItem = (it, i) => {
+    if (it[0] === 'sep') return '<div class="sep"></div>';
+    const inv = it[4] === 'inv';
+    return `<button type="button" class="item ${it[4] || ''}" data-i="${i}" title="${esc(it[0])}"${inv ? ' aria-expanded="false" aria-controls="au-inv-sub"' : ''}><i data-lucide="${it[1]}"></i><span class="lbl">${esc(it[0])}</span>${inv ? '<i class="chev" data-lucide="chevron-right"></i>' : ''}</button>`
+      + (inv ? `<div class="sub" id="au-inv-sub" role="group" aria-label="Inventory features">${INV_SUB.map((s) => `<button type="button" data-path="${esc(s[1])}">${esc(s[0])}</button>`).join('')}</div>` : '');
+  };
+  function toggleInvMenu(force) {
+    const b = $('#au-rail button.item.inv'), sub = $('#au-inv-sub'); if (!b || !sub) return;
+    const open = force == null ? !sub.classList.contains('open') : force;
+    if (open && !doc.body.classList.contains('au-rail-open')) { doc.body.classList.add('au-rail-open'); store.set('au_rail_open', '1'); }
+    sub.classList.toggle('open', open); b.classList.toggle('open', open); b.setAttribute('aria-expanded', open ? 'true' : 'false'); setTimeout(moveInd, 60); setTimeout(moveInd, 400);
+  }
   let railEl = null;
   function rail() {
     if (railEl) return;
     railEl = doc.createElement('nav'); railEl.id = 'au-rail'; railEl.setAttribute('aria-label', 'Main navigation');
     const logo = 'rre_icon.png';
-    railEl.innerHTML = `<div class="brand"><img src="${logo}" alt=""><span class="lbl">RRE Entries</span></div><div class="nav"><div class="ind"></div>${ITEMS.map((it, i) => (it[0] === 'sep' ? '<div class="sep"></div>' : `<button type="button" class="item ${it[4] || ''}" data-i="${i}" title="${esc(it[0])}"><i data-lucide="${it[1]}"></i><span class="lbl">${esc(it[0])}</span></button>`)).join('')}</div>
+    railEl.innerHTML = `<div class="brand"><img src="${logo}" alt=""><span class="lbl">RRE Entries</span></div><div class="nav"><div class="ind"></div>${ITEMS.map(railItem).join('')}</div>
       <div class="foot"><button type="button" class="item" data-act="users" title="Users & security"><i data-lucide="users"></i><span class="lbl">Users</span></button><button type="button" class="item" data-act="theme" title="Theme (Alt+T)"><i data-lucide="palette"></i><span class="lbl">Theme</span></button><button type="button" class="item" data-act="collapse" title="Collapse / expand"><i data-lucide="panel-left"></i><span class="lbl">Collapse</span></button></div>`;
     doc.body.appendChild(railEl);
     if (store.get('au_rail_open') === '1') doc.body.classList.add('au-rail-open');
     railEl.addEventListener('click', (e) => {
+      const sb = e.target.closest('.sub button[data-path]'); if (sb) { try { window.RREInventoryGo(sb.dataset.path); } catch (err) { /* ignore */ } return; }
       const b = e.target.closest('button.item'); if (!b) return;
+      if (b.classList.contains('inv')) { const wasOpen = $('#au-inv-sub').classList.contains('open'); toggleInvMenu(); if (!wasOpen || !$('#rre-inv-host') || !$('#rre-inv-host').classList.contains('open')) { try { window.RREInventoryGo('/admin'); } catch (err) { /* ignore */ } } return; }
       if (b.dataset.act === 'collapse') { doc.body.classList.toggle('au-rail-open'); store.set('au_rail_open', doc.body.classList.contains('au-rail-open') ? '1' : '0'); setTimeout(moveInd, 380); return; }
       if (b.dataset.act === 'users') { if (typeof openUserManagement === 'function') openUserManagement(); return; }
       if (b.dataset.act === 'theme') { if (typeof openThemeSelectorModal === 'function') openThemeSelectorModal(); return; }
-      const it = ITEMS[+b.dataset.i]; try { it[2](); } catch (err) { console.warn('[Aurora] navigation:', err.message); }
+      const it = ITEMS[+b.dataset.i]; if (window.RREInventory) window.RREInventory.close(); try { it[2](); } catch (err) { console.warn('[Aurora] navigation:', err.message); }
     });
     icons(); moveInd();
   }
@@ -88,7 +105,7 @@
     tabEl = doc.createElement('nav'); tabEl.id = 'au-tabbar'; tabEl.setAttribute('aria-label', 'Quick navigation');
     tabEl.innerHTML = TABS.map((t) => { const i = ITEMS.findIndex((x) => x[0] === t), it = ITEMS[i]; return `<button type="button" data-i="${i}" class="${it[4] || ''}"><i data-lucide="${it[1]}"></i><span>${esc(t.replace('Sales & Reports', 'Reports'))}</span></button>`; }).join('');
     doc.body.appendChild(tabEl);
-    tabEl.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { try { ITEMS[+b.dataset.i][2](); } catch (err) { /* ignore */ } } });
+    tabEl.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { if (!b.classList.contains('inv') && window.RREInventory) window.RREInventory.close(); try { ITEMS[+b.dataset.i][2](); } catch (err) { /* ignore */ } } });
     icons();
   }
   function activeIndex() {
@@ -149,7 +166,7 @@
     const grid = [0, 1, 2, 3].map((i) => { const v = min + ((max - min) * i) / 3; return `<line x1="${L}" x2="${W - R}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}"/><text x="${L - 6}" y="${(y(v) + 3).toFixed(1)}" text-anchor="end">${compact(v)}</text>`; }).join('');
     const xl = series.map((s, i) => (series.length > 8 && i % 2 ? '' : `<text x="${x(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">${esc(s.label)}</text>`)).join('');
     const body = defs.map((d, di) => { const pts = series.map((s, i) => [x(i), y(s[d.k] || 0)]), line = smooth(pts), area = line + ` L${pts[pts.length - 1][0].toFixed(1)},${y(Math.max(min, 0)).toFixed(1)} L${pts[0][0].toFixed(1)},${y(Math.max(min, 0)).toFixed(1)} Z`;
-      return `<defs><linearGradient id="agr${di}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${d.c}" stop-opacity=".42"/><stop offset="1" stop-color="${d.c}" stop-opacity="0"/></linearGradient></defs><path class="area" d="${area}" fill="url(#agr${di})"/><path class="line" d="${line}" fill="none" stroke="${d.c}" stroke-width="2.6" stroke-linecap="round"/>${pts.map((p, i) => `<circle class="dot" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${series[i][d.k] ? 3.4 : 0}" fill="${d.c}" stroke="#0a0f2c" stroke-width="1.5"><title>${esc(series[i].label)}: ${money(series[i][d.k] || 0)}</title></circle>`).join('')}`; }).join('');
+      return `<defs><linearGradient id="agr${di}" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="${d.c}" stop-opacity=".42"/><stop offset="1" stop-color="${d.c}" stop-opacity="0"/></linearGradient></defs><path class="area" d="${area}" fill="url(#agr${di})"/><path class="line" d="${line}" fill="none" stroke="${d.c}" stroke-width="2.6" stroke-linecap="round"/>${pts.map((p, i) => `<circle class="dot" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${series[i][d.k] ? 3.4 : 0}" fill="${d.c}" stroke="var(--au-surface)" stroke-width="1.5"><title>${esc(series[i].label)}: ${money(series[i][d.k] || 0)}</title></circle>`).join('')}`; }).join('');
     return `<svg class="au-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Chart"><g class="grid">${grid}</g>${xl}${body}</svg>`;
   }
   function barChart(series, key, pos, neg) {
@@ -172,7 +189,7 @@
         <span class="au-eyebrow"><i></i>Live business overview</span>
         <h1>Welcome back to <span id="au-co">your business</span></h1>
         <p class="au-lead">Your sales, spending, profit and stock in one place, straight from your books and updated as you work.</p>
-        <div class="au-cta"><button type="button" class="au-btn primary" data-act="voucher"><i data-lucide="plus"></i>New voucher</button><button type="button" class="au-btn" data-act="reports"><i data-lucide="bar-chart-3"></i>Reports</button><button type="button" class="au-btn" data-act="inventory"><i data-lucide="boxes"></i>Inventory</button></div>
+        <div class="au-cta"><button type="button" class="au-btn primary" data-act="voucher"><i data-lucide="plus"></i>New voucher</button><button type="button" class="au-btn" data-act="reports"><i data-lucide="bar-chart-3"></i>Reports</button></div>
       </div><div class="au-stage" data-speed="0.07" aria-hidden="true"><div class="au-orb"><div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div><div class="core"></div></div>
         <div class="au-float f1" data-go="profit-loss" role="button" tabindex="0"><small>Net profit</small><b id="au-f-np">—</b></div><div class="au-float f2" data-go="outstandings" role="button" tabindex="0"><small>Cash &amp; bank</small><b id="au-f-cash">—</b></div><div class="au-float f3" data-go="stock-summary" role="button" tabindex="0"><small>Inventory value</small><b id="au-f-stock">—</b></div></div></section>
       <div class="au-sec-title">Business overview</div>
@@ -235,15 +252,15 @@
     const pt = $('#au-profit') && $('#au-profit').parentElement.querySelector('h3'); if (pt) pt.lastChild.textContent = fromVouchers ? 'Sales less purchases' : 'Profit by month';
     // spending mix
     const mix = t ? [{ l: 'Purchases', v: t.purchases || 0, c: '#4f6bff' }, { l: 'Direct expenses', v: t.direct_expenses || 0, c: '#22d3ee' }, ...((ind && ind.indirect_expense_items) || []).slice(0, 3).map((x, i) => ({ l: x.name, v: Math.abs(x.net_debit || x.closing_balance || 0), c: ['#a78bfa', '#f472b6', '#fbbf24'][i] }))].filter((p) => p.v > 0) : [];
-    $('#au-mix').innerHTML = mix.length ? `<div class="au-donut-wrap">${donut(mix)}<div class="au-legend" style="flex-direction:column;gap:7px">${mix.map((p) => `<span><i style="background:${p.c}"></i>${esc(p.l)} <b style="color:#fff;margin-left:6px">${money(p.v)}</b></span>`).join('')}</div></div>` : empty('No spending recorded yet.');
+    $('#au-mix').innerHTML = mix.length ? `<div class="au-donut-wrap">${donut(mix)}<div class="au-legend" style="flex-direction:column;gap:7px">${mix.map((p) => `<span><i style="background:${p.c}"></i>${esc(p.l)} <b style="color:var(--au-strong);margin-left:6px">${money(p.v)}</b></span>`).join('')}</div></div>` : empty('No spending recorded yet.');
     // inventory analytics
     const items = tiles ? (tiles.stock_tile.top_items || []).map((i) => ({ n: i.name, v: i.closing_val || 0, q: `${i.closing_qty} ${i.uom_symbol || ''}` })).sort((a, b) => b.v - a.v).slice(0, 6) : [], mx = Math.max(1, ...items.map((i) => i.v));
     $('#au-inv').innerHTML = items.length ? `<div class="au-bars">${items.map((i) => `<div class="au-bar-row"><span title="${esc(i.n)}">${esc(i.n)}</span><b>${compact(i.v)}</b><div class="t"><i style="--w:${Math.max(3, (i.v / mx) * 100).toFixed(1)}%"></i></div></div>`).join('')}</div>` : empty('No stock items yet.');
-    const ff = tiles && tiles.funds_flow_tile; $('#au-cash').innerHTML = ff ? `<div class="au-bars">${[['Money in', ff.inflow || 0, '#34d399'], ['Money out', ff.outflow || 0, '#fb7185']].map((r) => `<div class="au-bar-row"><span>${r[0]}</span><b>${money(r[1])}</b><div class="t"><i style="--w:${Math.max(3, (r[1] / Math.max(1, ff.inflow || 0, ff.outflow || 0)) * 100).toFixed(1)}%;background:${r[2]}"></i></div></div>`).join('')}</div><div class="au-legend"><span>Net flow <b style="color:${(ff.net_flow || 0) >= 0 ? '#6ee7b7' : '#fda4af'};margin-left:6px">${money(ff.net_flow || 0)}</b></span></div>` : empty('Cash figures need permission to view.');
+    const ff = tiles && tiles.funds_flow_tile; $('#au-cash').innerHTML = ff ? `<div class="au-bars">${[['Money in', ff.inflow || 0, '#34d399'], ['Money out', ff.outflow || 0, '#fb7185']].map((r) => `<div class="au-bar-row"><span>${r[0]}</span><b>${money(r[1])}</b><div class="t"><i style="--w:${Math.max(3, (r[1] / Math.max(1, ff.inflow || 0, ff.outflow || 0)) * 100).toFixed(1)}%;background:${r[2]}"></i></div></div>`).join('')}</div><div class="au-legend"><span>Net flow <b style="color:${(ff.net_flow || 0) >= 0 ? 'var(--au-pos)' : 'var(--au-neg)'};margin-left:6px">${money(ff.net_flow || 0)}</b></span></div>` : empty('Cash figures need permission to view.');
     // growth indicators
     const gp = t ? t.gross_profit : null, gm = sales ? (gp / sales) * 100 : null, nm = sales ? (net / sales) * 100 : null, done = series.filter((s) => s.complete), cur = done[done.length - 1], prev = done[done.length - 2], gr = cur && prev && prev.sales ? ((cur.sales - prev.sales) / prev.sales) * 100 : null;
-    const row = (l, v, c) => `<div class="au-bar-row"><span>${l}</span><b style="color:${c || '#fff'}">${v}</b><div class="t"><i style="--w:${v === '—' ? 0 : Math.min(100, Math.max(3, Math.abs(parseFloat(v)))).toFixed(1)}%"></i></div></div>`;
-    $('#au-growth').innerHTML = tiles || pl ? `<div class="au-bars">${row('Gross margin', gm == null ? '—' : gm.toFixed(1) + '%')}${row('Net margin', nm == null ? '—' : nm.toFixed(1) + '%', nm != null && nm < 0 ? '#fda4af' : '')}${row('Sales vs last month', gr == null ? '—' : (gr >= 0 ? '+' : '') + gr.toFixed(1) + '%', gr != null && gr < 0 ? '#fda4af' : '#6ee7b7')}</div><div class="au-legend"><span>Receivables ${tiles ? money(tiles.debtors_tile.total) : '—'}</span><span>Payables ${tiles ? money(tiles.creditors_tile.total) : '—'}</span></div>` : empty('Growth figures need permission to view.');
+    const row = (l, v, c) => `<div class="au-bar-row"><span>${l}</span><b style="color:${c || 'var(--au-strong)'}">${v}</b><div class="t"><i style="--w:${v === '—' ? 0 : Math.min(100, Math.max(3, Math.abs(parseFloat(v)))).toFixed(1)}%"></i></div></div>`;
+    $('#au-growth').innerHTML = tiles || pl ? `<div class="au-bars">${row('Gross margin', gm == null ? '—' : gm.toFixed(1) + '%')}${row('Net margin', nm == null ? '—' : nm.toFixed(1) + '%', nm != null && nm < 0 ? 'var(--au-neg)' : '')}${row('Sales vs last month', gr == null ? '—' : (gr >= 0 ? '+' : '') + gr.toFixed(1) + '%', gr != null && gr < 0 ? 'var(--au-neg)' : 'var(--au-pos)')}</div><div class="au-legend"><span>Receivables ${tiles ? money(tiles.debtors_tile.total) : '—'}</span><span>Payables ${tiles ? money(tiles.creditors_tile.total) : '—'}</span></div>` : empty('Growth figures need permission to view.');
     // activity
     const list = Array.isArray(vch) ? vch : [], by = (re, n) => list.filter((x) => re.test(x.voucher_type)).slice(0, n);
     const gr0 = gr; void gr0;
@@ -259,12 +276,31 @@
     w.__auWrapped = true; window[name] = w;
   }
   function onView(id) {
+    if (window.RREInventory) window.RREInventory.close(); // any RRE screen replaces the inventory area
     moveInd(); window.scrollTo(0, 0); const m = $('main'); if (m) m.scrollTop = 0;
     const el = id && doc.getElementById(id); if (el && motionOn()) { el.classList.remove('au-enter'); void el.offsetWidth; el.classList.add('au-enter'); }
     if (id === 'view-dashboard') { buildPortfolio(); observe(portfolioEl); }
   }
+  // ------------------------------------------------------------------ Light (white) / Dark mode
+  const modeNow = () => (store.get('au_mode') === 'dark' ? 'dark' : 'light'); // white by default
+  function applyMode() { if (isOn()) html.setAttribute('data-au', modeNow()); else html.removeAttribute('data-au'); syncToggle(); }
+  function syncToggle() { const t = $('#au-mode'); if (!t) return; $$('button', t).forEach((b) => { const on = isOn() && b.dataset.m === modeNow(); b.classList.toggle('on', on); b.setAttribute('aria-pressed', on ? 'true' : 'false'); }); }
+  function setMode(m) {
+    store.set('au_mode', m === 'dark' ? 'dark' : 'light');
+    if (!isOn() && typeof applyTheme === 'function') applyTheme('aurora', false); // choosing Light / Dark from another theme brings Aurora with it
+    applyMode(); doc.dispatchEvent(new CustomEvent('rre-mode', { detail: modeNow() }));
+  }
+  function modeToggle() {
+    if ($('#au-mode')) return;
+    const anchor = $('#btn-top-theme'); if (!anchor || !anchor.parentElement) return;
+    const t = doc.createElement('div'); t.id = 'au-mode'; t.setAttribute('role', 'group'); t.setAttribute('aria-label', 'Colour mode');
+    t.innerHTML = '<button type="button" data-m="light" title="White theme"><i data-lucide="sun"></i><span>Light</span></button><button type="button" data-m="dark" title="Dark theme"><i data-lucide="moon"></i><span>Dark</span></button>';
+    anchor.parentElement.insertBefore(t, anchor);
+    t.addEventListener('click', (e) => { const b = e.target.closest('button[data-m]'); if (b) setMode(b.dataset.m); });
+    icons(); syncToggle();
+  }
   function enable() {
-    syncMotion(); if (!isOn()) return; ambient(); rail(); tabbar(); buildPortfolio(); if (portfolioEl) observe(portfolioEl); moveInd();
+    applyMode(); syncMotion(); modeToggle(); if (!isOn()) return; ambient(); rail(); tabbar(); buildPortfolio(); if (portfolioEl) observe(portfolioEl); moveInd();
   }
   function install() {
     wrap('showView', onView); wrap('loadDashboard', () => { renderPortfolio(); });
@@ -277,6 +313,6 @@
     // start on the portfolio dashboard (Esc still returns to the Gateway, as always)
     if (isOn() && typeof appState !== 'undefined' && appState.currentView === 'view-gateway') setTimeout(() => { if (appState.currentView === 'view-gateway') openDash(); }, 350);
   }
-  window.RREAurora = { enable, renderPortfolio };
+  window.RREAurora = { enable, renderPortfolio, setMode, mode: modeNow };
   if (doc.readyState === 'complete') install(); else window.addEventListener('load', install);
 })();

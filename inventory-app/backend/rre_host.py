@@ -83,19 +83,31 @@ def rre_ping():
 
 
 # ---- the original web interface ----------------------------------------------------------------------------------------
-_BOOT = """<script>/* RRE: (1) sign in with the one-time link RRE opened this page with, or (2) start clean when RRE asks (?fresh=1). Nothing else here touches the original app */
-(function(){try{var p=new URLSearchParams(location.search),t=p.get('sso'),f=p.get('fresh');if(!t&&!f)return;
+_BOOT = """<script>/* RRE: (1) sign in with the one-time link RRE opened this page with, or (2) start clean when RRE asks (?fresh=1); (3) follow RRE's Light / Dark choice. Nothing else here touches the original app */
+(function(){try{var d0=document.documentElement;function mode(m){if(m==='dark'||m==='light'){d0.classList.toggle('dark',m==='dark');try{localStorage.setItem('sp_theme',m);}catch(e){}}}
+window.addEventListener('message',function(e){if(e.source!==window.parent)return;var d=e.data;if(d&&d.rre==='theme')mode(d.mode);});
+var p=new URLSearchParams(location.search),t=p.get('sso'),f=p.get('fresh'),m=p.get('mode');if(m)mode(m);if(!t&&!f&&!m)return;
 function clear(){['sp_access','sp_refresh'].forEach(function(k){localStorage.removeItem(k);sessionStorage.removeItem(k);});}
 if(f)clear();
 if(t){var x=new XMLHttpRequest();x.open('POST','/api/rre/sso',false);x.setRequestHeader('Content-Type','application/json');x.send(JSON.stringify({token:t}));
 if(x.status===200){var d=JSON.parse(x.responseText);clear();localStorage.setItem('sp_access',d.access_token);localStorage.setItem('sp_refresh',d.refresh_token);}else{clear();}}
-p.delete('sso');p.delete('fresh');var q=p.toString();history.replaceState(null,'',location.pathname+(q?'?'+q:'')+location.hash);}catch(e){}})();</script>"""
+p.delete('sso');p.delete('fresh');p.delete('mode');var q=p.toString();history.replaceState(null,'',location.pathname+(q?'?'+q:'')+location.hash);}catch(e){}})();</script>"""
+
+# RRE look for the inventory screens (colours and shapes only), loaded after the application's own style sheet
+_THEME_LINK = '<link rel="stylesheet" href="/rre-theme.css">'
+THEME_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rre_theme.css")
+
+
+@app.get("/rre-theme.css", include_in_schema=False)
+def rre_theme():
+    return FileResponse(THEME_FILE, media_type="text/css", headers={"Cache-Control": "no-cache"})
 
 
 def _index() -> HTMLResponse:
     with open(os.path.join(DIST, "index.html"), encoding="utf-8") as f:
         html = f.read()
     html = html.replace("<head>", "<head>" + _BOOT, 1) if "<head>" in html else _BOOT + html
+    html = html.replace("</head>", _THEME_LINK + "</head>", 1) if "</head>" in html else html
     return HTMLResponse(html, headers={"Cache-Control": "no-store"})
 
 

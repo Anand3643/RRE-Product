@@ -18,7 +18,11 @@
 #rre-inv-host iframe{flex:1;border:0;width:100%;background:#fff}
 #rre-inv-host .msg{flex:1;display:grid;place-items:center;text-align:center;color:#495057;padding:24px}
 #rre-inv-host .msg .box{max-width:520px}#rre-inv-host .spin{width:30px;height:30px;border:3px solid #ced4da;border-top-color:#089185;border-radius:50%;margin:0 auto 12px;animation:rrespin 1s linear infinite}
-@keyframes rrespin{to{transform:rotate(360deg)}}`;
+@keyframes rrespin{to{transform:rotate(360deg)}}
+[data-au="light"] #rre-inv-host{background:#f4f6ff}[data-au="light"] #rre-inv-host .bar{background:rgba(255,255,255,.96);color:#0f172a;border-bottom:1px solid rgba(99,102,241,.2)}
+[data-au="light"] #rre-inv-host .bar button{border-color:#cfd6f7;color:#1e293b}[data-au="light"] #rre-inv-host .bar button:hover{background:#eef1ff}[data-au="light"] #rre-inv-host .msg{color:#475569}
+[data-au="dark"] #rre-inv-host{background:#050816}[data-au="dark"] #rre-inv-host .bar{background:rgba(9,13,38,.96);color:#e8edff;border-bottom:1px solid rgba(140,158,255,.25)}[data-au="dark"] #rre-inv-host .msg{color:#b6c1ee}
+[data-au] #rre-inv-host iframe{background:transparent}[data-au] #rre-inv-host .spin{border-top-color:#4f6bff}`;
 
   function build() {
     if (root()) return;
@@ -55,6 +59,14 @@
     } catch (e) { btn.hidden = true; label.textContent = ''; }
   }
   setInterval(refreshBooks, 30000);
+
+  // the inventory screens follow RRE's Light / Dark choice
+  const html = document.documentElement;
+  const modeNow = () => html.getAttribute('data-au') || (html.getAttribute('data-theme') === 'midnight-dark' ? 'dark' : 'light');
+  const withMode = (u) => u + (u.includes('?') ? '&' : '?') + 'mode=' + modeNow();
+  function sendMode() { const f = root() && root().querySelector('iframe'); if (f && f.contentWindow && loadedUrl) { try { f.contentWindow.postMessage({ rre: 'theme', mode: modeNow() }, new URL(loadedUrl).origin); } catch (e) { /* ignore */ } } }
+  new MutationObserver(sendMode).observe(html, { attributes: true, attributeFilter: ['data-au', 'data-theme'] });
+  document.addEventListener('rre-mode', sendMode);
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   // a call to RRE's own server; a dropped connection is retried before the person is told
@@ -100,13 +112,13 @@
       let f = root().querySelector('iframe');
       if (!f) { f = document.createElement('iframe'); f.title = 'Inventory'; f.setAttribute('allow', 'clipboard-write; fullscreen'); root().appendChild(f); }
       f.addEventListener('load', () => { const m = root().querySelector('#rre-inv-msg'); if (m) m.style.display = 'none'; }, { once: true });
-      f.src = url; loadedUrl = url;
+      f.src = withMode(url); loadedUrl = url;
     } catch (e) {
       msg(`<b>Inventory could not be opened</b><div style="margin:8px 0 12px">${esc(e.message)}</div><button id="rre-inv-retry" style="padding:6px 14px;border:1px solid #adb5bd;border-radius:6px;background:#fff;cursor:pointer">Try again</button>`);
       const r = root().querySelector('#rre-inv-retry'); if (r) r.onclick = () => open(path);
     }
   }
-  async function openWindow() { try { window.open(await launch('/'), '_blank', 'noopener'); } catch (e) { msg(esc(e.message)); } }
+  async function openWindow() { try { window.open(withMode(await launch('/')), '_blank', 'noopener'); } catch (e) { msg(esc(e.message)); } }
   function close() { if (root()) root().classList.remove('open'); }
   function reset() { const r = root(); if (r) { const f = r.querySelector('iframe'); if (f) f.remove(); loadedUrl = null; r.classList.remove('open'); } }
 

@@ -38,13 +38,27 @@ async function main() {
   assert(!/https?:\/\//.test(css.replace(/\/\*[\s\S]*?\*\//g, '')) && !/@import/.test(css) && !/url\(/.test(css), 'The stylesheet makes no network request (no fonts, images or imports from the internet)');
   assert(!/https?:\/\/(?!127\.0\.0\.1|localhost)/.test(js.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '')) && !/\bXMLHttpRequest\b|\bWebSocket\b/.test(js), 'The script only talks to the local application');
   const rules = css.replace(/\/\*[\s\S]*?\*\//g, '').split('}').map((r) => r.split('{')[0].trim()).filter(Boolean);
-  const unscoped = rules.filter((sel) => !/\[data-theme="aurora"\]|^@|^from|^to|^\d+%|#aurora-bg|\.au-|#au-|^:root$|^#view-dashboard$|^@keyframes|^@property|^\s*$/.test(sel) && !/^(from|to|\d+%|50%|0%|70%|100%)/.test(sel));
+  const unscoped = rules.filter((sel) => !/\[data-theme="aurora"\]|\[data-au=|^@|^from|^to|^\d+%|#aurora-bg|\.au-|#au-|^:root$|^#view-dashboard$|^@keyframes|^@property|^\s*$/.test(sel) && !/^(from|to|\d+%|50%|0%|70%|100%)/.test(sel));
   assert(unscoped.length === 0, 'Every rule is scoped to the Aurora theme or to Aurora-only elements, so other themes keep their look', unscoped.slice(0, 4).join(' | '));
   assert(/@media \(prefers-reduced-motion: reduce\)/.test(css) && /\.au-motion/.test(css) && /prefers-reduced-motion: reduce/.test(js), 'Reduced-motion is respected in the styles and the script');
   assert(/@media \(max-width: 899px\)/.test(css) && /@media \(max-width: 700px\)/.test(css) && /#au-tabbar/.test(css), 'Phones get a responsive layout with a bottom tab bar');
   assert(/setAttribute\('aria-label', 'Main navigation'\)/.test(js) && /role="button" tabindex="0"/.test(js), 'The rail and the stat cards are keyboard-friendly and labelled');
   assert(!/api\/(auth|users)|password|token|localStorage\.setItem\('tally_user_session/.test(js.replace(/\/\/.*$/gm, '')), 'The theme script never touches accounts, passwords or sessions');
   assert(['showView', 'loadDashboard'].every((f) => new RegExp(`wrap\\('${f}'`).test(js)) && !/function (showView|loadDashboard|openReport)\b/.test(js), 'It wraps the existing screens; it does not replace any business function');
+
+  console.log('\n--- 2b. Light / Dark and Inventory in the side bar ---');
+  assert(/\[data-au="light"\]/.test(css) && /\[data-au="dark"\]/.test(css) && /#au-mode/.test(css), 'The stylesheet has a white and a dark mode and the switch styling');
+  assert(/function setMode/.test(js) && /au_mode/.test(js) && /id = 'au-mode'/.test(js) && /rre-mode/.test(js), 'The script has the Light / Dark switch, remembers the choice and tells the inventory');
+  assert(/data-au/.test(html) && /au_mode/.test(html), 'The page sets the mode before it paints (no flash)');
+  const invapp = read('public/ext/invapp.js'), hostJs = read('public/ext/inventory_host.js');
+  assert(!/rre-inv-menu/.test(invapp) && !/rre-inv-menu/.test(js) && !/data-act="inventory"/.test(js), 'There is no Inventory button in the header or on the dashboard: only the side bar');
+  assert(/INV_SUB/.test(js) && /toggleInvMenu/.test(js) && /id="au-inv-sub"/.test(js) && /\[data-theme="aurora"\] #gw-inventory-section/.test(css), 'The side bar Inventory entry expands into its features; the Gateway shortcuts are hidden in the new look');
+  assert(/rre-mode/.test(hostJs) && /postMessage\(\{ rre: 'theme'/.test(hostJs) && /mode=/.test(hostJs),'The inventory frame is told the Light / Dark choice');
+  const rt = read('inventory-app/backend/rre_theme.css'), hostPy = read('inventory-app/backend/rre_host.py'), rtCode = rt.replace(/\/\*[\s\S]*?\*\//g, '');
+  assert(/:root\s*\{/.test(rt) && /\.dark\s*\{/.test(rt) && /--brand: 79 107 255/.test(rt), 'The inventory skin defines the application colours for light and dark');
+  assert(!/https?:\/\/|@import|url\(/.test(rtCode), 'The inventory skin makes no network request');
+  assert(!/(^|[;{\s])(display|position|visibility|flex|grid|width|height|margin|padding|order|float|content|z-index|overflow)\s*:/.test(rtCode), 'The inventory skin changes colours and shapes only (no layout, no visibility, no content)');
+  assert(/rre-theme\.css/.test(hostPy) && /e\.source!==window\.parent/.test(hostPy) && /d\.rre==='theme'/.test(hostPy), 'The inventory host loads the skin and accepts the colour choice only from RRE');
 
   console.log('\n--- 3. Served by the application ---');
   await initDb(); await runMigrations();
