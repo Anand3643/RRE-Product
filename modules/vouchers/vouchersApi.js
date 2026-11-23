@@ -101,6 +101,11 @@ router.delete('/:id', async (req, res) => {
     const v = await get('SELECT * FROM vouchers WHERE id = ?', [req.params.id]);
     if (!v) return res.status(404).json({ success: false, error: 'Voucher not found' });
 
+    // A voucher created from a purchase/sales order is part of that order's record: deleting it would leave the order claiming goods
+    // that were never received or invoiced. Reverse it with a Debit/Credit Note instead.
+    const linked = await get('SELECT o.number AS order_no, d.number AS doc_no FROM inv_order_docs d JOIN inv_orders o ON o.id = d.order_id WHERE d.voucher_id = ?', [v.id]).catch(() => null);
+    if (linked) return res.status(409).json({ success: false, error: `Voucher ${v.voucher_no} was created from order ${linked.order_no} (${linked.doc_no}), so it cannot be deleted. Reverse it with a ${v.voucher_type === 'Purchase' ? 'Debit' : 'Credit'} Note instead.` });
+
     await run('BEGIN TRANSACTION');
     try {
       await run('DELETE FROM ledger_entries WHERE voucher_id = ?', [v.id]);

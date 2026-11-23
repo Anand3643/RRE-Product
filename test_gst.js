@@ -194,7 +194,7 @@ async function main() {
   assert(bl.json.data.length === 2 && bl.json.data[0].valid && !bl.json.data[1].valid, 'Batch GSTIN validation');
   const dr = (await get('SELECT ROUND(SUM(debit_amount),2) s FROM ledger_entries')).s, cr = (await get('SELECT ROUND(SUM(credit_amount),2) s FROM ledger_entries')).s;
   assert(dr === cr, 'Total Dr == total Cr after all GST operations', `${dr}/${cr}`);
-  assert((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 12, 'Migration 004 recorded');
+  assert((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 13, 'Migration 004 recorded');
 
   console.log('\n====================================================');
   console.log(`📊 GST RESULTS: ${passed} PASSED | ${failed} FAILED`);

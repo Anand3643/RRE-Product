@@ -8,6 +8,7 @@
 const express = require('express');
 const router = express.Router();
 const inv = require('../../core/invCore');
+const ord = require('../../core/invOrders');
 const { requireAuth } = require('../../core/auth');
 
 const read = requireAuth();
@@ -59,5 +60,29 @@ router.get('/adjustments', read, handle((req) => inv.listDocs('adjustment', req.
 router.get('/adjustments/:id', read, handle((req) => inv.getDoc(id(req), req.user)));
 router.post('/adjustments', move, handle((req) => inv.createAdjustment(req.body || {}, req.user)));
 router.get('/adjustment-reasons', read, handle(async () => inv.ADJUSTMENT_REASONS));
+
+// ---- stage 2: customers, suppliers, purchase orders, sales orders, history
+const kindOf = { customers: 'customer', suppliers: 'supplier' };
+for (const [path, kind] of Object.entries(kindOf)) {
+  router.get(`/${path}`, read, handle((req) => ord.listParties(kind, req.query, req.user)));
+  router.get(`/${path}/:id`, read, handle((req) => ord.partyDetail(kind, id(req), req.user)));
+  router.post(`/${path}`, write, handle((req) => ord.saveParty(kind, null, req.body || {}, req.user)));
+  router.patch(`/${path}/:id`, write, handle((req) => ord.saveParty(kind, id(req), req.body || {}, req.user)));
+  router.post(`/${path}/:id/archive`, move, handle((req) => ord.setPartyActive(kind, id(req), false, req.user)));
+  router.post(`/${path}/:id/restore`, move, handle((req) => ord.setPartyActive(kind, id(req), true, req.user)));
+}
+for (const [path, kind] of [['purchase-orders', 'purchase'], ['sales-orders', 'sales']]) {
+  router.get(`/${path}`, read, handle((req) => ord.listOrders(kind, req.query, req.user)));
+  router.post(`/${path}`, write, handle((req) => ord.createOrder(kind, req.body || {}, req.user)));
+}
+router.get('/orders/:id', read, handle((req) => ord.getOrder(id(req), req.user)));
+router.put('/orders/:id', write, handle((req) => ord.updateOrder(id(req), req.body || {}, req.user)));
+router.delete('/orders/:id', write, handle((req) => ord.deleteOrder(id(req), req.user)));
+router.post('/orders/:id/confirm', write, handle((req) => ord.confirmOrder(id(req), req.user)));
+router.post('/orders/:id/cancel', move, handle((req) => ord.cancelOrder(id(req), req.body && req.body.reason, req.user)));
+router.post('/orders/:id/receive', write, handle((req) => ord.receiveGoods(id(req), req.body || {}, req.user)));
+router.post('/orders/:id/invoice', write, handle((req) => ord.invoiceOrder(id(req), req.body || {}, req.user)));
+router.get('/purchase-history', read, handle((req) => ord.history('purchase', req.query, req.user)));
+router.get('/sales-history', read, handle((req) => ord.history('sales', req.query, req.user)));
 
 module.exports = router;

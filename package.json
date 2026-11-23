@@ -30,6 +30,7 @@
     "test:search": "node test_search.js",
     "test:accounts": "node test_accounts.js",
     "test:invapp": "node test_invapp.js",
+    "test:invorders": "node test_invorders.js",
     "test:asr": "node test_asr.js",
     "build:win": "electron-builder --win nsis",
     "build:portable": "electron-builder --win portable",

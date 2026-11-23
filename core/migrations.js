@@ -426,6 +426,72 @@ const MIGRATIONS = [
       'CREATE INDEX IF NOT EXISTS idx_inv_reservations_item ON inv_reservations(item_id, godown_id)',
       'CREATE INDEX IF NOT EXISTS idx_inv_reservations_ref ON inv_reservations(ref_type, ref_id)'
     ]
+  },
+  {
+    id: '013_inventory_orders',
+    description: 'Customer/supplier profiles; purchase and sales orders linked to vouchers',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS party_profiles (
+        ledger_id INTEGER PRIMARY KEY,
+        email TEXT,
+        phone TEXT,
+        contact_name TEXT,
+        city TEXT,
+        payment_terms TEXT,
+        notes TEXT,
+        FOREIGN KEY(ledger_id) REFERENCES ledgers(id)
+      )`,
+      `CREATE TABLE IF NOT EXISTS inv_orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL,
+        number TEXT NOT NULL UNIQUE,
+        party_ledger_id INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'draft',
+        order_date TEXT NOT NULL,
+        expected_date TEXT,
+        warehouse_id INTEGER NOT NULL,
+        reference TEXT,
+        notes TEXT,
+        subtotal REAL DEFAULT 0,
+        tax REAL DEFAULT 0,
+        total REAL DEFAULT 0,
+        cancelled_reason TEXT,
+        created_by TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME,
+        FOREIGN KEY(party_ledger_id) REFERENCES ledgers(id)
+      )`,
+      'CREATE INDEX IF NOT EXISTS idx_inv_orders_kind ON inv_orders(kind, status, id)',
+      'CREATE INDEX IF NOT EXISTS idx_inv_orders_party ON inv_orders(party_ledger_id, id)',
+      `CREATE TABLE IF NOT EXISTS inv_order_lines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id INTEGER NOT NULL,
+        item_id INTEGER NOT NULL,
+        qty REAL NOT NULL,
+        rate REAL NOT NULL,
+        discount_pct REAL DEFAULT 0,
+        gst_rate REAL DEFAULT 0,
+        qty_done REAL DEFAULT 0,
+        FOREIGN KEY(order_id) REFERENCES inv_orders(id) ON DELETE CASCADE,
+        FOREIGN KEY(item_id) REFERENCES stock_items(id)
+      )`,
+      'CREATE INDEX IF NOT EXISTS idx_inv_order_lines_order ON inv_order_lines(order_id)',
+      `CREATE TABLE IF NOT EXISTS inv_order_docs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        number TEXT NOT NULL UNIQUE,
+        voucher_id INTEGER NOT NULL,
+        doc_date TEXT,
+        reference TEXT,
+        created_by TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(order_id) REFERENCES inv_orders(id),
+        FOREIGN KEY(voucher_id) REFERENCES vouchers(id)
+      )`,
+      'CREATE INDEX IF NOT EXISTS idx_inv_order_docs_order ON inv_order_docs(order_id)',
+      'CREATE INDEX IF NOT EXISTS idx_inv_order_docs_voucher ON inv_order_docs(voucher_id)'
+    ]
   }
 ];
 

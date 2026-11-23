@@ -68,6 +68,8 @@
   const S = { route: 'dashboard', param: null, q: {}, cats: [], units: [], whs: [] };
   const NAV = [
     ['', [['dashboard', 'Dashboard', 'layout-dashboard'], ['alerts', 'Low stock alerts', 'bell-ring']]],
+    ['Sales', [['customers', 'Customers', 'contact'], ['sales-orders', 'Sales orders', 'shopping-cart'], ['sales-history', 'Sales history', 'receipt']]],
+    ['Purchases', [['suppliers', 'Suppliers', 'store'], ['purchase-orders', 'Purchase orders', 'clipboard-list'], ['purchase-history', 'Purchase history', 'history']]],
     ['Items', [['items', 'Items', 'package'], ['categories', 'Categories', 'folder-tree'], ['units', 'Units', 'ruler']]],
     ['Inventory', [['stock', 'Stock levels', 'boxes'], ['movements', 'Movement history', 'arrow-left-right'], ['warehouses', 'Warehouses', 'warehouse'], ['transfers', 'Transfers', 'arrow-right-left'], ['adjustments', 'Adjustments', 'sliders-horizontal']]]
   ];
@@ -397,6 +399,193 @@
       catch (err) { btn.classList.remove('busy'); er.hidden = false; er.textContent = err.message; }
     };
   }
+
+  // ================================================================== stage 2: customers, suppliers, orders, history
+  const ORDER_BADGE = { draft: 'b-n', issued: 'b-info', partially_received: 'b-warn', received: 'b-ok', confirmed: 'b-info', invoiced: 'b-ok', cancelled: 'b-bad' };
+  const obadge = (s) => `<span class="badge ${ORDER_BADGE[s] || 'b-n'}">${esc(String(s).replace('_', ' '))}</span>`;
+  const KIND = { customers: { one: 'customer', many: 'Customers', order: 'sales-orders', hist: 'sales-history' }, suppliers: { one: 'supplier', many: 'Suppliers', order: 'purchase-orders', hist: 'purchase-history' } };
+
+  /** Type-to-search picker for customers/suppliers; resolves the typed label back to an id. */
+  function partyPicker(id, path, ph) { return `<input class="input" list="${id}-dl" data-party-picker="${path}" data-for="${id}" placeholder="${esc(ph || 'Type a name…')}" autocomplete="off"><datalist id="${id}-dl"></datalist>`; }
+  function bindPartyPicker(scope) {
+    const map = new Map();
+    const fill = debounce(async (inp) => {
+      try {
+        const d = await api(`/${inp.dataset.partyPicker}?${qs({ q: inp.value, page_size: 15 })}`); const dl = scope.querySelector(`#${inp.dataset.for}-dl`); dl.innerHTML = '';
+        for (const p of d.items) { const label = `${p.name}${p.city ? ' · ' + p.city : ''}`; map.set(label, p); const o = document.createElement('option'); o.value = label; dl.appendChild(o); }
+      } catch (e) { /* the list stays as it was */ }
+    }, 200);
+    scope.addEventListener('input', (e) => { if (e.target.matches('[data-party-picker]')) fill(e.target); });
+    return (inp) => map.get(inp.value.trim());
+  }
+
+  // ---- customers / suppliers
+  async function partiesPage(v, path) {
+    const K = KIND[path], q = S.q[path] = { page: 1, ...(S.q[path] || {}) }, val = can.value();
+    const d = await api(`/${path}?${qs({ q: q.q, archived: q.archived, page: q.page, page_size: 25 })}`);
+    v.innerHTML = `<div class="sp-wrap"><div class="row wrap mb"><input class="input" data-f="q" placeholder="Search name, GSTIN, phone, city…" value="${esc(q.q || '')}" style="max-width:300px"><label class="chk"><input type="checkbox" data-f="archived" ${q.archived ? 'checked' : ''}> Archived</label><span class="grow"></span>${can.write() ? `<button class="btn primary" id="n">+ New ${K.one}</button>` : ''}</div>
+      <div class="card scroll-x">${d.items.length ? `<table><thead><tr><th>${K.one === 'customer' ? 'Customer' : 'Supplier'}</th><th>Contact</th><th>GSTIN</th><th class="num">Credit days</th>${path === 'customers' ? '<th class="num">Credit limit</th>' : ''}${val ? '<th class="num">Balance</th>' : ''}<th class="num">Orders</th></tr></thead><tbody>
+      ${d.items.map((p) => `<tr class="click" data-id="${p.id}"><td>${esc(p.name)}<div class="small sub">${esc([p.city, p.state].filter(Boolean).join(', '))}</div></td><td class="small">${esc(p.contact_name || '')}<div class="sub">${esc(p.phone || p.email || '')}</div></td><td class="mono">${esc(p.gstin || '—')}</td><td class="num">${p.credit_period ?? ''}</td>${path === 'customers' ? `<td class="num">${p.credit_limit ? inr(p.credit_limit) : '—'}</td>` : ''}${val ? `<td class="num">${inr(p.balance)} <span class="small sub">${esc(p.balance_side === 'receivable' ? 'to receive' : p.balance_side === 'payable' ? 'to pay' : p.balance ? 'advance' : '')}</span></td>` : ''}<td class="num">${p.orders}${p.open_orders ? ` <span class="badge b-info">${p.open_orders} open</span>` : ''}</td></tr>`).join('')}</tbody></table>${pager(d, path)}`
+      : empty(q.q ? 'No match' : `No ${K.many.toLowerCase()} yet`, q.q ? 'Try a different search.' : `Add your first ${K.one}.`, can.write() ? `<button class="btn primary" id="n2">+ New ${K.one}</button>` : '')}</div></div>`;
+    bindFilters(path);
+    v.querySelector('#n')?.addEventListener('click', () => partyForm(path)); v.querySelector('#n2')?.addEventListener('click', () => partyForm(path));
+    v.querySelectorAll('tr[data-id]').forEach((r) => r.addEventListener('click', () => partyDrawer(path, parseInt(r.dataset.id, 10))));
+  }
+  PAGES.customers = (v) => partiesPage(v, 'customers');
+  PAGES.suppliers = (v) => partiesPage(v, 'suppliers');
+
+  function partyForm(path, p) {
+    const K = KIND[path], e = !!p;
+    const m = modal(e ? `Edit ${K.one}` : `New ${K.one}`, `<form id="f" class="formgrid" novalidate>
+      ${field('Name', `<input class="input" name="name" value="${esc(p?.name)}" maxlength="120">`, true)}${field('GSTIN', `<input class="input" name="gstin" value="${esc(p?.gstin)}" maxlength="15" placeholder="15 characters">`)}${field('PAN', `<input class="input" name="pan" value="${esc(p?.pan)}" maxlength="10">`)}
+      ${field('State', `<input class="input" name="state" value="${esc(p?.state)}">`)}${field('State code', `<input class="input" name="state_code" value="${esc(p?.state_code)}" maxlength="2" placeholder="e.g. 33">`, false, 'Decides CGST+SGST (same state) or IGST')}
+      ${field('Contact person', `<input class="input" name="contact_name" value="${esc(p?.contact_name)}">`)}${field('Phone', `<input class="input" name="phone" value="${esc(p?.phone)}">`)}${field('E-mail', `<input class="input" name="email" value="${esc(p?.email)}">`)}${field('City', `<input class="input" name="city" value="${esc(p?.city)}">`)}
+      ${field('Address', `<input class="input" name="address" value="${esc(p?.address)}">`, true)}${field('Credit period (days)', `<input class="input" type="number" min="0" max="365" name="credit_period" value="${p ? p.credit_period : 30}">`)}
+      ${path === 'customers' ? field('Credit limit (₹)', `<input class="input" type="number" min="0" step="0.01" name="credit_limit" value="${p ? p.credit_limit : 0}">`, false, 'A warning only, as elsewhere in RRE') : field('Payment terms', `<input class="input" name="payment_terms" value="${esc(p?.payment_terms)}" placeholder="e.g. Net 30">`)}
+      ${field('Notes', `<textarea name="notes" rows="2" maxlength="500">${esc(p?.notes)}</textarea>`, true)}
+      <div class="full errtxt" id="err" hidden></div><div class="full row" style="justify-content:flex-end"><button type="button" class="btn" data-x>Cancel</button><button class="btn primary">${e ? 'Save changes' : `Create ${K.one}`}</button></div></form>`, { wide: true });
+    m.el.querySelector('#f').onsubmit = async (ev) => {
+      ev.preventDefault(); const b = Object.fromEntries(new FormData(ev.target)); const btn = ev.target.querySelector('.primary'); btn.classList.add('busy');
+      try { await api(e ? `/${path}/${p.id}` : `/${path}`, { method: e ? 'PATCH' : 'POST', body: b }); m.close(); toast('Saved'); reload(); }
+      catch (er) { btn.classList.remove('busy'); const x = m.el.querySelector('#err'); x.hidden = false; x.textContent = er.message; }
+    };
+  }
+
+  async function partyDrawer(path, id) {
+    const K = KIND[path], m = modal(K.one, skel(5), { drawer: true });
+    try {
+      const p = await api(`/${path}/${id}`), val = can.value();
+      m.el.querySelector('.drawer').innerHTML = `<div class="row between mb"><div><h2 style="font-size:16px;margin:0">${esc(p.name)}</h2><div class="small sub">${esc([p.city, p.state].filter(Boolean).join(', '))}</div></div><button class="btn flat sm" data-x>✕</button></div>
+        <div class="row wrap mb">${status(p.is_active)}${p.gstin ? `<span class="badge b-n mono">${esc(p.gstin)}</span>` : ''}</div>
+        ${val ? `<div class="grid g2 mb"><div class="card kpi"><div class="l">${path === 'customers' ? 'Owes you' : 'You owe'}</div><div class="v">${inr(p.balance)}</div><div class="small sub">${esc(p.balance_side || '')}</div></div><div class="card kpi"><div class="l">Orders</div><div class="v">${p.orders}</div><div class="small sub">${p.open_orders} open</div></div></div>` : ''}
+        <div class="small mb">${esc([p.contact_name, p.phone, p.email].filter(Boolean).join(' · ')) || '<span class="sub">No contact details</span>'}<div class="sub">${esc(p.address || '')}</div><div class="sub">Credit ${p.credit_period ?? 0} days${path === 'customers' && p.credit_limit ? ` · limit ${inr(p.credit_limit)}` : ''}${p.payment_terms ? ' · ' + esc(p.payment_terms) : ''}</div></div>
+        <h2>Orders</h2><div class="card mb scroll-x">${p.orders_list.length ? `<table><tbody>${p.orders_list.map((o) => `<tr class="click" data-o="${o.id}"><td class="mono">${esc(o.number)}</td><td class="small">${esc(o.order_date)}</td><td>${obadge(o.status)}</td><td class="num">${inr(o.total)}</td></tr>`).join('')}</tbody></table>` : empty('No orders yet')}</div>
+        <h2>Recent vouchers</h2><div class="card mb scroll-x">${p.vouchers.length ? `<table><tbody>${p.vouchers.map((x) => `<tr><td class="small">${esc(x.date)}</td><td class="small"><span class="badge b-n">${esc(x.type)}</span> ${esc(x.number)}</td><td class="num">${inr(x.total)}</td></tr>`).join('')}</tbody></table>` : empty('No vouchers yet')}</div>
+        <div class="row wrap">${can.write() && p.is_active ? `<button class="btn primary" id="d-order">New ${path === 'customers' ? 'sales' : 'purchase'} order</button>` : ''}${can.write() ? '<button class="btn" id="d-edit">Edit</button>' : ''}${can.move() ? `<button class="btn" id="d-arch">${p.is_active ? 'Archive' : 'Restore'}</button>` : ''}</div>`;
+      const $ = (s) => m.el.querySelector(s);
+      $('#d-edit')?.addEventListener('click', () => { m.close(); partyForm(path, p); });
+      $('#d-order')?.addEventListener('click', async () => { m.close(); await lookups(); orderForm(K.order, null, p); });
+      $('#d-arch')?.addEventListener('click', () => confirmBox(p.is_active ? 'Archive' : 'Restore', p.is_active ? `${p.name} will be hidden from new orders. History is kept.` : `${p.name} will become active again.`, p.is_active ? 'Archive' : 'Restore', async () => { await api(`/${path}/${id}/${p.is_active ? 'archive' : 'restore'}`, { method: 'POST' }); m.close(); toast('Done'); reload(); }));
+      m.el.querySelectorAll('tr[data-o]').forEach((r) => r.addEventListener('click', () => { m.close(); orderDrawer(parseInt(r.dataset.o, 10)); }));
+    } catch (err) { m.el.querySelector('.drawer').innerHTML = `<button class="btn flat sm" data-x>✕</button>${empty('Could not load', err.message)}`; }
+  }
+
+  // ---- orders
+  async function ordersPage(v, kind) {
+    await lookups();
+    const key = kind === 'purchase-orders' ? 'po' : 'so', K = kind === 'purchase-orders' ? { word: 'purchase', party: 'Supplier' } : { word: 'sales', party: 'Customer' };
+    const q = S.q[kind] = { page: 1, ...(S.q[kind] || {}) };
+    const d = await api(`/${kind}?${qs({ q: q.q, status: q.status, from: q.from, to: q.to, page: q.page, page_size: 25 })}`);
+    const states = kind === 'purchase-orders' ? ['draft', 'issued', 'partially_received', 'received', 'cancelled'] : ['draft', 'confirmed', 'invoiced', 'cancelled'];
+    v.innerHTML = `<div class="sp-wrap"><div class="row wrap mb"><input class="input" data-f="q" placeholder="Search number, ${K.party.toLowerCase()} or reference…" value="${esc(q.q || '')}" style="max-width:280px">
+      <select data-f="status" style="width:170px"><option value="">Any status</option><option value="open" ${q.status === 'open' ? 'selected' : ''}>Open</option>${states.map((s) => `<option value="${s}" ${q.status === s ? 'selected' : ''}>${s.replace('_', ' ')}</option>`).join('')}</select>
+      <input class="input" type="date" data-f="from" value="${esc(q.from || '')}" style="width:140px" aria-label="From"><input class="input" type="date" data-f="to" value="${esc(q.to || '')}" style="width:140px" aria-label="To"><span class="grow"></span>${can.write() ? `<button class="btn primary" id="n">+ New ${K.word} order</button>` : ''}</div>
+      <div class="card scroll-x">${d.items.length ? `<table><thead><tr><th>Number</th><th>Date</th><th>${K.party}</th><th>Warehouse</th><th class="num">Lines</th><th class="num">Total</th><th>Status</th></tr></thead><tbody>
+      ${d.items.map((o) => `<tr class="click" data-id="${o.id}"><td class="mono">${esc(o.number)}</td><td class="small">${esc(o.order_date)}${o.expected_date ? `<div class="sub">due ${esc(o.expected_date)}</div>` : ''}</td><td>${esc(o.party)}</td><td class="small">${esc(o.warehouse)}</td><td class="num">${o.lines}</td><td class="num">${inr(o.total)}</td><td>${obadge(o.status)}${o.overdue ? ' <span class="badge b-bad">overdue</span>' : ''}</td></tr>`).join('')}</tbody></table>${pager(d, kind)}`
+      : empty(`No ${K.word} orders`, q.q || q.status ? 'Nothing matches these filters.' : kind === 'purchase-orders' ? 'Order goods from a supplier; receiving them adds stock and posts a Purchase voucher.' : 'Confirming an order reserves the stock; invoicing it posts a Sales voucher.', can.write() ? `<button class="btn primary" id="n2">+ New ${K.word} order</button>` : '')}</div></div>`;
+    bindFilters(kind);
+    v.querySelector('#n')?.addEventListener('click', () => orderForm(kind)); v.querySelector('#n2')?.addEventListener('click', () => orderForm(kind));
+    v.querySelectorAll('tr[data-id]').forEach((r) => r.addEventListener('click', () => orderDrawer(parseInt(r.dataset.id, 10))));
+  }
+  PAGES['purchase-orders'] = (v) => ordersPage(v, 'purchase-orders');
+  PAGES['sales-orders'] = (v) => ordersPage(v, 'sales-orders');
+
+  function orderLineRow(sales) {
+    return `<tr class="ln"><td style="min-width:200px">${picker('o' + Math.random().toString(36).slice(2, 7))}</td><td style="width:90px"><input class="input q" type="number" min="0" step="any" placeholder="Qty"></td><td style="width:105px"><input class="input rt" type="number" min="0" step="0.01" placeholder="Default"></td><td style="width:80px"><input class="input ds" type="number" min="0" max="100" step="0.01" placeholder="0"></td><td style="width:80px"><input class="input gs" type="number" min="0" max="100" step="0.01" placeholder="GST %"></td><td class="num am" style="width:100px"></td><td style="width:30px"><button type="button" class="btn flat sm rm" aria-label="Remove line">✕</button></td></tr>`;
+  }
+
+  async function orderForm(kind, o, party) {
+    const sales = kind === 'sales-orders', path = sales ? 'customers' : 'suppliers', w = activeWhs(), e = !!o;
+    const m = modal(e ? `Edit ${o.number}` : `New ${sales ? 'sales' : 'purchase'} order`, `<form id="f">
+      <div class="formgrid">${field(sales ? 'Customer' : 'Supplier', partyPicker('pp', path, 'Type to search…'))}${field('Warehouse', `<select name="wh">${w.map((x) => `<option value="${x.id}" ${o?.warehouse_id === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`, false, sales ? 'Stock is reserved here' : 'Goods are received here')}
+        ${field('Order date', `<input class="input" type="date" name="order_date" value="${esc(o?.order_date || today())}">`)}${field(sales ? 'Delivery date' : 'Expected date', `<input class="input" type="date" name="expected_date" value="${esc(o?.expected_date || '')}">`)}${field('Reference', `<input class="input" name="reference" value="${esc(o?.reference)}" maxlength="60" placeholder="${sales ? "Customer's PO number" : 'Quote / request number'}">`)}${field('Notes', `<input class="input" name="notes" value="${esc(o?.notes)}" maxlength="500">`)}</div>
+      <div class="card mt scroll-x"><table><thead><tr><th>Item</th><th>Qty</th><th>Rate (₹)</th><th>Disc %</th><th>GST %</th><th class="num">Amount</th><th></th></tr></thead><tbody id="lines">${orderLineRow(sales)}</tbody></table></div>
+      <div class="row between mt"><button type="button" class="btn sm" id="add">+ Add line</button><span class="small sub" id="est"></span></div>
+      <div class="hint">Leave the rate empty to use the item's ${sales ? 'selling price' : 'cost'}. The server works out GST (CGST+SGST in your state, IGST otherwise) and the final total.</div>
+      <div class="errtxt" id="err" hidden></div><div class="row" style="justify-content:flex-end;margin-top:14px"><button type="button" class="btn" data-x>Cancel</button><button class="btn primary">${e ? 'Save changes' : 'Save as draft'}</button></div></form>`, { wide: true });
+    const f = m.el.querySelector('#f'), resolveItem = bindPickers(f), resolveParty = bindPartyPicker(f), tb = f.querySelector('#lines');
+    const refresh = () => { let sub = 0, tax = 0; tb.querySelectorAll('.ln').forEach((tr) => { const q = +tr.querySelector('.q').value || 0, r = +tr.querySelector('.rt').value || 0, d = +tr.querySelector('.ds').value || 0, g = +tr.querySelector('.gs').value || 0; const a = q * r * (1 - d / 100); tr.querySelector('.am').textContent = a ? inr(a) : ''; sub += a; tax += a * g / 100; }); f.querySelector('#est').textContent = sub ? `About ${inr(sub)} + GST ${inr(tax)} = ${inr(sub + tax)}` : ''; };
+    f.addEventListener('input', (ev) => { if (ev.target.matches('.q,.rt,.ds,.gs')) refresh(); });
+    f.addEventListener('change', async (ev) => {
+      if (!ev.target.matches('[data-picker]')) return; const tr = ev.target.closest('.ln'), it = resolveItem(ev.target); if (!it) return;
+      tr.querySelector('.gs').value = it.gst_rate ?? ''; if (can.value() && !tr.querySelector('.rt').value) tr.querySelector('.rt').value = (sales ? it.price : it.cost) || ''; if (!tr.querySelector('.q').value) tr.querySelector('.q').value = 1; refresh();
+    });
+    f.querySelector('#add').onclick = () => tb.insertAdjacentHTML('beforeend', orderLineRow(sales));
+    f.addEventListener('click', (ev) => { if (ev.target.closest('.rm') && tb.children.length > 1) { ev.target.closest('.ln').remove(); refresh(); } });
+    // pre-fill: an existing order, or a chosen party
+    const setParty = (p) => { const inp = f.querySelector('[data-party-picker]'); inp.value = `${p.name}${p.city ? ' · ' + p.city : ''}`; f.querySelector('#pp-dl').innerHTML = `<option value="${esc(inp.value)}">`; inp.dataset.id = p.id; };
+    if (party) setParty(party);
+    if (o) {
+      try { const p = await api(`/${path}/${o.party_ledger_id}`); setParty(p); } catch (er) { /* the user can pick again */ }
+      tb.innerHTML = ''; for (const l of o.lines) { tb.insertAdjacentHTML('beforeend', orderLineRow(sales)); const tr = tb.lastElementChild, inp = tr.querySelector('[data-picker]'); inp.value = `${l.item} · ${l.sku}`; inp.dataset.id = l.item_id; tr.querySelector('.q').value = l.qty; tr.querySelector('.rt').value = l.rate; tr.querySelector('.ds').value = l.discount_pct || ''; tr.querySelector('.gs').value = l.gst_rate; }
+      refresh();
+    }
+    f.onsubmit = async (ev) => {
+      ev.preventDefault(); const er = f.querySelector('#err'); er.hidden = true;
+      const pInp = f.querySelector('[data-party-picker]'), pRes = resolveParty(pInp), partyId = pRes ? pRes.id : (pInp.dataset.id ? +pInp.dataset.id : 0);
+      if (!partyId) { er.hidden = false; er.textContent = `Choose the ${sales ? 'customer' : 'supplier'} from the suggestions as you type.`; return; }
+      const lines = []; for (const tr of tb.querySelectorAll('.ln')) {
+        const inp = tr.querySelector('[data-picker]'), it = resolveItem(inp), id = it ? it.id : (inp.dataset.id ? +inp.dataset.id : 0), q = tr.querySelector('.q').value; if (!id && !q) continue;
+        if (!id) { er.hidden = false; er.textContent = 'Choose each item from the suggestions as you type.'; return; }
+        lines.push({ item_id: id, qty: q, rate: tr.querySelector('.rt').value, discount_pct: tr.querySelector('.ds').value, gst_rate: tr.querySelector('.gs').value });
+      }
+      const body = { party_id: partyId, warehouse_id: +f.wh.value, order_date: f.order_date.value, expected_date: f.expected_date.value, reference: f.reference.value, notes: f.notes.value, lines };
+      const btn = f.querySelector('.primary'); btn.classList.add('busy');
+      try { const r = await api(e ? `/orders/${o.id}` : `/${kind}`, { method: e ? 'PUT' : 'POST', body }); m.close(); toast(`${r.number} saved as a draft`); go(kind); setTimeout(() => orderDrawer(r.id), 400); }
+      catch (err) { btn.classList.remove('busy'); er.hidden = false; er.textContent = err.message; }
+    };
+  }
+
+  async function orderDrawer(id) {
+    const m = modal('Order', skel(6), { drawer: true });
+    try {
+      const o = await api(`/orders/${id}`), sales = o.kind === 'sales', T = o.totals, kindPath = sales ? 'sales-orders' : 'purchase-orders';
+      const canPost = can.write(), canCancel = can.move();
+      const actions = [];
+      if (o.status === 'draft' && canPost) actions.push(`<button class="btn primary" id="a-conf">${sales ? 'Confirm &amp; reserve stock' : 'Issue to supplier'}</button><button class="btn" id="a-edit">Edit</button><button class="btn danger" id="a-del">Delete</button>`);
+      if (!sales && ['issued', 'partially_received'].includes(o.status) && canPost) actions.push('<button class="btn primary" id="a-recv">Receive goods</button>');
+      if (sales && o.status === 'confirmed' && canPost) actions.push('<button class="btn primary" id="a-inv">Create invoice</button>');
+      if (!['cancelled', 'received', 'invoiced'].includes(o.status) && !o.lines.some((l) => l.qty_done > 0) && canCancel) actions.push('<button class="btn" id="a-cancel">Cancel order</button>');
+      m.el.querySelector('.drawer').innerHTML = `<div class="row between mb"><div><h2 style="font-size:16px;margin:0">${esc(o.number)}</h2><div class="small sub">${esc(o.order_date)} · by ${esc(o.created_by)}${o.expected_date ? ` · due ${esc(o.expected_date)}` : ''}</div></div><button class="btn flat sm" data-x>✕</button></div>
+        <div class="row wrap mb">${obadge(o.status)}${o.reserved ? '<span class="badge b-info">stock reserved</span>' : ''}<span class="badge b-n">${esc(o.warehouse)}</span></div>
+        <div class="small mb"><b>${esc(o.party)}</b>${o.reference ? `<div class="sub">Ref: ${esc(o.reference)}</div>` : ''}${o.notes ? `<div class="sub">${esc(o.notes)}</div>` : ''}${o.cancelled_reason ? `<div class="errtxt">Cancelled: ${esc(o.cancelled_reason)}</div>` : ''}</div>
+        <div class="card mb scroll-x"><table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Disc</th><th class="num">GST</th><th class="num">Amount</th><th class="num">${sales ? 'Invoiced' : 'Received'}</th></tr></thead><tbody>
+        ${o.lines.map((l) => `<tr><td>${esc(l.item)}<div class="small sub mono">${esc(l.sku)}</div></td><td class="num">${num(l.qty)} ${esc(l.uom)}</td><td class="num">${inr(l.rate)}</td><td class="num">${l.discount_pct ? num(l.discount_pct, 2) + '%' : '—'}</td><td class="num">${num(l.gst_rate, 2)}%</td><td class="num">${inr(l.amount)}</td><td class="num">${num(l.qty_done)}</td></tr>`).join('')}</tbody></table></div>
+        <div class="card p mb small"><div class="row between"><span class="sub">Taxable</span><span>${inr(T.taxable)}</span></div>${T.cgst ? `<div class="row between"><span class="sub">CGST</span><span>${inr(T.cgst)}</span></div><div class="row between"><span class="sub">SGST</span><span>${inr(T.sgst)}</span></div>` : ''}${T.igst ? `<div class="row between"><span class="sub">IGST</span><span>${inr(T.igst)}</span></div>` : ''}${T.round_off ? `<div class="row between"><span class="sub">Round off</span><span>${inr(T.round_off)}</span></div>` : ''}<div class="row between" style="margin-top:6px;font-weight:700;font-size:14px"><span>Total</span><span>${inr(T.total)}</span></div></div>
+        ${o.docs.length ? `<h2>${sales ? 'Invoices' : 'Goods receipts'}</h2><div class="card mb scroll-x"><table><tbody>${o.docs.map((d) => `<tr><td class="mono">${esc(d.number)}</td><td class="small">${esc(d.doc_date)}</td><td class="small sub">Voucher ${esc(d.voucher_no)}</td><td class="num">${inr(d.total_amount)}</td></tr>`).join('')}</tbody></table></div>` : ''}
+        <div class="row wrap">${actions.join('') || '<span class="sub small">No further actions.</span>'}</div>`;
+      const $ = (s) => m.el.querySelector(s);
+      $('#a-edit')?.addEventListener('click', async () => { m.close(); await lookups(); orderForm(kindPath, o); });
+      $('#a-del')?.addEventListener('click', () => confirmBox('Delete draft', `Delete ${o.number}? This cannot be undone.`, 'Delete', async () => { await api(`/orders/${id}`, { method: 'DELETE' }); m.close(); toast('Deleted'); reload(); }));
+      $('#a-conf')?.addEventListener('click', async (e) => { e.target.classList.add('busy'); try { const r = await api(`/orders/${id}/confirm`, { method: 'POST' }); m.close(); toast(sales ? `${o.number} confirmed — stock reserved` : `${o.number} issued`); (r.warnings || []).forEach((w) => toast(w, 'err')); reload(); setTimeout(() => orderDrawer(id), 300); } catch (er) { e.target.classList.remove('busy'); toast(er.message, 'err'); } });
+      $('#a-cancel')?.addEventListener('click', () => { const mm = modal('Cancel order', `<form id="cf">${field('Reason (optional)', '<input class="input" name="reason" maxlength="200">')}<p class="hint">${sales ? 'Reserved stock will be released.' : 'The order will be closed.'}</p><div class="row" style="justify-content:flex-end;margin-top:12px"><button type="button" class="btn" data-x>Keep order</button><button class="btn danger">Cancel order</button></div></form>`); mm.el.querySelector('#cf').onsubmit = async (ev) => { ev.preventDefault(); try { await api(`/orders/${id}/cancel`, { method: 'POST', body: { reason: ev.target.reason.value } }); mm.close(); m.close(); toast('Order cancelled'); reload(); } catch (er) { toast(er.message, 'err'); } }; });
+      $('#a-recv')?.addEventListener('click', () => {
+        const mm = modal('Receive goods', `<form id="rf"><div class="formgrid">${field('Receipt date', `<input class="input" type="date" name="date" value="${today()}">`)}${field("Supplier's invoice no.", '<input class="input" name="reference" maxlength="60" placeholder="Optional">')}</div>
+          <div class="card mt scroll-x"><table><thead><tr><th>Item</th><th class="num">Ordered</th><th class="num">Still due</th><th>Receiving now</th></tr></thead><tbody>${o.lines.map((l) => `<tr><td>${esc(l.item)}</td><td class="num">${num(l.qty)}</td><td class="num">${num(l.remaining)}</td><td><input class="input" type="number" min="0" max="${l.remaining}" step="any" data-line="${l.id}" value="${l.remaining}" ${l.remaining <= 0 ? 'disabled' : ''}></td></tr>`).join('')}</tbody></table></div>
+          <p class="hint">This posts a Purchase voucher: stock comes in to ${esc(o.warehouse)}, the supplier's bill is opened and input GST is recorded.</p><div class="errtxt" id="err" hidden></div><div class="row" style="justify-content:flex-end;margin-top:12px"><button type="button" class="btn" data-x>Cancel</button><button class="btn primary">Receive &amp; post</button></div></form>`, { wide: true });
+        mm.el.querySelector('#rf').onsubmit = async (ev) => { ev.preventDefault(); const btn = ev.target.querySelector('.primary'); btn.classList.add('busy'); const lines = [...ev.target.querySelectorAll('[data-line]')].map((i) => ({ line_id: +i.dataset.line, qty: i.value })).filter((l) => +l.qty > 0);
+          try { const r = await api(`/orders/${id}/receive`, { method: 'POST', body: { date: ev.target.date.value, reference: ev.target.reference.value, lines } }); mm.close(); m.close(); toast(`Goods received (${r.docs[r.docs.length - 1].number})`); reload(); setTimeout(() => orderDrawer(id), 300); } catch (er) { btn.classList.remove('busy'); const x = mm.el.querySelector('#err'); x.hidden = false; x.textContent = er.message; } };
+      });
+      $('#a-inv')?.addEventListener('click', () => {
+        const mm = modal('Create invoice', `<form id="vf"><div class="formgrid">${field('Invoice date', `<input class="input" type="date" name="date" value="${today()}">`)}${field("Customer's PO no.", '<input class="input" name="reference" maxlength="60" placeholder="Optional">')}</div>
+          <p class="hint">This posts a Sales voucher for ${inr(T.total)}: stock goes out of ${esc(o.warehouse)}, the customer's bill is opened and output GST is recorded. The reservation is released.</p><div class="errtxt" id="err" hidden></div><div class="row" style="justify-content:flex-end;margin-top:12px"><button type="button" class="btn" data-x>Cancel</button><button class="btn primary">Invoice &amp; post</button></div></form>`);
+        mm.el.querySelector('#vf').onsubmit = async (ev) => { ev.preventDefault(); const btn = ev.target.querySelector('.primary'); btn.classList.add('busy');
+          try { const r = await api(`/orders/${id}/invoice`, { method: 'POST', body: { date: ev.target.date.value, reference: ev.target.reference.value } }); mm.close(); m.close(); toast(`Invoice ${r.docs[r.docs.length - 1].number} posted`); reload(); setTimeout(() => orderDrawer(id), 300); } catch (er) { btn.classList.remove('busy'); const x = mm.el.querySelector('#err'); x.hidden = false; x.textContent = er.message; } };
+      });
+    } catch (err) { m.el.querySelector('.drawer').innerHTML = `<button class="btn flat sm" data-x>✕</button>${empty('Could not load the order', err.message)}`; }
+  }
+
+  // ---- purchase and sales history
+  async function historyPage(v, kind) {
+    const sales = kind === 'sales-history', q = S.q[kind] = { page: 1, ...(S.q[kind] || {}) };
+    const d = await api(`/${kind}?${qs({ q: q.q, from: q.from, to: q.to, page: q.page, page_size: 30 })}`);
+    v.innerHTML = `<div class="sp-wrap"><div class="row wrap mb"><input class="input" data-f="q" placeholder="Voucher, ${sales ? 'customer' : 'supplier'} or order no…" value="${esc(q.q || '')}" style="max-width:280px"><input class="input" type="date" data-f="from" value="${esc(q.from || '')}" style="width:140px" aria-label="From"><input class="input" type="date" data-f="to" value="${esc(q.to || '')}" style="width:140px" aria-label="To"><span class="grow"></span><span class="badge b-n">${d.total} vouchers · ${inr(d.sum)}</span></div>
+      <div class="card scroll-x">${d.items.length ? `<table><thead><tr><th>Date</th><th>Voucher</th><th>${sales ? 'Customer' : 'Supplier'}</th><th>Reference</th><th>Order</th><th class="num">Qty</th><th class="num">Total</th></tr></thead><tbody>
+      ${d.items.map((r) => `<tr><td class="small">${esc(r.date)}</td><td class="mono">${esc(r.number)}</td><td>${esc(r.party || '—')}</td><td class="small sub">${esc(r.reference || '')}</td><td>${r.order_number ? `<a href="#" data-o="${r.order_id}" onclick="return false">${esc(r.order_number)}</a>` : '<span class="sub small">direct entry</span>'}</td><td class="num">${num(r.quantity)}</td><td class="num">${inr(r.total)}</td></tr>`).join('')}</tbody></table>${pager(d, kind)}` : empty('No vouchers found', 'Posted vouchers appear here, whether entered directly or created from an order.')}</div></div>`;
+    bindFilters(kind); v.querySelectorAll('a[data-o]').forEach((a) => a.addEventListener('click', () => orderDrawer(+a.dataset.o)));
+  }
+  PAGES['sales-history'] = (v) => historyPage(v, 'sales-history');
+  PAGES['purchase-history'] = (v) => historyPage(v, 'purchase-history');
 
   window.StockPilotInv = { open, close, go, _state: S };
 })();
