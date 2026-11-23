@@ -199,6 +199,7 @@ async function initDb() {
       bank_ifsc TEXT,
       maintain_bill_by_bill INTEGER DEFAULT 1,
       is_active INTEGER DEFAULT 1,
+      description TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(group_id) REFERENCES account_groups(id)
     )
@@ -482,7 +483,217 @@ async function initDb() {
   await run('CREATE INDEX IF NOT EXISTS idx_user_logins_time ON user_logins(login_time)');
 
   await seedTallyMasters();
+  await seedStandardTallyLedgers();
   await seedDefaultUsers(); // security columns, first-run administrator, and account hardening for existing databases
+}
+
+// ========================================================
+// 96 STANDARD TALLY ERP 9 LEDGER-GROUP DICTIONARY
+// ========================================================
+const STANDARD_TALLY_LEDGERS = [
+  // Page 1: Direct Expenses (1-14)
+  { sno: 1, name: 'Carriage', group: 'Direct Expenses', side: 'Dr' },
+  { sno: 2, name: 'Carriage Inward / Carriage on Purchase', group: 'Direct Expenses', side: 'Dr' },
+  { sno: 3, name: 'Custom Duty Of Import', group: 'Direct Expenses', side: 'Dr' },
+  { sno: 4, name: 'Dock Charge (Inward)', group: 'Direct Expenses', side: 'Dr' },
+  { sno: 5, name: 'Factory Duty', group: 'Direct Expenses', side: 'Dr' },
+  { sno: 6, name: 'Factory Expenses & Insurance', group: 'Direct Expenses', side: 'Dr' },
+  { sno: 7, name: 'Freight Inward', group: 'Direct Expenses', side: 'Dr' },
+  { sno: 8, name: 'Fuel, Heating & Lighting', group: 'Direct Expenses', side: 'Dr' },
+  { sno: 9, name: 'Gas, Water & Oil', group: 'Direct Expenses', side: 'Dr' },
+  { sno: 10, name: 'Grease', group: 'Direct Expenses', side: 'Dr' },
+  { sno: 11, name: 'Manufacturing Exp.', group: 'Direct Expenses', side: 'Dr' },
+  { sno: 12, name: 'Motive Power, Coal', group: 'Direct Expenses', side: 'Dr' },
+  { sno: 13, name: 'Royalty Based On Product', group: 'Direct Expenses', side: 'Dr' },
+  { sno: 14, name: 'Wages', group: 'Direct Expenses', side: 'Dr' },
+
+  // Page 1 & 2: Indirect Expenses (15-52)
+  { sno: 15, name: 'Advertisement', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 16, name: 'Audit Fees', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 17, name: 'Bad Debts', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 18, name: 'Bank Charges', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 19, name: 'Boxes & Labels', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 20, name: 'Brokerage', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 21, name: 'Carriage Outward / Carriage on sales', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 22, name: 'Commission', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 23, name: 'Conveyance Expenses', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 24, name: 'Depreciation', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 25, name: 'Discount', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 26, name: 'Discount On Debtors', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 27, name: 'Distributive Expenses', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 28, name: 'Entertainment Expenses', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 29, name: 'Establishment Expenses', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 30, name: 'Export Duty', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 31, name: 'Freight Outward', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 32, name: 'General Expenses', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 33, name: 'Insurance', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 34, name: 'Interest', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 35, name: 'Interest on Capital', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 36, name: 'Legal Charge & Law fess', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 37, name: 'License Fess', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 38, name: 'Loss Theft By Fire', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 39, name: 'Office Expenses', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 40, name: 'Office Lighting', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 41, name: 'Packing Expense', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 42, name: 'Postage & Telegram', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 43, name: 'Printing', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 44, name: 'Provisional for Bad debts(New/Old)', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 45, name: 'Rent, Rates & Taxes', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 46, name: 'Repair & Renewals', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 47, name: 'Salary', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 48, name: 'Stationary', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 49, name: 'Sundry Expenses', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 50, name: 'Telephone Exp', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 51, name: 'Trade Exp', group: 'Indirect Expenses', side: 'Dr' },
+  { sno: 52, name: 'Travelling Expenses', group: 'Indirect Expenses', side: 'Dr' },
+
+  // Page 2: Indirect Income (53-60)
+  { sno: 53, name: 'Bad Debts Received', group: 'Indirect Incomes', side: 'Cr' },
+  { sno: 54, name: 'Commission (Cr)', group: 'Indirect Incomes', side: 'Cr' },
+  { sno: 55, name: 'Discount (Cr)', group: 'Indirect Incomes', side: 'Cr' },
+  { sno: 56, name: 'Discount On creditors', group: 'Indirect Incomes', side: 'Cr' },
+  { sno: 57, name: 'Interest (Cr)', group: 'Indirect Incomes', side: 'Cr' },
+  { sno: 58, name: 'Interest on drawing', group: 'Indirect Incomes', side: 'Cr' },
+  { sno: 59, name: 'Interest Received', group: 'Indirect Incomes', side: 'Cr' },
+  { sno: 60, name: 'Rent Received', group: 'Indirect Incomes', side: 'Cr' },
+
+  // Page 2: Fixed Assets (61-71)
+  { sno: 61, name: 'Brand', group: 'Fixed Assets', side: 'Dr' },
+  { sno: 62, name: 'Building', group: 'Fixed Assets', side: 'Dr' },
+  { sno: 63, name: 'Business Premises', group: 'Fixed Assets', side: 'Dr' },
+  { sno: 64, name: 'Freehold / lease Hold Hand', group: 'Fixed Assets', side: 'Dr' },
+  { sno: 65, name: 'Land', group: 'Fixed Assets', side: 'Dr' },
+  { sno: 66, name: 'Machinery', group: 'Fixed Assets', side: 'Dr' },
+  { sno: 67, name: 'Motor Vehicle', group: 'Fixed Assets', side: 'Dr' },
+  { sno: 68, name: 'Office Furniture & Fitting', group: 'Fixed Assets', side: 'Dr' },
+  { sno: 69, name: 'Patents', group: 'Fixed Assets', side: 'Dr' },
+  { sno: 70, name: 'Plant', group: 'Fixed Assets', side: 'Dr' },
+  { sno: 71, name: "Tools/ Office Equipment's", group: 'Fixed Assets', side: 'Dr' },
+
+  // Page 2: Bank & Cash (72-73)
+  { sno: 72, name: 'Bank / Cash at Bank', group: 'Bank Accounts', side: 'Dr' },
+  { sno: 73, name: 'Cash / Cash In Hand', group: 'Cash-in-hand', side: 'Dr' },
+
+  // Page 3: Bank OD & Capital (74-76)
+  { sno: 74, name: 'Bank Overdraft', group: 'Bank OD A/c', side: 'Cr' },
+  { sno: 75, name: 'Capital', group: 'Capital Account', side: 'Cr' },
+  { sno: 76, name: 'Drawings', group: 'Capital Account', side: 'Dr' },
+
+  // Page 3: Purchase & Sales (77-80)
+  { sno: 77, name: 'Purchase', group: 'Purchase Accounts', side: 'Dr' },
+  { sno: 78, name: 'Purchase Return /Return Outward', group: 'Purchase Accounts', side: 'Cr' },
+  { sno: 79, name: 'Sales', group: 'Sales Accounts', side: 'Cr' },
+  { sno: 80, name: 'Sales Return / Return Inward', group: 'Sales Accounts', side: 'Dr' },
+
+  // Page 3: Stock & Current Assets (81-86)
+  { sno: 81, name: 'Stock Opening', group: 'Stock-in-hand', side: 'Dr' },
+  { sno: 82, name: 'Stock Closing', group: 'Stock-in-hand', side: 'Dr' },
+  { sno: 83, name: 'Bills Receivable (BR)', group: 'Current Assets', side: 'Dr' },
+  { sno: 84, name: 'Goodwill', group: 'Current Assets', side: 'Dr' },
+  { sno: 85, name: 'Outstanding Income', group: 'Current Assets', side: 'Dr' },
+  { sno: 86, name: 'Prepaid Expenses', group: 'Current Assets', side: 'Dr' },
+
+  // Page 3: Current Liabilities & Loans (87-91)
+  { sno: 87, name: 'Outstanding Expenses', group: 'Current Liabilities', side: 'Cr' },
+  { sno: 88, name: 'Bills Payable (BP)', group: 'Current Liabilities', side: 'Cr' },
+  { sno: 89, name: 'Prepaid Income', group: 'Current Liabilities', side: 'Cr' },
+  { sno: 90, name: 'Loans (Dr.)', group: 'Loans & Advances (Asset)', side: 'Dr' },
+  { sno: 91, name: 'Loans (Cr)', group: 'Loans (Liability)', side: 'Cr' },
+
+  // Page 3: Duties, Reserve, Investment, Debtors/Creditors (92-96)
+  { sno: 92, name: 'GST (CGST – SGST – IGST)', group: 'Duties & Taxes', side: 'Cr' },
+  { sno: 93, name: 'Reserve Fund', group: 'Reserves & Surplus', side: 'Cr' },
+  { sno: 94, name: 'Investment', group: 'Investments', side: 'Dr' },
+  { sno: 95, name: 'Sundry Creditors', group: 'Sundry Creditors', side: 'Cr' },
+  { sno: 96, name: 'Sundry Debtors', group: 'Sundry Debtors', side: 'Dr' }
+];
+
+async function seedStandardTallyLedgers() {
+  try {
+    const cols = (await all('PRAGMA table_info(ledgers)')).map(c => c.name);
+    if (!cols.includes('description')) {
+      await run('ALTER TABLE ledgers ADD COLUMN description TEXT');
+    }
+  } catch (err) {}
+
+  // Clear any existing Hindi descriptions from ledgers
+  try {
+    await run("UPDATE ledgers SET description = NULL WHERE description IS NOT NULL");
+  } catch (err) {}
+
+  // Ensure common Tally group aliases exist
+  const groupAliases = [
+    { name: 'Bank Account', parentName: 'Bank Accounts', nature: 'Assets', aff: 0 },
+    { name: 'Cash In Hand', parentName: 'Cash-in-hand', nature: 'Assets', aff: 0 },
+    { name: 'Bank O/D Account', parentName: 'Bank OD A/c', nature: 'Liabilities', aff: 0 },
+    { name: 'Purchase Account', parentName: 'Purchase Accounts', nature: 'Expenses', aff: 1 },
+    { name: 'Sales Account', parentName: 'Sales Accounts', nature: 'Income', aff: 1 },
+    { name: 'Indirect Income', parentName: 'Indirect Incomes', nature: 'Income', aff: 0 },
+    { name: 'Stock-In-Hand', parentName: 'Stock-in-hand', nature: 'Assets', aff: 0 },
+    { name: 'Current Liability', parentName: 'Current Liabilities', nature: 'Liabilities', aff: 0 },
+    { name: 'Loans (Advance Assets)', parentName: 'Loans & Advances (Asset)', nature: 'Assets', aff: 0 },
+    { name: 'Reserve & Surplus', parentName: 'Reserves & Surplus', nature: 'Liabilities', aff: 0 },
+    { name: 'Investment', parentName: 'Investments', nature: 'Assets', aff: 0 }
+  ];
+
+  for (const ga of groupAliases) {
+    const ex = await get('SELECT id FROM account_groups WHERE LOWER(name) = LOWER(?)', [ga.name]);
+    if (!ex) {
+      const parent = await get('SELECT id FROM account_groups WHERE LOWER(name) = LOWER(?)', [ga.parentName]);
+      await run(
+        'INSERT INTO account_groups (name, nature, parent_id, affects_gross_profit, is_primary) VALUES (?, ?, ?, ?, 0)',
+        [ga.name, ga.nature, parent ? parent.id : null, ga.aff]
+      );
+    }
+  }
+
+  const grps = await all('SELECT id, name FROM account_groups');
+  const gMap = {};
+  grps.forEach(g => {
+    gMap[g.name.toLowerCase().trim()] = g.id;
+  });
+
+  const resolveGroupId = (groupName) => {
+    const k = (groupName || '').toLowerCase().trim();
+    if (gMap[k]) return gMap[k];
+    if (k.includes('direct exp')) return gMap['direct expenses'];
+    if (k.includes('indirect exp')) return gMap['indirect expenses'];
+    if (k.includes('indirect inc')) return gMap['indirect incomes'] || gMap['indirect income'];
+    if (k.includes('fixed asset')) return gMap['fixed assets'];
+    if (k.includes('bank account') || k.includes('bank a/c')) return gMap['bank accounts'] || gMap['bank account'];
+    if (k.includes('cash')) return gMap['cash-in-hand'] || gMap['cash in hand'];
+    if (k.includes('bank od') || k.includes('overdraft')) return gMap['bank od a/c'] || gMap['bank o/d account'];
+    if (k.includes('capital')) return gMap['capital account'];
+    if (k.includes('purchase')) return gMap['purchase accounts'] || gMap['purchase account'];
+    if (k.includes('sales')) return gMap['sales accounts'] || gMap['sales account'];
+    if (k.includes('stock')) return gMap['stock-in-hand'];
+    if (k.includes('current asset')) return gMap['current assets'];
+    if (k.includes('current liab')) return gMap['current liabilities'] || gMap['current liability'];
+    if (k.includes('loan') && k.includes('advance')) return gMap['loans & advances (asset)'] || gMap['loans (advance assets)'];
+    if (k.includes('loan')) return gMap['loans (liability)'];
+    if (k.includes('tax') || k.includes('dut')) return gMap['duties & taxes'];
+    if (k.includes('reserve') || k.includes('surplus')) return gMap['reserves & surplus'] || gMap['reserve & surplus'];
+    if (k.includes('invest')) return gMap['investments'] || gMap['investment'];
+    if (k.includes('creditor')) return gMap['sundry creditors'];
+    if (k.includes('debtor')) return gMap['sundry debtors'];
+    return gMap['current assets'] || 6;
+  };
+
+  let seeded = 0;
+  for (const it of STANDARD_TALLY_LEDGERS) {
+    const targetGid = resolveGroupId(it.group);
+    const existing = await get('SELECT id FROM ledgers WHERE LOWER(name) = LOWER(?)', [it.name]);
+    if (!existing) {
+      await run(
+        `INSERT INTO ledgers (name, group_id, opening_balance, opening_balance_type, description, state, state_code)
+         VALUES (?, ?, 0, ?, NULL, 'Tamil Nadu', '33')`,
+        [it.name, targetGid, it.side || 'Dr']
+      );
+      seeded++;
+    }
+  }
+
+  return { total: STANDARD_TALLY_LEDGERS.length, newlySeeded: seeded };
 }
 
 async function seedTallyMasters(force = false) {
@@ -792,6 +1003,7 @@ async function seedTallyMasters(force = false) {
   await run("INSERT INTO ledger_entries (voucher_id, ledger_id, entry_type, debit_amount, credit_amount, particulars) VALUES (?, ?, 'Cr', 0, 15000, 'Plant & Machinery')", [v8.lastID, lMap['Plant & Machinery']]);
 
   console.log('[Tally Core DB] Company 100000 seeded with verified mathematical equilibrium!');
+  await seedStandardTallyLedgers();
   await seedDefaultUsers();
 }
 
@@ -1384,7 +1596,9 @@ module.exports = {
   updateUser,
   deleteUser,
   getLoginAuditTrail,
-  getRolePermissions
+  getRolePermissions,
+  seedStandardTallyLedgers,
+  STANDARD_TALLY_LEDGERS
 };
 
 // Values that depend on the active company are exposed as live getters so existing code that reads them keeps working after a switch.

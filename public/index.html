@@ -1583,10 +1583,18 @@
     <section id="view-chart-accounts" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden hidden fade-in">
       <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
         <div>
-          <h2 class="text-sm font-bold uppercase tracking-wider">Chart of Accounts — Statutory 28 Groups &amp; Ledgers</h2>
-          <p class="text-[10px] text-slate-300">Hierarchical View of Indian Accounting Groups</p>
+          <h2 class="text-sm font-bold uppercase tracking-wider">Chart of Accounts — Statutory Groups &amp; Ledgers</h2>
+          <p class="text-[10px] text-slate-300">Hierarchical View of Indian Accounting Groups &amp; Standard Ledgers</p>
         </div>
-        <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
+        <div class="flex items-center space-x-2">
+          <button onclick="openModal('createGroupModal')" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-bold flex items-center space-x-1">
+            <i data-lucide="folder-plus" class="w-3.5 h-3.5"></i><span>+ Create Group</span>
+          </button>
+          <button onclick="openModal('createLedgerModal')" class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold flex items-center space-x-1">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i><span>+ Create Ledger (Alt+C)</span>
+          </button>
+          <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
+        </div>
       </div>
 
       <div class="p-6">
@@ -1977,6 +1985,54 @@
 </div>
 
   <!-- ============================================== -->
+  <!-- MODAL: CREATE ACCOUNT GROUP MASTER             -->
+  <!-- ============================================== -->
+  <div id="createGroupModal" class="modal-backdrop hidden">
+    <div class="bg-white rounded-lg shadow-2xl max-w-lg w-full border border-slate-300 overflow-hidden text-xs">
+      <div class="bg-[#1f3a52] text-white px-4 py-2.5 font-bold flex justify-between items-center">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="folder-plus" class="w-4 h-4 text-amber-400"></i>
+          <span>Account Group Creation Master</span>
+        </div>
+        <button type="button" onclick="closeModal('createGroupModal')" class="text-slate-300 hover:text-white">✕</button>
+      </div>
+      <form onsubmit="handleSaveGroup(event)" class="p-5 space-y-3">
+        <div>
+          <label class="block font-bold text-slate-700 mb-0.5">Group Name *</label>
+          <input type="text" id="m-group-name" required placeholder="e.g. Administrative Expenses or North Zone Debtors" class="w-full border border-slate-300 rounded p-1.5 font-semibold">
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-0.5">Under (Parent Group)</label>
+          <select id="m-group-parent" onchange="handleGroupParentChange()" class="w-full border border-slate-300 rounded p-1.5 font-semibold">
+            <option value="">Primary (Top Level Group)</option>
+          </select>
+          <p class="text-[10px] text-slate-400 mt-0.5">Select an existing group to create a sub-group, or Primary for a root group.</p>
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-0.5">Nature of Group *</label>
+          <select id="m-group-nature" required class="w-full border border-slate-300 rounded p-1.5 font-bold">
+            <option value="Expenses">Expenses</option>
+            <option value="Income">Income</option>
+            <option value="Assets">Assets</option>
+            <option value="Liabilities">Liabilities</option>
+          </select>
+        </div>
+        <div class="p-2.5 bg-slate-50 border border-slate-200 rounded">
+          <label class="flex items-center space-x-2 cursor-pointer">
+            <input type="checkbox" id="m-group-affects-gp" class="rounded text-indigo-600 focus:ring-indigo-500">
+            <span class="font-bold text-slate-800">Affects Gross Profit (Trading Account)</span>
+          </label>
+          <p class="text-[10px] text-slate-500 ml-5 mt-0.5">Check for Direct Expenses and Direct Incomes that affect Gross Profit.</p>
+        </div>
+        <div class="pt-3 border-t border-slate-200 flex justify-end space-x-2">
+          <button type="button" onclick="closeModal('createGroupModal')" class="px-3 py-1.5 border border-slate-300 rounded font-semibold text-slate-600">Cancel</button>
+          <button type="submit" class="px-4 py-1.5 bg-[#1f3a52] text-white rounded font-bold hover:bg-[#162a3b]">Save Group</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
   <!-- MODAL: CREATE LEDGER (ALT+C)                   -->
   <!-- ============================================== -->
   <div id="createLedgerModal" class="modal-backdrop hidden">
@@ -1991,8 +2047,15 @@
           <input type="text" id="m-ledger-name" required placeholder="e.g. Cummins India Diesel Vendor" class="w-full border border-slate-300 rounded p-1.5 font-semibold">
         </div>
         <div>
-          <label class="block font-bold text-slate-700 mb-0.5">Under (Group) *</label>
+          <div class="flex justify-between items-center mb-0.5">
+            <label class="block font-bold text-slate-700">Under (Group) *</label>
+            <button type="button" onclick="openModal('createGroupModal')" class="text-blue-600 hover:underline font-semibold text-[11px]">+ New Group</button>
+          </div>
           <select id="m-ledger-group" required class="w-full border border-slate-300 rounded p-1.5 font-semibold"></select>
+        </div>
+        <div>
+          <label class="block font-bold text-slate-700 mb-0.5">Description / Notes (Optional)</label>
+          <input type="text" id="m-ledger-desc" placeholder="e.g. Terms, supplier code or note" class="w-full border border-slate-300 rounded p-1.5 font-medium">
         </div>
         <div class="grid grid-cols-2 gap-3">
           <div>
@@ -2611,7 +2674,7 @@
                 <div class="text-[10px] text-slate-500">Parties, Banks, Incomes, Exp</div>
               </div>
             </button>
-            <button onclick="closeModal('masterCreateModal'); openReport('chart-accounts');" class="p-2.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded text-left transition flex items-center space-x-2">
+            <button onclick="closeModal('masterCreateModal'); openModal('createGroupModal');" class="p-2.5 bg-slate-50 hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded text-left transition flex items-center space-x-2">
               <i data-lucide="layers" class="w-4 h-4 text-indigo-600"></i>
               <div>
                 <div class="font-bold text-slate-900">Group</div>
