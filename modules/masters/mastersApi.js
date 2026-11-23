@@ -20,13 +20,33 @@ router.get('/groups', async (req, res) => {
 router.post('/groups', async (req, res) => {
   try {
     const { name, parent_id, nature, affects_gross_profit } = req.body;
-    if (!name || !nature) return res.status(400).json({ success: false, error: 'Group name and nature are required' });
+    if (!name || !name.trim()) return res.status(400).json({ success: false, error: 'Group name is required' });
+
+    let finalNature = nature;
+    let finalAffects = affects_gross_profit ? 1 : 0;
+    const parentId = parent_id ? parseInt(parent_id, 10) : null;
+
+    if (parentId) {
+      const parent = await get('SELECT nature, affects_gross_profit FROM account_groups WHERE id = ?', [parentId]);
+      if (parent) {
+        if (!finalNature) finalNature = parent.nature;
+        if (affects_gross_profit === undefined) finalAffects = parent.affects_gross_profit;
+      }
+    }
+
+    if (!finalNature) finalNature = 'Expenses';
+
+    const trimmedName = name.trim();
+    const existing = await get('SELECT id FROM account_groups WHERE LOWER(name) = LOWER(?)', [trimmedName]);
+    if (existing) {
+      return res.status(400).json({ success: false, error: `Account group '${trimmedName}' already exists` });
+    }
 
     const result = await run(
-      'INSERT INTO account_groups (name, nature, parent_id, affects_gross_profit, is_primary) VALUES (?, ?, ?, ?, 0)',
-      [name, nature, parent_id || null, affects_gross_profit ? 1 : 0]
+      'INSERT INTO account_groups (name, nature, parent_id, affects_gross_profit, is_primary) VALUES (?, ?, ?, ?, ?)',
+      [trimmedName, finalNature, parentId, finalAffects, parentId ? 0 : 1]
     );
-    res.json({ success: true, id: result.lastID, message: `Group '${name}' created successfully` });
+    res.json({ success: true, id: result.lastID, message: `Group '${trimmedName}' created successfully` });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -49,23 +69,24 @@ router.get('/ledgers', async (req, res) => {
 
 router.post('/ledgers', async (req, res) => {
   try {
-    const { name, group_id, opening_balance, opening_balance_type, gstin, pan, state, state_code, address, bank_account_no, bank_ifsc } = req.body;
+    const { name, group_id, opening_balance, opening_balance_type, gstin, pan, state, state_code, address, bank_account_no, bank_ifsc, description } = req.body;
     if (!name || !group_id) {
       return res.status(400).json({ success: false, error: 'Ledger name and group are required' });
     }
 
     const result = await run(
-      `INSERT INTO ledgers (name, group_id, opening_balance, opening_balance_type, gstin, pan, state, state_code, address, bank_account_no, bank_ifsc)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO ledgers (name, group_id, opening_balance, opening_balance_type, gstin, pan, state, state_code, address, bank_account_no, bank_ifsc, description)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        name, group_id,
+        name.trim(), group_id,
         parseFloat(opening_balance) || 0,
         opening_balance_type || 'Dr',
         gstin || '', pan || '',
         state || 'Tamil Nadu', state_code || '33',
         address || '',
         bank_account_no || null,
-        bank_ifsc || null
+        bank_ifsc || null,
+        description ? description.trim() : null
       ]
     );
 

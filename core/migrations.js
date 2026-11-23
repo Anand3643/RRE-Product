@@ -535,6 +535,13 @@ const MIGRATIONS = [
         PRIMARY KEY (source, kind, src_id)
       )`
     ]
+  },
+  {
+    id: '017_tally_standard_ledgers_and_group_create',
+    description: 'Add description column to ledgers, ensure Tally group aliases, and seed 96 standard Tally ledgers with Hindi meanings',
+    statements: [
+      'ALTER TABLE ledgers ADD COLUMN description TEXT'
+    ]
   }
 ];
 
@@ -569,6 +576,14 @@ async function runMigrations() {
       await run('ROLLBACK').catch(() => {});
       throw new Error(`Migration ${m.id} failed: ${err.message}`);
     }
+  }
+  try {
+    const { seedStandardTallyLedgers } = require('./db');
+    if (typeof seedStandardTallyLedgers === 'function') {
+      await seedStandardTallyLedgers();
+    }
+  } catch (seedErr) {
+    console.warn('[Migrations] Standard Tally ledgers seed note:', seedErr.message);
   }
   return applied;
 }

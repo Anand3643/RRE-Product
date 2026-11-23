@@ -860,6 +860,11 @@ function populateLedgerDropdowns() {
   if (modalGroupSelect && appState.groups) {
     modalGroupSelect.innerHTML = appState.groups.map(g => `<option value="${g.id}">${g.name} (${g.nature})</option>`).join('');
   }
+  const parentGroupSelect = document.getElementById('m-group-parent');
+  if (parentGroupSelect && appState.groups) {
+    parentGroupSelect.innerHTML = '<option value="">Primary (Top Level Group)</option>' +
+      appState.groups.map(g => `<option value="${g.id}">${g.name} (${g.nature})</option>`).join('');
+  }
 }
 
 function populateStockDropdowns() {
@@ -2146,7 +2151,7 @@ async function clearBankEntry(entryId) {
 async function loadChartOfAccountsTree() {
   try {
     const container = document.getElementById('coa-tree-container');
-    const primaryGroups = (appState.groups || []).filter(g => g.is_primary === 1);
+    const primaryGroups = (appState.groups || []).filter(g => g.is_primary === 1 || !g.parent_id);
 
     container.innerHTML = primaryGroups.map(pg => {
       const subGroups = (appState.groups || []).filter(sg => sg.parent_id === pg.id);
@@ -2154,15 +2159,18 @@ async function loadChartOfAccountsTree() {
 
       return `
         <div class="border border-slate-200 rounded-lg p-3 bg-white shadow-sm">
-          <div class="font-bold text-slate-900 text-sm flex items-center space-x-2">
-            <span class="w-2.5 h-2.5 rounded-full ${pg.nature === 'Assets' ? 'bg-blue-500' : pg.nature === 'Liabilities' ? 'bg-purple-500' : pg.nature === 'Income' ? 'bg-emerald-500' : 'bg-amber-500'}"></span>
-            <span>${pg.name}</span>
-            <span class="text-[10px] text-slate-400">(${pg.nature})</span>
+          <div class="font-bold text-slate-900 text-sm flex items-center justify-between">
+            <div class="flex items-center space-x-2">
+              <span class="w-2.5 h-2.5 rounded-full ${pg.nature === 'Assets' ? 'bg-blue-500' : pg.nature === 'Liabilities' ? 'bg-purple-500' : pg.nature === 'Income' ? 'bg-emerald-500' : 'bg-amber-500'}"></span>
+              <span>${escapeHtml(pg.name)}</span>
+              <span class="text-[10px] text-slate-400">(${pg.nature})</span>
+            </div>
+            <button type="button" onclick="openCreateLedgerForGroup(${pg.id})" class="text-[11px] text-blue-600 hover:text-blue-800 font-normal hover:underline">+ Add Ledger</button>
           </div>
 
           <!-- Ledgers in Primary Group -->
           <div class="ml-5 mt-1 space-y-0.5">
-            ${pgLedgers.map(l => `<div class="text-slate-700 text-xs flex justify-between py-0.5 border-b border-slate-100"><span>• ${l.name}</span><span class="font-mono text-slate-500">${formatCurrency(l.opening_balance)} ${l.opening_balance_type}</span></div>`).join('')}
+            ${pgLedgers.map(l => `<div class="text-slate-700 text-xs flex justify-between py-0.5 border-b border-slate-100"><span>• ${escapeHtml(l.name)}</span><span class="font-mono text-slate-500">${formatCurrency(l.opening_balance)} ${l.opening_balance_type}</span></div>`).join('')}
           </div>
 
           <!-- Sub Groups -->
@@ -2171,9 +2179,12 @@ async function loadChartOfAccountsTree() {
               const sgLedgers = (appState.ledgers || []).filter(l => l.group_id === sg.id);
               return `
                 <div class="bg-slate-50 p-2 rounded border border-slate-200">
-                  <div class="font-bold text-xs text-slate-800">↳ ${sg.name}</div>
+                  <div class="font-bold text-xs text-slate-800 flex justify-between items-center">
+                    <span>↳ ${escapeHtml(sg.name)}</span>
+                    <button type="button" onclick="openCreateLedgerForGroup(${sg.id})" class="text-[10px] text-blue-600 hover:text-blue-800 font-normal hover:underline">+ Add Ledger</button>
+                  </div>
                   <div class="ml-4 mt-1 space-y-0.5">
-                    ${sgLedgers.map(l => `<div class="text-slate-600 text-[11px] flex justify-between py-0.5"><span>- ${l.name}</span><span class="font-mono">${formatCurrency(l.opening_balance)} ${l.opening_balance_type}</span></div>`).join('')}
+                    ${sgLedgers.map(l => `<div class="text-slate-600 text-[11px] flex justify-between py-0.5"><span>- ${escapeHtml(l.name)}</span><span class="font-mono">${formatCurrency(l.opening_balance)} ${l.opening_balance_type}</span></div>`).join('')}
                   </div>
                 </div>
               `;
@@ -2184,6 +2195,75 @@ async function loadChartOfAccountsTree() {
     }).join('');
   } catch (err) {
     console.error('Failed to load Chart of Accounts:', err);
+  }
+}
+
+// Group Parent Selection Auto-Nature Logic
+function handleGroupParentChange() {
+  const parentSelect = document.getElementById('m-group-parent');
+  const natureSelect = document.getElementById('m-group-nature');
+  const affectsCheck = document.getElementById('m-group-affects-gp');
+  if (!parentSelect || !natureSelect) return;
+  const val = parentSelect.value;
+  if (!val) return;
+  const parentId = parseInt(val, 10);
+  const p = (appState.groups || []).find(g => g.id === parentId);
+  if (p) {
+    natureSelect.value = p.nature;
+    if (affectsCheck) affectsCheck.checked = p.affects_gross_profit === 1;
+  }
+}
+
+async function handleSaveGroup(e) {
+  if (e) e.preventDefault();
+  const nameInput = document.getElementById('m-group-name');
+  const parentSelect = document.getElementById('m-group-parent');
+  const natureSelect = document.getElementById('m-group-nature');
+  const affectsCheck = document.getElementById('m-group-affects-gp');
+
+  const name = nameInput ? nameInput.value.trim() : '';
+  const parentId = parentSelect && parentSelect.value ? parseInt(parentSelect.value, 10) : null;
+  const nature = natureSelect ? natureSelect.value : 'Expenses';
+  const affectsGP = affectsCheck ? affectsCheck.checked : false;
+
+  if (!name) {
+    alert('Please enter a group name');
+    return;
+  }
+
+  try {
+    const res = await fetch(`${API_BASE}/masters/groups`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, parent_id: parentId, nature, affects_gross_profit: affectsGP })
+    });
+    const json = await res.json();
+    if (json.success) {
+      alert(`Group '${name}' created successfully!`);
+      if (nameInput) nameInput.value = '';
+      closeModal('createGroupModal');
+      await loadMasters();
+      populateLedgerDropdowns();
+      const ledgerGroupSelect = document.getElementById('m-ledger-group');
+      if (ledgerGroupSelect && json.id) {
+        ledgerGroupSelect.value = json.id;
+      }
+      if (appState.currentView === 'view-chart-accounts') {
+        loadChartOfAccountsTree();
+      }
+    } else {
+      alert(`Error: ${json.error}`);
+    }
+  } catch (err) {
+    alert(`Failed to save group: ${err.message}`);
+  }
+}
+
+function openCreateLedgerForGroup(groupId) {
+  openModal('createLedgerModal');
+  const groupSelect = document.getElementById('m-ledger-group');
+  if (groupSelect && groupId) {
+    groupSelect.value = groupId;
   }
 }
 
@@ -2204,6 +2284,7 @@ async function handleSaveLedger(e) {
   e.preventDefault();
   const name = document.getElementById('m-ledger-name').value;
   const groupId = parseInt(document.getElementById('m-ledger-group').value, 10);
+  const desc = document.getElementById('m-ledger-desc') ? document.getElementById('m-ledger-desc').value : '';
   const opBal = parseFloat(document.getElementById('m-ledger-opbal').value) || 0;
   const opType = document.getElementById('m-ledger-optype').value;
   const gstin = document.getElementById('m-ledger-gstin').value;
@@ -2215,14 +2296,19 @@ async function handleSaveLedger(e) {
     const res = await fetch(`${API_BASE}/masters/ledgers`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, group_id: groupId, opening_balance: opBal, opening_balance_type: opType, gstin, state, state_code: stateCode })
+      body: JSON.stringify({ name, group_id: groupId, description: desc, opening_balance: opBal, opening_balance_type: opType, gstin, state, state_code: stateCode })
     });
     const json = await res.json();
     if (json.success) {
       alert(`Ledger '${name}' created successfully!`);
       closeModal('createLedgerModal');
+      const descInput = document.getElementById('m-ledger-desc');
+      if (descInput) descInput.value = '';
       await loadMasters();
       populatePartyDropdown();
+      if (appState.currentView === 'view-chart-accounts') {
+        loadChartOfAccountsTree();
+      }
     } else {
       alert(`Error: ${json.error}`);
     }
@@ -2288,6 +2374,7 @@ const GOTO_REGISTRY = [
   { title: 'Create Credit Note (Sales Return)', category: 'Vouchers', action: () => openVoucherScreen('Credit Note'), hotkey: 'Alt+F6' },
 
   // Masters
+  { title: 'Create Account Group', category: 'Masters', action: () => openModal('createGroupModal'), hotkey: 'Alt+G' },
   { title: 'Create Ledger Account', category: 'Masters', action: () => openModal('createLedgerModal'), hotkey: 'Alt+C' },
   { title: 'Create Stock Item', category: 'Masters', action: () => openModal('createStockModal'), hotkey: 'Alt+I' },
   { title: 'Master Creation Hub', category: 'Masters', action: () => openMasterCreateModal(), hotkey: 'C' },
