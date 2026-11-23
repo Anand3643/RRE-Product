@@ -83,7 +83,7 @@ async function pidOnPort(port) {
   return line ? parseInt(line.trim().split(/\s+/).pop(), 10) : null;
 }
 async function killTree(pid) {
-  if (!pid) return;
+  if (!pid || pid === process.pid || pid === process.ppid) return; // never our own process or the window that started us
   if (isWin) await run('taskkill', ['/PID', String(pid), '/T', '/F']);
   else { try { process.kill(-pid); } catch (e) { try { process.kill(pid); } catch (e2) { /* already gone */ } } }
 }
@@ -141,14 +141,15 @@ function ssoToken(as = 'admin') {
 }
 
 /** Starts the inventory application if needed and returns the address to open. `admin` signs the administrator in; otherwise the original login is shown. */
-async function launch({ admin = false, path: sub = '/' } = {}) {
+async function launch({ admin = false, path: sub = '/', wait = true } = {}) {
+  if (!wait && !(state.port && (await ping(state.port, 800)))) { ensureStarted().catch(() => { /* the reason is kept in state.error and shown by status() */ }); return { starting: true }; } // answer at once; the screen waits for the start-up
   await ensureStarted();
   const p = /^\/[A-Za-z0-9\-_/]*$/.test(sub) ? sub : '/';
   return { url: `http://127.0.0.1:${state.port}${p}${admin ? `?sso=${ssoToken('admin')}` : '?fresh=1'}`, port: state.port };
 }
 
 function status() {
-  return { available: fs.existsSync(path.join(APP_DIR, 'frontend', 'dist', 'index.html')), running: !!state.port, port: state.port, error: state.error, database: fs.existsSync(dbFile()) ? 'ready' : 'not created yet' };
+  return { available: fs.existsSync(path.join(APP_DIR, 'frontend', 'dist', 'index.html')), running: !!state.port, starting: !!state.starting, port: state.port, error: state.error, database: fs.existsSync(dbFile()) ? 'ready' : 'not created yet' };
 }
 
 // when RRE quits normally the inventory process goes with it (after a hard kill it keeps running and RRE adopts it again on the next start)

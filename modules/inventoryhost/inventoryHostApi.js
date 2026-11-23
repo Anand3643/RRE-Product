@@ -14,12 +14,14 @@ const fail = (res, status, message) => res.status(status).json({ success: false,
 
 router.get('/status', (req, res) => res.json({ success: true, data: host.status() }));
 
+
 router.post('/launch', async (req, res) => {
   try {
     const user = identify(req); // optional: in the login-free build there is no session and the person at the keyboard is the administrator
     if (user && user.role === 'Customer') return fail(res, 403, 'Customer accounts use the customer portal.');
     const admin = !user || !!getRolePermissions(user.role).canManageUsers;
-    const out = await host.launch({ admin, path: req.body && req.body.path });
+    const out = await host.launch({ admin, path: req.body && req.body.path, wait: !(req.body && req.body.nowait) });
+    if (out.starting) return res.status(202).json({ success: true, data: { starting: true } }); // still starting: the screen asks again
     if (user) logActivity({ user, ip: req.ip, action: 'INVENTORY_APP_OPEN', entity: 'inventory-app', details: { admin } });
     res.json({ success: true, data: { url: out.url, signed_in: admin } });
   } catch (err) { fail(res, 503, err.message); }

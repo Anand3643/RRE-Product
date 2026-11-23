@@ -903,6 +903,15 @@ function startServer(preferredPort = WEB_PORT, preferredHost = '127.0.0.1') {
 
 // Auto-start if invoked directly via `node server.js`
 if (require.main === module) {
+  // A stray error in one request or background job is written to the log and the server keeps running (it used to stop the whole application)
+  const crashLog = (kind, err) => {
+    const msg = `[${new Date().toISOString()}] ${kind}: ${err && err.stack ? err.stack : err}
+`;
+    console.error('[RRE Server] ' + msg.trim());
+    try { require('fs').appendFileSync(require('path').join(require('./core/db').getDataDir(), 'server-errors.log'), msg); } catch (e) { /* the console line above is enough */ }
+  };
+  process.on('uncaughtException', (err) => crashLog('uncaughtException', err));
+  process.on('unhandledRejection', (err) => crashLog('unhandledRejection', err));
   startServer();
 }
 

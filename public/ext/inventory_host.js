@@ -56,12 +56,35 @@
   }
   setInterval(refreshBooks, 30000);
 
-  async function launch(path) {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // a call to RRE's own server; a dropped connection is retried before the person is told
+  async function call(p, body) {
     const base = typeof API_BASE !== 'undefined' ? API_BASE : '/api';
-    const res = await fetch(base + '/inventory-app/launch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: path || '/' }) });
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok || !j.success) throw new Error(j.error || 'The inventory application could not be started.');
-    return j.data.url;
+    let last;
+    for (let i = 0; i < 4; i++) {
+      try {
+        const res = await fetch(base + p, { method: body ? 'POST' : 'GET', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+        return { res, j: await res.json().catch(() => ({})) };
+      } catch (e) { last = e; await sleep(1000 * (i + 1)); }
+    }
+    throw new Error('RRE could not reach its own server (' + ((last && last.message) || 'no connection') + '). Make sure RRE is still running, then press Try again.');
+  }
+  // asks RRE to open Inventory. RRE answers at once; if the inventory application is still starting we wait for it here (and show how long)
+  async function launch(path, onWait) {
+    const t0 = Date.now();
+    for (;;) {
+      const { res, j } = await call('/inventory-app/launch', { path: path || '/', nowait: true });
+      if (res.status === 202 && j.data && j.data.starting) {
+        if (onWait) onWait(Math.round((Date.now() - t0) / 1000));
+        if (Date.now() - t0 > 180000) throw new Error('Inventory is taking too long to start. Please try again in a minute.');
+        await sleep(1500);
+        const st = (await call('/inventory-app/status')).j;
+        if (st && st.data && st.data.error && !st.data.starting) throw new Error(st.data.error);
+        continue;
+      }
+      if (!res.ok || !j.success) throw new Error(j.error || 'The inventory application could not be started.');
+      return j.data.url;
+    }
   }
 
   async function open(path) {
@@ -73,7 +96,7 @@
     }
     msg('<div class="spin"></div><b>Starting inventory…</b><div style="margin-top:6px">The first start can take a few seconds.</div>');
     try {
-      const url = await launch(path);
+      const url = await launch(path, (sec) => msg(`<div class="spin"></div><b>Starting inventory…</b><div style="margin-top:6px">${sec ? sec + ' seconds so far. ' : ''}The first start can take up to a minute.</div>`));
       let f = root().querySelector('iframe');
       if (!f) { f = document.createElement('iframe'); f.title = 'Inventory'; f.setAttribute('allow', 'clipboard-write; fullscreen'); root().appendChild(f); }
       f.addEventListener('load', () => { const m = root().querySelector('#rre-inv-msg'); if (m) m.style.display = 'none'; }, { once: true });
