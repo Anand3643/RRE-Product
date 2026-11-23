@@ -39,7 +39,8 @@
     "test:invimport": "node test_invimport.js",
     "test:portal": "node test_portal.js",
     "test:invbridge": "node test_invbridge.js",
-    "setup:inventory": "python -m venv inventory-app/backend/.venv && inventory-app/backend/.venv/Scripts/python -m pip install -r inventory-app/backend/requirements.txt"
+    "setup:inventory": "python -m venv inventory-app/backend/.venv && inventory-app/backend/.venv/Scripts/python -m pip install -r inventory-app/backend/requirements.txt",
+    "test:theme": "node test_theme.js"
   },
   "repository": {
     "type": "git",

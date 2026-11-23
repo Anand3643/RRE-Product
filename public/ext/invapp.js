@@ -38,12 +38,12 @@
     const ask = ['AI Workspace', 'Alerts', 'AI Copilot', 'Ask AI'].map((t) => btns.find((x) => x.textContent.includes(t))).find(Boolean);
     if (!ask) return;
     const style = document.createElement('style');
-    style.textContent = `#rre-inv-menu-btn{display:inline-flex;align-items:center;gap:9px;padding:9px 20px;border-radius:9px;background:linear-gradient(135deg,#f59e0b 0%,#ea580c 100%);color:#fff;font-weight:800;font-size:15px;letter-spacing:.03em;text-transform:uppercase;border:2px solid #fde68a;cursor:pointer;box-shadow:0 0 0 0 rgba(251,191,36,.7),0 4px 14px rgba(234,88,12,.55);animation:rreInvPulse 2.4s ease-out infinite;white-space:nowrap}
+    style.textContent = `#rre-inv-menu-btn{display:inline-flex;align-items:center;gap:9px;padding:9px 20px;border-radius:9px;background:linear-gradient(135deg,#ea580c 0%,#c2410c 100%);color:#fff;font-weight:800;font-size:15px;letter-spacing:.03em;text-transform:uppercase;border:2px solid #fde68a;cursor:pointer;box-shadow:0 0 0 0 rgba(251,191,36,.7),0 4px 14px rgba(234,88,12,.55);animation:rreInvPulse 2.4s ease-out infinite;white-space:nowrap}
 #rre-inv-menu-btn:hover{filter:brightness(1.1);transform:translateY(-1px)}#rre-inv-menu-btn:focus-visible{outline:3px solid #fff;outline-offset:2px}
 #rre-inv-menu-btn i{width:20px!important;height:20px!important}
 @keyframes rreInvPulse{0%{box-shadow:0 0 0 0 rgba(251,191,36,.75),0 4px 14px rgba(234,88,12,.55)}70%{box-shadow:0 0 0 12px rgba(251,191,36,0),0 4px 14px rgba(234,88,12,.55)}100%{box-shadow:0 0 0 0 rgba(251,191,36,0),0 4px 14px rgba(234,88,12,.55)}}
 @media (prefers-reduced-motion:reduce){#rre-inv-menu-btn{animation:none}}
-#rre-inv-banner{display:flex;align-items:center;gap:14px;width:100%;margin:0 0 8px;padding:14px 18px;border:0;border-radius:11px;background:linear-gradient(135deg,#f59e0b 0%,#ea580c 100%);color:#fff;text-align:left;cursor:pointer;box-shadow:0 6px 18px rgba(234,88,12,.4)}
+#rre-inv-banner{display:flex;align-items:center;gap:14px;width:100%;margin:0 0 8px;padding:14px 18px;border:0;border-radius:11px;background:linear-gradient(135deg,#ea580c 0%,#c2410c 100%);color:#fff;text-align:left;cursor:pointer;box-shadow:0 6px 18px rgba(234,88,12,.4)}
 #rre-inv-banner:hover{filter:brightness(1.08)}#rre-inv-banner b{display:block;font-size:17px;letter-spacing:.04em;text-transform:uppercase}#rre-inv-banner small{display:block;font-size:11.5px;opacity:.95;margin-top:2px}
 #rre-inv-banner i{width:34px!important;height:34px!important;flex:none}#rre-inv-banner .go{margin-left:auto;font-weight:800;font-size:13px;background:rgba(255,255,255,.22);padding:7px 14px;border-radius:7px;white-space:nowrap}
 #rre-inv-menu{position:fixed;z-index:75;display:none;width:min(560px,calc(100vw - 16px));background:#fff;color:#1f2937;border:1px solid #cbd5e1;border-radius:10px;box-shadow:0 18px 40px -8px rgba(15,23,42,.35);padding:12px 14px;font-size:12px}

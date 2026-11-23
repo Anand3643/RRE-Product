@@ -243,11 +243,13 @@ function togglePasswordVisibility(inputId) {
 // THEME & COLOR PALETTE ENGINE
 // ========================================================
 
-const THEMES = ['tally-gold', 'retro-green', 'midnight-dark', 'ruby-red', 'nordic-light', 'solar-amber'];
+const THEMES = ['aurora', 'tally-gold', 'retro-green', 'midnight-dark', 'ruby-red', 'nordic-light', 'solar-amber'];
 
 function initTheme() {
-  const savedTheme = localStorage.getItem('tally_theme') || 'tally-gold';
-  applyTheme(savedTheme, false);
+  let savedTheme = localStorage.getItem('tally_theme');
+  // One time only: the new Aurora look becomes the default. Anyone can pick another theme (Alt+T) and it is remembered from then on.
+  if (!localStorage.getItem('rre_aurora_default_v1')) { localStorage.setItem('rre_aurora_default_v1', '1'); savedTheme = 'aurora'; }
+  applyTheme(savedTheme || 'aurora', false);
 }
 
 function applyTheme(themeId, notify = false) {
@@ -276,7 +278,7 @@ function applyTheme(themeId, notify = false) {
 }
 
 function openThemeSelectorModal() {
-  const currentTheme = localStorage.getItem('tally_theme') || 'tally-gold';
+  const currentTheme = localStorage.getItem('tally_theme') || 'aurora';
   applyTheme(currentTheme, false);
   openModal('themeSelectorModal');
 }

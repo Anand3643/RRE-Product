@@ -44,6 +44,7 @@
     };
   </script>
   <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="theme/aurora.css">
 </head>
 <body class="bg-slate-100 text-slate-800 antialiased min-h-screen flex flex-col font-sans select-none">
 
@@ -2424,6 +2425,22 @@
 
         <!-- Themes Grid -->
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-3" id="theme-cards-grid">
+          <!-- 0. Aurora (premium 3D glass) -->
+          <div onclick="applyTheme('aurora')" id="theme-card-aurora" class="theme-swatch-card border border-indigo-500/60 text-white" style="background:linear-gradient(135deg,#1b2566,#0a0e2a 60%,#3b1d8f)">
+            <div class="flex items-center space-x-1.5 mb-2">
+              <span class="w-4 h-4 rounded-full bg-[#050816] border border-slate-500 inline-block"></span>
+              <span class="w-4 h-4 rounded-full bg-[#5b7cff] border border-slate-500 inline-block"></span>
+              <span class="w-4 h-4 rounded-full bg-[#7c3aed] border border-slate-500 inline-block"></span>
+              <span class="w-4 h-4 rounded-full bg-[#22d3ee] border border-slate-500 inline-block"></span>
+            </div>
+            <div class="font-bold text-white text-xs">Aurora</div>
+            <p class="text-[11px] text-indigo-200 mt-0.5">Premium glass, 3D scroll and a portfolio dashboard</p>
+            <div class="mt-2 flex items-center justify-between">
+              <span class="text-[10px] font-mono text-indigo-300">New</span>
+              <span class="theme-active-tag hidden text-[10px] font-bold text-cyan-300 bg-cyan-950 border border-cyan-800 px-1.5 py-0.5 rounded">✓ Active</span>
+            </div>
+          </div>
+
           <!-- 1. TallyPrime Gold -->
           <div onclick="applyTheme('tally-gold')" id="theme-card-tally-gold" class="theme-swatch-card bg-slate-50 border border-slate-200">
             <div class="flex items-center space-x-1.5 mb-2">
@@ -3712,6 +3729,7 @@ TOTAL PAYABLE: Rs. 53,100.00"
   <script src="ext/invapp.js"></script>
   <script src="inv/portal.js"></script>
   <script src="ext/portal.js"></script>
+  <script src="theme/aurora.js"></script>
   <script src="quotations.js"></script>
 </body>
 </html>
