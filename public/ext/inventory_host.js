@@ -68,8 +68,8 @@
     build(); root().classList.add('open'); setTimeout(refreshBooks, 300);
     const frame = root().querySelector('iframe');
     if (frame && loadedUrl) {
-      if (path && path !== '/') { try { frame.contentWindow.postMessage({ rre: 'navigate', path }, '*'); } catch (e) { /* ignore */ } try { const u = new URL(frame.src); frame.src = u.origin + path; } catch (e) { /* ignore */ } }
-      return; // already running: keep the state the person left it in
+      if (path) { try { const u = new URL(loadedUrl); const target = u.origin + path; try { frame.contentWindow.location.href = target; } catch (e2) { frame.src = target; } } catch (e) { /* ignore */ } } // already running (signed in): go straight to the feature asked for
+      return;
     }
     msg('<div class="spin"></div><b>Starting inventory…</b><div style="margin-top:6px">The first start can take a few seconds.</div>');
     try {
