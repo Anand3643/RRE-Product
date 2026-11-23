@@ -56,8 +56,8 @@ async function createWindow() {
     height: 820,
     minWidth: 1024,
     minHeight: 700,
-    title: 'RRE Tally',
-    icon: path.join(__dirname, 'tally_icon.ico'),
+    title: 'RRE Entries',
+    icon: path.join(__dirname, 'rre_icon.ico'),
     backgroundColor: '#0a192f',
     webPreferences: {
       nodeIntegration: false,
@@ -70,10 +70,10 @@ async function createWindow() {
   // Native application menu
   const menuTemplate = [
     {
-      label: 'Tally (Gateway)',
+      label: 'Gateway',
       submenu: [
         {
-          label: 'Gateway of Tally (Esc)',
+          label: 'Main Gateway (Esc)',
           accelerator: 'Esc',
           click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.showGateway && window.showGateway(); if(window.closeModal) window.closeModal();')
         },
@@ -99,13 +99,13 @@ async function createWindow() {
         },
         { type: 'separator' },
         {
-          label: 'Export Tally XML (Alt+E)',
+          label: 'Export Compatible XML (Alt+E)',
           accelerator: 'Alt+E',
           click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.exportTallyXml && window.exportTallyXml()')
         },
         { type: 'separator' },
         {
-          label: 'Exit RRE Tally',
+          label: 'Exit RRE Entries',
           accelerator: 'Ctrl+Q',
           click: () => app.quit()
         }
@@ -182,13 +182,13 @@ async function createWindow() {
         },
         { type: 'separator' },
         {
-          label: 'About RRE Tally',
+          label: 'About RRE Entries',
           click: () => {
             dialog.showMessageBox(mainWindow, {
               type: 'info',
-              title: 'About RRE Tally',
-              message: 'RRE Tally (V5 Edition) — Standalone Desktop',
-              detail: 'RRE Tally (V5 Edition)\nMode: 100% Offline Standalone (No Internet or External Server Required)\nData Storage: Local PC SQLite (company.db)\nCompany No: 100000 | Tamil Nadu (33)\nNative Tally XML Port: 9000 (ODBC / Tally Protocol)\nFull double-entry integrity & statutory compliance.'
+              title: 'About RRE Entries',
+              message: 'RRE Entries (V5 Edition) — Enterprise Suite',
+              detail: 'RRE Entries (V5 Edition)\nMode: 100% Offline Standalone (No Internet Required)\nData Storage: Local PC SQLite (company.db)\nCompany No: 100000 | Tamil Nadu (33)\nXML Data Sync Port: 9000 (Open Interoperability)\nFull double-entry integrity & Indian GST statutory compliance.\n\nLegal Notice: Tally, TallyPrime, and Tally.ERP 9 are registered trademarks of Tally Solutions Pvt. Ltd. RRE Entries is an independent product developed by RRE and is not affiliated with or endorsed by Tally Solutions Pvt. Ltd.'
             });
           }
         },

@@ -1,13 +1,13 @@
 // ========================================================
-// RRE TALLY — MASTER APPLICATION ENGINE
+// RRE ENTRIES — MASTER APPLICATION ENGINE
 // ========================================================
 
 // Production Global Error Boundaries
 window.addEventListener('error', (event) => {
-  console.warn('[RRE Tally Runtime Error Caught]', event.message);
+  console.warn('[RRE Entries Runtime Error Caught]', event.message);
 });
 window.addEventListener('unhandledrejection', (event) => {
-  console.warn('[RRE Tally Async Rejection Caught]', event.reason);
+  console.warn('[RRE Entries Async Rejection Caught]', event.reason);
 });
 
 let currentApiOrigin = (function() {
@@ -130,9 +130,9 @@ function getOfflineRolePermissions(role) {
 // Application State with Resilient Offline Defaults
 let appState = {
   company: {
-    name: 'RRE Tally',
+    name: 'RRE Entries',
     company_number: '100000',
-    formal_name: 'M/s. RRE TALLY',
+    formal_name: 'M/s. RRE ENTRIES',
     financial_year_from: '2026-04-01',
     books_beginning_from: '2026-04-01',
     gstin: '',
@@ -451,7 +451,7 @@ async function handleLogin(e) {
     loginData = data.data;
   } catch (netErr) {
     if (errEl) errEl.classList.remove('hidden');
-    if (errText) errText.textContent = 'Cannot reach the RRE Tally server. Please make sure the application is running, then try again.';
+    if (errText) errText.textContent = 'Cannot reach the RRE Entries server. Please make sure the application is running, then try again.';
     return;
   }
 
@@ -553,7 +553,7 @@ async function handleRegister(e) {
     }
   } catch (err) {
     if (errEl) errEl.classList.remove('hidden');
-    if (errText) errText.textContent = 'Cannot reach the RRE Tally server. Please make sure the application is running, then try again.';
+    if (errText) errText.textContent = 'Cannot reach the RRE Entries server. Please make sure the application is running, then try again.';
     } finally {
     if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = origBtnText; }
   }
@@ -623,7 +623,7 @@ async function handleGoogleAuthSubmit(e) {
     authData = data.data;
   } catch (err) {
     if (errEl) errEl.classList.remove('hidden');
-    if (errText) errText.textContent = 'Cannot reach the RRE Tally server. Please make sure the application is running, then try again.';
+    if (errText) errText.textContent = 'Cannot reach the RRE Entries server. Please make sure the application is running, then try again.';
     } finally {
     if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = origBtnText; }
   }
@@ -752,7 +752,7 @@ async function loadGatewayInfo() {
     appState.company = d.company;
 
     // Update Top & Gateway DOM safely
-    const companyTitle = d.company?.name || 'RRE Tally';
+    const companyTitle = d.company?.name || 'RRE Entries';
     const setElText = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
 
     setElText('top-company-name', companyTitle);
@@ -894,20 +894,20 @@ const VIEWS = [
 
 const VIEW_BREADCRUMBS = {
   'view-login': 'Security & Company Login',
-  'view-dashboard': 'TallyPrime Dashboard',
-  'view-gateway': 'Gateway of Tally',
-  'view-display-more': 'Gateway of Tally > Display More Reports',
-  'view-voucher': 'Gateway of Tally > Accounting Voucher Creation',
-  'view-balance-sheet': 'Gateway of Tally > Balance Sheet',
-  'view-profit-loss': 'Gateway of Tally > Profit & Loss A/c',
-  'view-trial-balance': 'Gateway of Tally > Trial Balance',
-  'view-stock-summary': 'Gateway of Tally > Stock Summary',
-  'view-daybook': 'Gateway of Tally > Day Book',
-  'view-ratio-analysis': 'Gateway of Tally > Ratio Analysis',
-  'view-gst': 'Gateway of Tally > GST Portal (GSTR-1 & 3B)',
-  'view-outstandings': 'Gateway of Tally > Outstandings (Ageing)',
-  'view-bank-recon': 'Gateway of Tally > Bank Reconciliation (BRS)',
-  'view-chart-accounts': 'Gateway of Tally > Chart of Accounts'
+  'view-dashboard': 'RRE Entries Live Dashboard',
+  'view-gateway': 'Gateway of RRE Entries',
+  'view-display-more': 'Gateway of RRE Entries > Display More Reports',
+  'view-voucher': 'Gateway of RRE Entries > Accounting Voucher Creation',
+  'view-balance-sheet': 'Gateway of RRE Entries > Balance Sheet',
+  'view-profit-loss': 'Gateway of RRE Entries > Profit & Loss A/c',
+  'view-trial-balance': 'Gateway of RRE Entries > Trial Balance',
+  'view-stock-summary': 'Gateway of RRE Entries > Stock Summary',
+  'view-daybook': 'Gateway of RRE Entries > Day Book',
+  'view-ratio-analysis': 'Gateway of RRE Entries > Ratio Analysis',
+  'view-gst': 'Gateway of RRE Entries > GST Portal (GSTR-1 & 3B)',
+  'view-outstandings': 'Gateway of RRE Entries > Outstandings (Ageing)',
+  'view-bank-recon': 'Gateway of RRE Entries > Bank Reconciliation (BRS)',
+  'view-chart-accounts': 'Gateway of RRE Entries > Chart of Accounts'
 };
 
 function showView(viewId) {
@@ -923,7 +923,7 @@ function showView(viewId) {
   }
 
   // Update Breadcrumb and Bottom Status Bar Context
-  const label = VIEW_BREADCRUMBS[viewId] || 'Gateway of Tally';
+  const label = VIEW_BREADCRUMBS[viewId] || 'Gateway of RRE Entries';
   const topCrumb = document.getElementById('top-breadcrumb');
   if (topCrumb) topCrumb.textContent = label;
   const statusCtx = document.getElementById('status-bar-context');
@@ -2582,7 +2582,7 @@ async function checkForUpdates() {
       if (btnDoUpdate) btnDoUpdate.classList.remove('hidden');
     } else {
       if (statusMsg) statusMsg.className = 'p-2.5 bg-blue-50 border border-blue-200 rounded text-[11px] text-blue-900 flex items-center space-x-2';
-      if (statusText) statusText.textContent = 'Your RRE Tally installation is completely up to date!';
+      if (statusText) statusText.textContent = 'Your RRE Entries installation is completely up to date!';
       if (btnDoUpdate) btnDoUpdate.classList.add('hidden');
     }
   } catch (err) {
@@ -2602,7 +2602,7 @@ async function performDirectUpdate() {
   const btnDoUpdate = document.getElementById('btn-do-update');
   const statusText = document.getElementById('update-status-text');
 
-  if (!confirm('Download and install the latest RRE Tally update directly on this PC? All your company accounting data in company.db will remain 100% intact.')) {
+  if (!confirm('Download and install the latest RRE Entries update directly on this PC? All your company accounting data in company.db will remain 100% intact.')) {
     return;
   }
 
@@ -2623,11 +2623,11 @@ async function performDirectUpdate() {
           window.open(data.download_url, '_blank');
         }
       } else {
-        alert(data.message || 'RRE Tally update launched successfully! The application will refresh.');
+        alert(data.message || 'RRE Entries update launched successfully! The application will refresh.');
         setTimeout(() => location.reload(), 2500);
       }
     } else {
-      alert(`Update notification: ${data.error || 'Please run the RRE Tally Setup installer to update.'}`);
+      alert(`Update notification: ${data.error || 'Please run the RRE Entries Setup installer to update.'}`);
     }
   } catch (err) {
     alert(`Update request error: ${err.message}`);

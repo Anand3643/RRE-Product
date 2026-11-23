@@ -1,8 +1,8 @@
 {
-  "name": "rre-tally",
-  "productName": "RRE Tally",
+  "name": "rre-entries",
+  "productName": "RRE Entries",
   "version": "1.0.0",
-  "description": "RRE Tally Enterprise Accounting & Inventory Suite",
+  "description": "RRE Entries Enterprise Accounting & Inventory Suite",
   "main": "main.js",
   "scripts": {
     "start": "node server.js",
@@ -66,9 +66,9 @@
     "electron-builder": "^26.18.0"
   },
   "build": {
-    "appId": "com.rre.tally",
-    "productName": "RRE Tally",
-    "copyright": "Copyright © 2026 RRE Tally",
+    "appId": "com.rre.entries",
+    "productName": "RRE Entries",
+    "copyright": "Copyright © 2026 RRE Entries",
     "npmRebuild": false,
     "directories": {
       "output": "dist"
@@ -80,6 +80,8 @@
       "tally.ini",
       "tally_icon.ico",
       "tally_icon.png",
+      "rre_icon.ico",
+      "rre_icon.png",
       "core/**/*",
       "modules/**/*",
       "public/**/*",
@@ -99,10 +101,11 @@
     "extraResources": [
       "data/**/*",
       "tally.ini",
-      "tally_icon.ico"
+      "tally_icon.ico",
+      "rre_icon.ico"
     ],
     "win": {
-      "icon": "tally_icon.ico",
+      "icon": "rre_icon.ico",
       "target": [
         "nsis",
         "portable"
@@ -114,7 +117,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "RRE Tally"
+      "shortcutName": "RRE Entries"
     }
   }
 }

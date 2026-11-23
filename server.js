@@ -102,7 +102,7 @@ app.use(cors({
     if (!origin || origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1') || origin.startsWith('file://')) {
       return callback(null, true);
     }
-    return callback(new Error('CORS access blocked by RRE Tally local security policy.'));
+    return callback(new Error('CORS access blocked by RRE Entries local security policy.'));
   }
 }));
 
@@ -179,7 +179,7 @@ app.get('/api/health', async (req, res) => {
 
     res.json({
       status: (dbStatus === 'healthy' && integrityCheck === 'ok') ? 'healthy' : 'degraded',
-      application: 'RRE Tally',
+      application: 'RRE Entries',
       version: '1.0.0',
       timestamp: new Date().toISOString(),
       uptime: {
@@ -317,7 +317,7 @@ app.get('/api/gateway/info', async (req, res) => {
     res.json({
       success: true,
       data: {
-        company: comp || { name: 'RRE Tally', gstin: '', state: 'Tamil Nadu', state_code: '33' },
+        company: comp || { name: 'RRE Entries', gstin: '', state: 'Tamil Nadu', state_code: '33' },
         current_date: lastVoucher ? lastVoucher.date : '2026-06-01',
         financial_year: '1-Apr-2026 to 31-Mar-2027',
         last_voucher: lastVoucher || null,
@@ -396,7 +396,7 @@ app.get('/api/auth/setup-status', async (req, res) => {
 app.post('/api/auth/setup', rateLimitLoginMiddleware, async (req, res) => {
   const ip = req.socket && req.socket.remoteAddress;
   if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(ip)) {
-    return res.status(403).json({ success: false, error: 'First-time setup can only be completed on the computer where RRE Tally is installed.' });
+    return res.status(403).json({ success: false, error: 'First-time setup can only be completed on the computer where RRE Entries is installed.' });
   }
   const clientMeta = { ip, agent: req.headers['user-agent'] || 'TallyClient' };
   try {
@@ -414,7 +414,7 @@ app.post('/api/auth/setup', rateLimitLoginMiddleware, async (req, res) => {
 app.post('/api/auth/guest', rateLimitLoginMiddleware, async (req, res) => {
   const ip = req.socket && req.socket.remoteAddress;
   if (process.env.RRE_ALLOW_REMOTE_GUEST !== '1' && !['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(ip)) {
-    return res.status(403).json({ success: false, error: 'Guest entry is only available on the computer where RRE Tally is installed.' });
+    return res.status(403).json({ success: false, error: 'Guest entry is only available on the computer where RRE Entries is installed.' });
   }
   try {
     const result = await startGuestSession({ ip, agent: req.headers['user-agent'] || 'TallyClient' });
@@ -625,7 +625,7 @@ app.get('/api/export/tally-xml', async (req, res) => {
 </ENVELOPE>`;
 
     res.setHeader('Content-Type', 'text/xml');
-    res.setHeader('Content-Disposition', 'attachment; filename="TallyPrime_Backup.xml"');
+    res.setHeader('Content-Disposition', 'attachment; filename="RRE_Entries_Backup.xml"');
     res.send(xml);
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -714,7 +714,7 @@ app.get('/api/system/update-status', async (req, res) => {
     const timeoutId = setTimeout(() => controller.abort(), 4500);
 
     const ghRes = await fetch('https://api.github.com/repos/Anand3643/RRE-Product/commits/main', {
-      headers: { 'User-Agent': 'TallyPrime-Gold-Desktop' },
+      headers: { 'User-Agent': 'RRE-Entries-Desktop' },
       signal: controller.signal
     });
     clearTimeout(timeoutId);
@@ -750,7 +750,7 @@ app.get('/api/system/update-status', async (req, res) => {
       can_auto_update: hasGit,
       message: updateAvailable
         ? `New version available: ${remoteSha} - "${remoteMessage.split('\n')[0]}"`
-        : 'Your RRE Tally installation is completely up to date!'
+        : 'Your RRE Entries installation is completely up to date!'
     });
   } catch (err) {
     // Offline mode
@@ -774,7 +774,7 @@ app.post('/api/system/perform-update', async (req, res) => {
       console.log('[System Update] git pull result:', pullOut);
 
       // Trigger silent rebuild and installation in background
-      exec('npm run build:win && powershell -Command "Start-Process dist\\\"RRE Tally Setup 1.0.0.exe\\\" -ArgumentList \\\"/S\\\" -Wait"', (err) => {
+      exec('npm run build:win && powershell -Command "Start-Process dist\\\"RRE Entries Setup 1.0.0.exe\\\" -ArgumentList \\\"/S\\\" -Wait"', (err) => {
         if (err) console.warn('[System Update] Background installer warning:', err.message);
         else console.log('[System Update] Successfully rebuilt and updated desktop app on PC!');
       });
@@ -795,9 +795,10 @@ app.post('/api/system/perform-update', async (req, res) => {
   // Packaged / Installed Mode (No .git folder)
   // Check if setup installer exists locally or provide direct installer download
   const possibleSetupPaths = [
-    path.join(__dirname, 'dist', 'RRE Tally Setup 1.0.0.exe'),
-    path.join(__dirname, '..', 'dist', 'RRE Tally Setup 1.0.0.exe'),
-    path.join(process.env.USERPROFILE || 'C:\\Users\\Admin', 'Desktop', 'RRE PRoduct', 'dist', 'RRE Tally Setup 1.0.0.exe')
+    path.join(__dirname, 'dist', 'RRE Entries Setup 1.0.0.exe'),
+    path.join(__dirname, '..', 'dist', 'RRE Entries Setup 1.0.0.exe'),
+    path.join(process.env.USERPROFILE || 'C:\\Users\\Admin', 'Desktop', 'RRE PRoduct', 'dist', 'RRE Entries Setup 1.0.0.exe'),
+    path.join(__dirname, 'dist', 'RRE Tally Setup 1.0.0.exe')
   ];
 
   const foundInstaller = possibleSetupPaths.find(p => fs.existsSync(p));
@@ -809,7 +810,7 @@ app.post('/api/system/perform-update', async (req, res) => {
 
     return res.json({
       success: true,
-      message: 'Latest RRE Tally Setup installer found and launched. Your installation is being updated in the background without affecting your accounting data.'
+      message: 'Latest RRE Entries Setup installer found and launched. Your installation is being updated in the background without affecting your accounting data.'
     });
   }
 
@@ -818,7 +819,7 @@ app.post('/api/system/perform-update', async (req, res) => {
     success: true,
     requires_download: true,
     download_url: 'https://github.com/Anand3643/RRE-Product',
-    message: 'To install the latest release on this PC, please run the setup installer RRE Tally Setup 1.0.0.exe. All your company accounting data in company.db remains 100% intact.'
+    message: 'To install the latest release on this PC, please run the setup installer RRE Entries Setup 1.0.0.exe. All your company accounting data in company.db remains 100% intact.'
   });
 });
 
@@ -868,7 +869,7 @@ function startServer(preferredPort = WEB_PORT, preferredHost = '127.0.0.1') {
 
       server.listen(portToTry, host, () => {
         console.log(`=======================================================`);
-        console.log(`✨ RRE Tally (V5 Edition) Running!`);
+        console.log(`✨ RRE Entries (V5 Edition) Running!`);
         console.log(`👉 Web Interface: http://${host}:${portToTry}`);
         console.log(`📂 Data Storage: data/100000/company.db (Local PC SQLite)`);
         console.log(`⚡ Offline Mode: 100% Standalone (No Internet Required)`);

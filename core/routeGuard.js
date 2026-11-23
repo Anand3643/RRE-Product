@@ -54,13 +54,14 @@ const RULES = [
 const KNOWN_VOUCHER_TYPES = ['Contra', 'Payment', 'Receipt', 'Journal', 'Sales', 'Purchase', 'Debit Note', 'Credit Note'];
 
 function routeGuard(req, res, next) {
+  const user = identify(req);
+  if (user) req.user = user;
   if (!ENFORCE) return next();
   const url = req.originalUrl.split('?')[0];
   if (!url.startsWith('/api/') || url.startsWith('/api/platform/')) return next();
   if (req.method === 'OPTIONS') return next();
   if (PUBLIC.some(([m, re]) => m === req.method && re.test(url))) return next();
 
-  const user = identify(req);
   if (!user) {
     return res.status(401).json({ success: false, error: 'Authentication required. Please log in again.', code: 'AUTH_REQUIRED' });
   }
