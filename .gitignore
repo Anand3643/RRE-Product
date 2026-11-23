@@ -38,3 +38,7 @@ inventory-app/frontend/node_modules/
 inventory-app/pip_install.log
 inventory-app/backend/uploads/
 !inventory-app/frontend/dist/
+
+# Python bytecode (generated when the inventory application runs)
+__pycache__/
+*.pyc
