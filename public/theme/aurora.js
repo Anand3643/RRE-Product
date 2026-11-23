@@ -60,7 +60,7 @@
     ['GST', 'percent', () => openReport('gst'), ['view-gst']],
     ['Quotations', 'file-text', () => (typeof openQuotations === 'function' ? openQuotations() : null), ['view-quotations', 'view-quotation-editor']],
     ['sep'],
-    ['Inventory', 'boxes', () => (window.RREInventoryGo ? window.RREInventoryGo('/admin') : null), ['__inventory'], 'inv']
+    ['RRE Inventory', 'boxes', () => (window.RREInventoryGo ? window.RREInventoryGo('/admin') : null), ['__inventory'], 'inv']
   ];
   // Inventory lives in the rail only: its features open from this list (the screens themselves are the original inventory application)
   const INV_SUB = [['Dashboard', '/admin'], ['Items', '/products'], ['Stock levels', '/inventory'], ['Warehouses', '/warehouses'], ['Transfers', '/transfers'], ['Adjustments', '/adjustments'], ['Sales Orders', '/sales-orders'], ['Purchase Orders', '/purchase-orders'],
@@ -69,7 +69,7 @@
     if (it[0] === 'sep') return '<div class="sep"></div>';
     const inv = it[4] === 'inv';
     return `<button type="button" class="item ${it[4] || ''}" data-i="${i}" title="${esc(it[0])}"${inv ? ' aria-expanded="false" aria-controls="au-inv-sub"' : ''}><i data-lucide="${it[1]}"></i><span class="lbl">${esc(it[0])}</span>${inv ? '<i class="chev" data-lucide="chevron-right"></i>' : ''}</button>`
-      + (inv ? `<div class="sub" id="au-inv-sub" role="group" aria-label="Inventory features">${INV_SUB.map((s) => `<button type="button" data-path="${esc(s[1])}">${esc(s[0])}</button>`).join('')}</div>` : '');
+      + (inv ? `<div class="sub" id="au-inv-sub" role="group" aria-label="RRE Inventory features">${INV_SUB.map((s) => `<button type="button" data-path="${esc(s[1])}">${esc(s[0])}</button>`).join('')}</div>` : '');
   };
   function toggleInvMenu(force) {
     const b = $('#au-rail button.item.inv'), sub = $('#au-inv-sub'); if (!b || !sub) return;
@@ -98,7 +98,7 @@
     icons(); moveInd();
   }
   // phones: the same destinations as a bottom tab bar
-  const TABS = ['Gateway', 'Dashboard', 'Vouchers', 'Sales & Reports', 'Inventory'];
+  const TABS = ['Gateway', 'Dashboard', 'Vouchers', 'Sales & Reports', 'RRE Inventory'];
   let tabEl = null;
   function tabbar() {
     if (tabEl) return;
@@ -198,7 +198,7 @@
       <div class="au-grid2"><div class="au-panel au-reveal au-depth"><h3><i data-lucide="trending-up"></i>Revenue &amp; expenses</h3><div class="hint">Month by month, from your vouchers</div><div id="au-rev"></div></div>
         <div class="au-panel au-reveal au-depth" style="--au-d:.08s"><h3><i data-lucide="pie-chart"></i>Where the money goes</h3><div class="hint">Spending in the current period</div><div id="au-mix"></div></div></div>
       <div class="au-grid4" style="margin-top:16px"><div class="au-panel au-reveal au-depth"><h3><i data-lucide="line-chart"></i>Profit by month</h3><div class="hint">Net profit, green is a gain</div><div id="au-profit"></div></div>
-        <div class="au-panel au-reveal au-depth" style="--au-d:.06s"><h3><i data-lucide="package"></i>Inventory analytics</h3><div class="hint">Highest stock value</div><div id="au-inv"></div></div>
+        <div class="au-panel au-reveal au-depth" style="--au-d:.06s"><h3><i data-lucide="package"></i>RRE Inventory analytics</h3><div class="hint">Highest stock value</div><div id="au-inv"></div></div>
         <div class="au-panel au-reveal au-depth" style="--au-d:.12s"><h3><i data-lucide="arrow-left-right"></i>Cash flow</h3><div class="hint">Money in and out</div><div id="au-cash"></div></div>
         <div class="au-panel au-reveal au-depth" style="--au-d:.18s"><h3><i data-lucide="activity"></i>Growth indicators</h3><div class="hint">Margins and balance</div><div id="au-growth"></div></div></div>
       <div class="au-sec-title">Activity</div>

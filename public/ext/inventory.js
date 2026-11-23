@@ -122,7 +122,7 @@
     card.id = 'inv-tools-card';
     card.className = 'border border-slate-300 rounded-lg overflow-hidden text-xs mt-4';
     card.innerHTML = `
-      <div class="bg-slate-800 text-white font-bold p-2.5">Inventory Intelligence — Reorder, Demand, Dead Stock, Godowns &amp; Suppliers</div>
+      <div class="bg-slate-800 text-white font-bold p-2.5">RRE Inventory Intelligence — Reorder, Demand, Dead Stock, Godowns &amp; Suppliers</div>
       <div class="p-4 space-y-3">
         <div class="flex flex-wrap items-center gap-2">
           <button type="button" id="inv-b-reorder" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold">Reorder suggestions</button>

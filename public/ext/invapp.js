@@ -24,12 +24,12 @@
   // ------------------------------------------------------------------ Gateway section (themes without the side rail)
   function addGatewaySection() {
     if (document.getElementById('gw-inventory-section')) return;
-    const label = Array.from(document.querySelectorAll('div')).find((d) => d.textContent.trim() === 'Inventory & Statutory' && d.className.includes('uppercase'));
+    const label = Array.from(document.querySelectorAll('div')).find((d) => (d.textContent.trim() === 'Inventory & Statutory' || d.textContent.trim() === 'RRE Inventory & Statutory') && d.className.includes('uppercase'));
     if (!label || !label.parentElement) return;
     const sec = document.createElement('div'); sec.id = 'gw-inventory-section';
     const row = (t, p, hot, tag) => `<div class="gateway-item" onclick="RREInventoryGo('${p}')"><span>${hot ? `<span class="hotkey">${hot}</span>` : ''}${esc(t)}</span><span class="text-[10px] text-slate-400 font-mono">${esc(tag || '')}</span></div>`;
-    sec.innerHTML = `<div class="text-[10px] font-black text-teal-600 uppercase tracking-widest px-3 mb-1">Inventory Management (StockPilot)</div><div class="space-y-0.5">
-      ${row('Inventory Dashboard', '/admin', 'M', 'Overview')}${row('Items (Products)', '/products', '', 'Catalogue')}${row('Stock levels', '/inventory', '', 'On hand')}${row('Warehouses', '/warehouses', '', 'Locations')}
+    sec.innerHTML = `<div class="text-[10px] font-black text-teal-600 uppercase tracking-widest px-3 mb-1">RRE Inventory</div><div class="space-y-0.5">
+      ${row('RRE Inventory Dashboard', '/admin', 'M', 'Overview')}${row('Items (Products)', '/products', '', 'Catalogue')}${row('Stock levels', '/inventory', '', 'On hand')}${row('Warehouses', '/warehouses', '', 'Locations')}
       ${row('Stock Transfers', '/transfers', '', 'Between warehouses')}${row('Stock Adjustments', '/adjustments', '', 'Corrections')}${row('Sales Orders', '/sales-orders', '', 'Sell')}${row('Purchase Orders', '/purchase-orders', '', 'Buy')}
       ${row('Customers', '/customers', '', 'Parties')}${row('Vendors', '/vendors', '', 'Parties')}${row('Packages & Shipments', '/shipments', '', 'Dispatch')}${row('Inventory Reports', '/reports', '', 'Reports')}${row('AI Insights', '/insights', '', 'Forecasts')}${row('Inventory Users & Settings', '/team', '', 'Admin')}</div>`;
     label.parentElement.parentElement.insertBefore(sec, label.parentElement);
@@ -41,9 +41,9 @@
     const add = (arr, entry) => { if (Array.isArray(arr) && !arr.some((x) => x.title === entry.title)) arr.push(entry); };
     try {
       for (const [, items] of GROUPS) for (const [t, p] of items) {
-        const title = 'Inventory — ' + t;
-        if (typeof GOTO_REGISTRY !== 'undefined') add(GOTO_REGISTRY, { title, category: 'Inventory', action: () => openInv(p), hotkey: '' });
-        if (typeof OMNI_COMMANDS !== 'undefined') add(OMNI_COMMANDS, { title, category: 'Inventory', action: () => openInv(p), hotkey: '' });
+        const title = 'RRE Inventory — ' + t;
+        if (typeof GOTO_REGISTRY !== 'undefined') add(GOTO_REGISTRY, { title, category: 'RRE Inventory', action: () => openInv(p), hotkey: '' });
+        if (typeof OMNI_COMMANDS !== 'undefined') add(OMNI_COMMANDS, { title, category: 'RRE Inventory', action: () => openInv(p), hotkey: '' });
       }
     } catch (e) { /* the palette entries are a convenience */ }
   }

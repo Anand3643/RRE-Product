@@ -71,7 +71,7 @@
     ['Sales', [['customers', 'Customers', 'contact'], ['sales-orders', 'Sales orders', 'shopping-cart'], ['sales-history', 'Sales history', 'receipt'], ['portal-users', 'Customer portal logins', 'key-round']]],
     ['Purchases', [['suppliers', 'Suppliers', 'store'], ['purchase-orders', 'Purchase orders', 'clipboard-list'], ['purchase-history', 'Purchase history', 'history']]],
     ['Items', [['items', 'Items', 'package'], ['categories', 'Categories', 'folder-tree'], ['units', 'Units', 'ruler']]],
-    ['Inventory', [['stock', 'Stock levels', 'boxes'], ['movements', 'Movement history', 'arrow-left-right'], ['warehouses', 'Warehouses', 'warehouse'], ['transfers', 'Transfers', 'arrow-right-left'], ['adjustments', 'Adjustments', 'sliders-horizontal']]],
+    ['RRE Inventory', [['stock', 'Stock levels', 'boxes'], ['movements', 'Movement history', 'arrow-left-right'], ['warehouses', 'Warehouses', 'warehouse'], ['transfers', 'Transfers', 'arrow-right-left'], ['adjustments', 'Adjustments', 'sliders-horizontal']]],
     ['Reports', [['reports', 'Reports', 'bar-chart-3']]],
     ['Tools', [['import', 'Import from StockPilot', 'database-backup']]]
   ];
@@ -81,10 +81,10 @@
     if (root()) return;
     const el = document.createElement('div'); el.id = 'sp-app';
     if (store.get('sp-theme') === 'dark') el.classList.add('dark');
-    el.innerHTML = `<aside class="sp-side"><div class="sp-brand"><span class="sp-logo">${ic('boxes')}</span><span class="sp-lbl">Inventory</span></div>
+    el.innerHTML = `<aside class="sp-side"><div class="sp-brand"><span class="sp-logo">${ic('boxes')}</span><span class="sp-lbl">RRE Inventory</span></div>
       <nav>${NAV.map(([g, links]) => `${g ? `<div class="sp-grp">${g}</div>` : ''}${links.map(([k, t, i]) => `<button class="sp-nav" data-go="${k}" title="${t}"><span class="sp-ic">${ic(i)}</span><span class="sp-lbl">${t}</span></button>`).join('')}`).join('')}</nav>
       <div style="padding:8px;border-top:1px solid rgb(var(--line))"><button class="sp-nav" id="sp-collapse"><span class="sp-ic">${ic('chevrons-left')}</span><span class="sp-lbl">Collapse</span></button></div></aside>
-      <div class="sp-main"><header class="sp-top"><button class="btn sm" id="sp-back" data-tip="Back to RRE Tally">${ic('arrow-left')} RRE Tally</button><h1 id="sp-title"></h1>
+      <div class="sp-main"><header class="sp-top"><button class="btn sm" id="sp-back" data-tip="Back to RRE Entries">${ic('arrow-left')} RRE Entries</button><h1 id="sp-title"></h1>
         <input class="input" id="sp-quick" placeholder="Search items…  ( / )" style="width:220px" aria-label="Search items"><button class="btn flat sm" id="sp-theme" data-tip="Light / dark">${ic('moon')}</button></header>
         <div class="sp-view" id="sp-view"></div></div><div class="toasts" role="status" aria-live="polite"></div>`;
     document.body.appendChild(el);

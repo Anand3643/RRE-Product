@@ -12,7 +12,7 @@ function Shell({ title, subtitle, children }: { title: string; subtitle: string;
       <aside className="relative hidden overflow-hidden bg-gradient-to-br from-teal-700 via-teal-600 to-emerald-500 p-12 text-white lg:flex lg:flex-col lg:justify-between">
         <div className="pointer-events-none absolute -right-24 -top-24 h-96 w-96 rounded-full bg-white/10 blur-2xl" />
         <div className="pointer-events-none absolute -bottom-32 -left-16 h-96 w-96 rounded-full bg-black/10 blur-2xl" />
-        <div className="relative flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/20 backdrop-blur"><Boxes className="h-6 w-6" /></span><span className="text-2xl font-bold tracking-tight">StockPilot</span></div>
+        <div className="relative flex items-center gap-3"><span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/20 backdrop-blur"><Boxes className="h-6 w-6" /></span><span className="text-2xl font-bold tracking-tight">RRE Inventory</span></div>
         <div className="relative space-y-8">
           <div><h2 className="text-4xl font-bold leading-tight">Every item, order and shipment —<br />in one trusted ledger.</h2>
             <p className="mt-3 max-w-md text-teal-50/90">Sales, purchasing, warehouses and reporting, with access controlled per person by your administrator.</p></div>
@@ -21,11 +21,11 @@ function Shell({ title, subtitle, children }: { title: string; subtitle: string;
               <li key={t} className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/15"><I className="h-5 w-5" /></span>{t}</li>)}
           </ul>
         </div>
-        <p className="relative text-xs text-teal-50/70">© StockPilot</p>
+        <p className="relative text-xs text-teal-50/70">© RRE Inventory</p>
       </aside>
       <main className="flex items-center justify-center p-6">
         <div className="anim-up w-full max-w-sm">
-          <div className="mb-8 flex items-center gap-2 lg:hidden"><Boxes className="h-7 w-7 text-brand" /><span className="text-xl font-bold">StockPilot</span></div>
+          <div className="mb-8 flex items-center gap-2 lg:hidden"><Boxes className="h-7 w-7 text-brand" /><span className="text-xl font-bold">RRE Inventory</span></div>
           <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
           <p className="mb-6 mt-1 text-sm text-sub">{subtitle}</p>
           {children}
@@ -79,7 +79,7 @@ export function LoginPage({ onDone }: { onDone: (home: string) => void | Promise
     } catch (e: any) { setErr(e instanceof ApiError ? e.message : "Cannot reach the server. Check your connection and try again."); setPassword(""); } finally { setBusy(false); }
   };
   return (
-    <Shell title={signup ? (cfg?.first_run ? "Set up StockPilot" : "Create your account") : "Welcome back"} subtitle={signup ? (cfg?.first_run ? "This first account becomes the administrator." : "Register to browse products and track your orders.") : "Sign in to your StockPilot account"}>
+    <Shell title={signup ? (cfg?.first_run ? "Set up RRE Inventory" : "Create your account") : "Welcome back"} subtitle={signup ? (cfg?.first_run ? "This first account becomes the administrator." : "Register to browse products and track your orders.") : "Sign in to your RRE Inventory account"}>
       <form onSubmit={submit} className="space-y-4" noValidate>
         {signup && <>{cfg?.first_run && <div><label htmlFor="org" className="label">Organization name</label><input id="org" className="input" required value={org} onChange={(e) => setOrg(e.target.value)} /></div>}
           <div><label htmlFor="fullname" className="label">Your name</label><input id="fullname" className="input" required value={name} onChange={(e) => setName(e.target.value)} /></div></>}

@@ -260,7 +260,7 @@ function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
       <NavProgress />
       <div className="flex min-h-screen">
         <aside className={`sticky top-0 hidden h-screen shrink-0 flex-col border-r bg-surface transition-[width] duration-300 ease-out md:flex ${collapsed ? "w-16" : "w-60"}`}>
-          <div className="flex h-14 items-center gap-2.5 overflow-hidden border-b px-4"><Boxes className="h-6 w-6 shrink-0 text-brand" /><span className={`whitespace-nowrap text-[18px] font-bold tracking-tight transition-opacity duration-200 ${collapsed ? "opacity-0" : "opacity-100"}`}>StockPilot</span></div>
+          <div className="flex h-14 items-center gap-2.5 overflow-hidden border-b px-4"><Boxes className="h-6 w-6 shrink-0 text-brand" /><span className={`whitespace-nowrap text-[18px] font-bold tracking-tight transition-opacity duration-200 ${collapsed ? "opacity-0" : "opacity-100"}`}>RRE Inventory</span></div>
           <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2">
             {nav.map((n) => {
               const head = n.group !== lastGroup && n.group ? n.group : ""; lastGroup = n.group;
