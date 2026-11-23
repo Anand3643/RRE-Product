@@ -31,3 +31,10 @@ Thumbs.db
 
 # On-device speech model files (large, downloaded on demand)
 models/
+
+# Original inventory application (inventory-app/): keep its source and built interface, never its environment, databases or uploads
+inventory-app/backend/.venv/
+inventory-app/frontend/node_modules/
+inventory-app/pip_install.log
+inventory-app/backend/uploads/
+!inventory-app/frontend/dist/

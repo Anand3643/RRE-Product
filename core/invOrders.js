@@ -445,5 +445,5 @@ async function history(kind, q, user) {
 }
 
 module.exports = {
-  loadOrder, isIntra, listParties, partyDetail, saveParty, setPartyActive, createOrder, getOrder, listOrders, updateOrder, deleteOrder, confirmOrder, cancelOrder, receiveGoods, invoiceOrder, history, compute
+  post, buildEntries, nextNumber, loadOrder, isIntra, listParties, partyDetail, saveParty, setPartyActive, createOrder, getOrder, listOrders, updateOrder, deleteOrder, confirmOrder, cancelOrder, receiveGoods, invoiceOrder, history, compute
 };

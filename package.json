@@ -37,7 +37,9 @@
     "install:desktop": "powershell -ExecutionPolicy Bypass -File create-shortcuts.ps1",
     "test:invreports": "node test_invreports.js",
     "test:invimport": "node test_invimport.js",
-    "test:portal": "node test_portal.js"
+    "test:portal": "node test_portal.js",
+    "test:invbridge": "node test_invbridge.js",
+    "setup:inventory": "python -m venv inventory-app/backend/.venv && inventory-app/backend/.venv/Scripts/python -m pip install -r inventory-app/backend/requirements.txt"
   },
   "repository": {
     "type": "git",
@@ -87,6 +89,11 @@
       "public/**/*",
       "ocr/**/*",
       "data/**/*",
+      "!data/**/inventory/**",
+      "inventory-app/**/*",
+      "!inventory-app/backend/.venv/**",
+      "!inventory-app/frontend/node_modules/**",
+      "!inventory-app/pip_install.log",
       "node_modules/**/*"
     ],
     "asarUnpack": [
@@ -96,7 +103,8 @@
       "node_modules/onnxruntime-common/**/*",
       "node_modules/@huggingface/**/*",
       "node_modules/tesseract.js/**/*",
-      "node_modules/tesseract.js-core/**/*"
+      "node_modules/tesseract.js-core/**/*",
+      "inventory-app/**/*"
     ],
     "extraResources": [
       "data/**/*",

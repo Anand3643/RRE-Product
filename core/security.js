@@ -264,7 +264,7 @@ function securityHeadersMiddleware(req, res, next) {
   // Content Security Policy adapted for offline Tally desktop application
   res.setHeader(
     'Content-Security-Policy',
-    "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src 'self' http://127.0.0.1:* http://localhost:* https://api.github.com; img-src 'self' data: blob:; font-src 'self' https://fonts.gstatic.com data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;"
+    "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:; connect-src 'self' http://127.0.0.1:* http://localhost:* https://api.github.com; frame-src 'self' http://127.0.0.1:* http://localhost:*; img-src 'self' data: blob:; font-src 'self' https://fonts.gstatic.com data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;"
   );
 
   next();
@@ -306,7 +306,13 @@ function verifyApprovalPass(id, sig) {
   return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 
+/** A secret for one purpose, derived from the installation's session secret (so integrations need no separate stored secret). */
+function deriveSecret(purpose) {
+  return crypto.createHmac('sha256', SESSION_SECRET).update(`derive:${purpose}`).digest('hex');
+}
+
 module.exports = {
+  deriveSecret,
   signApprovalPass,
   verifyApprovalPass,
   setCompanyProvider,

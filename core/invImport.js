@@ -268,4 +268,4 @@ async function importAll(file, orgId, user) {
   } finally { running = false; src.close(); }
 }
 
-module.exports = { detect, preview, importAll };
+module.exports = { detect, preview, importAll, openSource, mapped, remember, clean, num, findUnit, stateCode, srcKey, DECIMAL_UNITS };

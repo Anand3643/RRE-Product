@@ -517,6 +517,24 @@ const MIGRATIONS = [
       'CREATE INDEX IF NOT EXISTS idx_users_party ON users(party_id)',
       'CREATE INDEX IF NOT EXISTS idx_inv_orders_portal ON inv_orders(portal_user_id, id)'
     ]
+  },
+  {
+    id: '016_inventory_bridge',
+    description: 'Accounting bridge for the original inventory application: remembers which of its documents have been posted to the books',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS inv_bridge_events (
+        source TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        src_id INTEGER NOT NULL,
+        status TEXT NOT NULL,
+        voucher_id INTEGER,
+        number TEXT,
+        message TEXT,
+        attempts INTEGER DEFAULT 0,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (source, kind, src_id)
+      )`
+    ]
   }
 ];
 

@@ -12,6 +12,7 @@ const ord = require('../../core/invOrders');
 const rep = require('../../core/invReports');
 const imp = require('../../core/invImport');
 const portal = require('../../core/portal');
+const bridge = require('../../core/invBridge');
 const { requireAuth } = require('../../core/auth');
 
 const read = requireAuth();
@@ -115,5 +116,10 @@ router.post('/portal-users', admins, handle((req) => portal.createPortalUser(req
 router.post('/portal-users/:id/disable', admins, handle((req) => portal.setPortalUserStatus(id(req), false, req.user)));
 router.post('/portal-users/:id/enable', admins, handle((req) => portal.setPortalUserStatus(id(req), true, req.user)));
 router.post('/portal-users/:id/reset-password', admins, handle((req) => portal.resetPortalPassword(id(req), req.body && req.body.password, req.user)));
+
+// ---- accounting link to the original inventory application
+const posting = requireAuth('canEditVouchers');
+router.get('/bridge/status', posting, handle(() => bridge.status()));
+router.post('/bridge/sync', posting, handle((req) => bridge.syncOnce({ force: !!(req.body && req.body.force === true) })));
 
 module.exports = router;

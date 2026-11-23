@@ -199,7 +199,7 @@ async function main() {
   assert(dr === cr, 'Total Dr == total Cr', `${dr}/${cr}`);
   const plainQty = (await getStockPositions()).find((s) => s.id === PLAIN).current_qty;
   assert(plainQty === 10, 'Untracked item stock unchanged');
-  assert((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 15, 'Migration 008 recorded');
+  assert((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 16, 'Migration 008 recorded');
   void all;
 
   console.log('\n====================================================');

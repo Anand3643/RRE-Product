@@ -540,6 +540,7 @@ app.use('/api/masters', mastersRouter);
 app.use('/api/vouchers', vouchersRouter);
 app.use('/api/reports', reportsRouter);
 app.use('/api/portal', require('./modules/portal/portalApi')); // new: customer portal (a customer sees only their own orders and invoices)
+app.use('/api/inventory-app', require('./modules/inventoryhost/inventoryHostApi')); // new: opens the ORIGINAL inventory application (React UI + FastAPI) running beside RRE
 app.use('/api/inv', invAppRouter); // new: inventory suite (items, warehouses, stock, transfers, adjustments)
 app.use('/api/search', searchRouter); // new: smart search and quick look (read-only)
 app.use('/api/voice', voiceRouter); // new: multilingual voice assistant (understanding, replies, consent)
@@ -874,6 +875,7 @@ function startServer(preferredPort = WEB_PORT, preferredHost = '127.0.0.1') {
         console.log(`📂 Data Storage: data/100000/company.db (Local PC SQLite)`);
         console.log(`⚡ Offline Mode: 100% Standalone (No Internet Required)`);
         console.log(`=======================================================`);
+        try { require('./core/invBridge').startAuto(); } catch (e) { console.warn('[Inventory bridge] not started:', e.message); } // posts the original inventory app's purchases and sales to the books
 
         // Start secondary Tally XML / ODBC server on loopback
         try {
