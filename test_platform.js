@@ -257,7 +257,7 @@ async function main() {
   assert((await get("SELECT COUNT(*) c FROM vouchers WHERE voucher_no='T/CON/2'")).c === 0, 'Post-snapshot voucher is gone after restore');
   assert((await get('SELECT COUNT(*) c FROM account_groups')).c === 28 && (await get('SELECT COUNT(*) c FROM ledgers')).c > 0, 'Masters intact after restore');
   const mig = await get("SELECT COUNT(*) c FROM schema_migrations");
-  assert(mig.c === 13, 'Migrations table survives restore', String(mig.c));
+  assert(mig.c === 14, 'Migrations table survives restore', String(mig.c));
   // the safety rollback taken just before the restore must itself hold the post-snapshot voucher
   const rb = fs.readdirSync(path.join(tmp, 'backups')).filter((f) => f.startsWith('rollback_pre_restore_')).sort().pop();
   const sq = require('sqlite3');

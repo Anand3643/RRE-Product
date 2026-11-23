@@ -71,7 +71,9 @@
     ['Sales', [['customers', 'Customers', 'contact'], ['sales-orders', 'Sales orders', 'shopping-cart'], ['sales-history', 'Sales history', 'receipt']]],
     ['Purchases', [['suppliers', 'Suppliers', 'store'], ['purchase-orders', 'Purchase orders', 'clipboard-list'], ['purchase-history', 'Purchase history', 'history']]],
     ['Items', [['items', 'Items', 'package'], ['categories', 'Categories', 'folder-tree'], ['units', 'Units', 'ruler']]],
-    ['Inventory', [['stock', 'Stock levels', 'boxes'], ['movements', 'Movement history', 'arrow-left-right'], ['warehouses', 'Warehouses', 'warehouse'], ['transfers', 'Transfers', 'arrow-right-left'], ['adjustments', 'Adjustments', 'sliders-horizontal']]]
+    ['Inventory', [['stock', 'Stock levels', 'boxes'], ['movements', 'Movement history', 'arrow-left-right'], ['warehouses', 'Warehouses', 'warehouse'], ['transfers', 'Transfers', 'arrow-right-left'], ['adjustments', 'Adjustments', 'sliders-horizontal']]],
+    ['Reports', [['reports', 'Reports', 'bar-chart-3']]],
+    ['Tools', [['import', 'Import from StockPilot', 'database-backup']]]
   ];
   const TITLES = {}; NAV.forEach(([, l]) => l.forEach(([k, t]) => { TITLES[k] = t; }));
 
@@ -110,9 +112,11 @@
   function close() { if (root()) root().classList.remove('open'); }
   function go(route, param = null) {
     if (!PAGES[route]) route = 'dashboard';
+    if (route === 'import' && !perms().canAlterCompany) route = 'dashboard';
     S.route = route; S.param = param;
-    root().querySelectorAll('.sp-nav[data-go]').forEach((b) => b.classList.toggle('on', b.dataset.go === (route === 'warehouse' ? 'warehouses' : route)));
-    root().querySelector('#sp-title').textContent = route === 'warehouse' ? 'Warehouse' : TITLES[route] || '';
+    { const imp = root().querySelector('.sp-nav[data-go="import"]'); if (imp) { const show = !!perms().canAlterCompany; imp.hidden = !show; if (imp.previousElementSibling) imp.previousElementSibling.hidden = !show; } }
+    root().querySelectorAll('.sp-nav[data-go]').forEach((b) => b.classList.toggle('on', b.dataset.go === (route === 'warehouse' ? 'warehouses' : route === 'report' ? 'reports' : route)));
+    root().querySelector('#sp-title').textContent = route === 'warehouse' ? 'Warehouse' : route === 'report' ? 'Report' : TITLES[route] || '';
     view().innerHTML = skel(); view().scrollTop = 0;
     Promise.resolve(PAGES[route](view())).then(icons).catch((e) => { view().innerHTML = `<div class="card">${empty('Could not load this page', e.message, '<button class="btn" data-go="' + route + '">Try again</button>')}</div>`; });
   }
@@ -586,6 +590,104 @@
   }
   PAGES['sales-history'] = (v) => historyPage(v, 'sales-history');
   PAGES['purchase-history'] = (v) => historyPage(v, 'purchase-history');
+
+  // ---- reports (stage 3)
+  PAGES.reports = async (v) => {
+    const list = await api('/reports'), groups = {};
+    list.forEach((r) => { (groups[r.group || 'Reports'] = groups[r.group || 'Reports'] || []).push(r); });
+    v.innerHTML = `<div class="sp-wrap">${Object.entries(groups).map(([g, rs]) => `<div class="sp-grp" style="padding:8px 0">${esc(g)}</div><div class="rep-grid mb">${rs.map((r) => `<button class="card rep-card" ${r.available ? `data-go="report" data-param="${r.id}"` : 'disabled'}><b>${esc(r.title)}</b><div class="sub small" style="margin-top:4px">${esc(r.description || '')}</div>${r.available ? '' : '<div class="small" style="margin-top:6px">Needs permission to view costs and values</div>'}</button>`).join('')}</div>`).join('')}</div>`;
+  };
+  const isNum = (c) => c.type === 'money' || c.type === 'number';
+  const cell = (c, x) => (x == null || x === '' ? '' : c.type === 'money' ? inr(x) : c.type === 'number' ? num(x) : c.type === 'badge' ? `<span class="badge b-n">${esc(x)}</span>` : esc(x));
+  PAGES.report = async (v) => {
+    const id = S.param, meta = (await api('/reports')).find((r) => r.id === id);
+    if (!meta) { v.innerHTML = `<div class="card">${empty('Report not found', '', '<button class="btn" data-go="reports">All reports</button>')}</div>`; return; }
+    await lookups();
+    const key = 'report:' + id, q = S.q[key] = { ...(S.q[key] || {}) };
+    if (!q.as_of && meta.filters.some((f) => f.key === 'as_of')) q.as_of = today();
+    const input = (f) => {
+      const val = q[f.key] || '';
+      if (f.type === 'date') return `<input class="input" type="date" data-r="${f.key}" value="${esc(val)}">`;
+      if (f.type === 'number') return `<input class="input" type="number" min="1" data-r="${f.key}" value="${esc(val)}" style="width:120px">`;
+      if (f.type === 'category') return `<select class="input" data-r="${f.key}"><option value="">All categories</option>${S.cats.map((c) => `<option value="${c.id}" ${String(val) === String(c.id) ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>`;
+      if (f.type === 'warehouse') return `<select class="input" data-r="${f.key}"><option value="">All warehouses</option>${S.whs.map((w) => `<option value="${w.id}" ${String(val) === String(w.id) ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}</select>`;
+      if (f.type === 'select') return `<select class="input" data-r="${f.key}">${f.options.map(([k, l]) => `<option value="${k}" ${String(val) === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>`;
+      return `<input class="input" data-r="${f.key}" value="${esc(val)}">`;
+    };
+    v.innerHTML = `<div class="sp-wrap"><div class="row wrap mb"><button class="btn sm" data-go="reports">${ic('arrow-left')} All reports</button><b style="font-size:15px">${esc(meta.title)}</b><span class="grow"></span><button class="btn sm" id="r-csv">${ic('download')} Download CSV</button></div>
+      <div class="card mb"><div class="row wrap" style="gap:12px;align-items:flex-end">${meta.filters.map((f) => `<div><label class="lbl">${esc(f.label)}</label>${input(f)}</div>`).join('')}<button class="btn primary" id="r-run">Show report</button></div></div><div id="r-out">${skel(4)}</div></div>`;
+    const params = () => { const o = {}; v.querySelectorAll('[data-r]').forEach((el) => { o[el.dataset.r] = el.value; S.q[key][el.dataset.r] = el.value; }); return qs(o); };
+    const show = async () => {
+      const out = v.querySelector('#r-out'); out.innerHTML = skel(4);
+      try {
+        const d = await api(`/reports/${id}?${params()}`), cols = d.columns, cls = (c) => (isNum(c) ? 'num' : '');
+        out.innerHTML = `<div class="card scroll-x">${d.rows.length ? `<table><thead><tr>${cols.map((c) => `<th class="${cls(c)}">${esc(c.label)}</th>`).join('')}</tr></thead><tbody>${d.rows.map((r) => `<tr>${cols.map((c) => `<td class="${cls(c)}">${cell(c, r[c.key])}</td>`).join('')}</tr>`).join('')}</tbody>${d.totals ? `<tfoot><tr>${cols.map((c) => `<td class="${cls(c)}"><b>${cell(c, d.totals[c.key])}</b></td>`).join('')}</tr></tfoot>` : ''}</table>` : empty('Nothing to show', 'No records match these filters.')}</div>
+          ${(d.notes || []).length ? `<ul class="hint" style="margin:10px 4px">${d.notes.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>` : ''}<div class="hint" style="margin:4px">Generated ${esc(d.generated)} · ${d.rows.length} row${d.rows.length === 1 ? '' : 's'}</div>`;
+      } catch (e) { out.innerHTML = `<div class="card">${empty('Could not run the report', e.message)}</div>`; }
+    };
+    v.querySelector('#r-run').onclick = show;
+    v.querySelector('#r-csv').onclick = async () => {
+      const btn = v.querySelector('#r-csv'); btn.classList.add('busy');
+      try {
+        const res = await fetch(`${base()}/reports/${id}?${params()}&format=csv`);
+        if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.error || `Download failed (${res.status})`); }
+        const blob = await res.blob(), a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+        a.download = (/filename="([^"]+)"/.exec(res.headers.get('Content-Disposition') || '') || [])[1] || `${id}.csv`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+      } catch (er) { toast(er.message, 'err'); }
+      btn.classList.remove('busy');
+    };
+    show();
+  };
+
+  // ---- import from StockPilot (Owner only; the server enforces this too)
+  PAGES.import = async (v) => {
+    const found = await api('/import/detect');
+    const st = S.imp = S.imp || { path: '', org: '', pv: null, result: null };
+    if (!st.path && found.length) st.path = found[0].path;
+    const err = (m) => { const x = v.querySelector('#i-err'); if (x) { x.hidden = !m; x.textContent = m || ''; } };
+    const row = (label, s) => `<tr><td>${label}</td><td class="num">${s.total}</td><td class="num">${s.new}</td><td class="num">${s.exists}</td><td class="num">${s.imported}</td><td class="num">${s.invalid}</td></tr>`;
+    const list = (title, arr, f) => (arr.length ? `<div class="card mb"><b>${title}</b><ul class="small" style="margin:8px 0 0 18px">${arr.map(f).join('')}</ul></div>` : '');
+    const check = async (org) => {
+      st.path = v.querySelector('#i-path').value.trim(); st.result = null; err(''); v.querySelector('#i-find').classList.add('busy');
+      try { st.pv = await api('/import/preview', { method: 'POST', body: { path: st.path, org_id: org || undefined } }); st.org = org || ''; showPreview(); } catch (e) { st.pv = null; v.querySelector('#i-out').innerHTML = ''; err(e.message); }
+      v.querySelector('#i-find').classList.remove('busy');
+    };
+    const showPreview = () => {
+      const d = st.pv, out = v.querySelector('#i-out');
+      if (d.step === 'choose_organisation') {
+        out.innerHTML = `<div class="card"><b>Which organisation?</b><p class="sub small" style="margin:4px 0 10px">This file holds ${d.organisations.length} organisation(s). Choose the one to bring into RRE.</p><table><thead><tr><th>Organisation</th><th class="num">Items</th><th class="num">Warehouses</th><th class="num">Customers</th><th class="num">Suppliers</th><th></th></tr></thead><tbody>${d.organisations.map((o) => `<tr><td>${esc(o.name)}</td><td class="num">${o.items}</td><td class="num">${o.warehouses}</td><td class="num">${o.customers}</td><td class="num">${o.suppliers}</td><td><button class="btn sm" data-org="${o.id}">Preview</button></td></tr>`).join('')}</tbody></table></div>`;
+        out.querySelectorAll('[data-org]').forEach((b) => { b.onclick = () => check(b.dataset.org); }); return;
+      }
+      const s = d.summary, todo = s.items.new + s.customers.new + s.suppliers.new + s.warehouses.new + s.stock_lines;
+      const label = { new: 'Will add', exists: 'Already in RRE', imported: 'Imported before', invalid: 'Skipped' };
+      out.innerHTML = `<div class="card mb"><div class="row between"><b>Preview — ${esc(d.organisation.name)}</b><button class="btn flat sm" id="i-other">Choose another organisation</button></div>
+        <div class="card scroll-x mt"><table><thead><tr><th></th><th class="num">In file</th><th class="num">Will be added</th><th class="num">Already in RRE</th><th class="num">Imported before</th><th class="num">Skipped</th></tr></thead><tbody>${row('Items', s.items)}${row('Customers', s.customers)}${row('Suppliers', s.suppliers)}${row('Warehouses', s.warehouses)}${row('Categories', s.categories)}${row('Units', s.units)}</tbody></table></div>
+        <p class="small" style="margin:10px 0 0">Stock on hand: <b>${s.stock_lines}</b> line(s), <b>${num(s.stock_units)}</b> units, entered as “Opening balance fix” adjustments so they show in Movement history.</p></div>
+        ${list('Not imported', d.not_imported, (n) => `<li><b>${esc(n.what)}</b> (${n.count}) — ${esc(n.reason)}</li>`)}
+        ${list(`Please note (${d.warnings_total})`, d.warnings, (w) => `<li>${esc(w)}</li>`)}
+        ${d.items.length ? `<div class="card mb scroll-x"><b>Items${s.items.total > d.items.length ? ` (first ${d.items.length} of ${s.items.total})` : ''}</b><table class="mt"><thead><tr><th>Name</th><th>SKU</th><th>Category</th><th>Unit</th><th>Status</th></tr></thead><tbody>${d.items.map((i) => `<tr><td>${esc(i.name)}</td><td class="mono small">${esc(i.sku || '(new)')}</td><td>${esc(i.category || '')}</td><td>${esc(i.unit || '')}</td><td><span class="badge ${i.status === 'new' ? 'b-ok' : i.status === 'invalid' ? 'b-bad' : 'b-n'}">${label[i.status]}</span>${i.reason ? ` <span class="sub small">${esc(i.reason)}</span>` : ''}</td></tr>`).join('')}</tbody></table></div>` : ''}
+        <div class="card"><div class="row between wrap"><span class="small">${todo ? 'Nothing has been written yet. Review the preview, then confirm.' : 'Everything in this file is already in RRE. There is nothing to add.'}</span><button class="btn primary" id="i-run" ${todo ? '' : 'disabled'}>Import now</button></div></div>`;
+      out.querySelector('#i-other').onclick = () => check();
+      out.querySelector('#i-run').onclick = () => confirmBox('Import from StockPilot?', `This adds ${s.items.new} item(s), ${s.customers.new} customer(s), ${s.suppliers.new} supplier(s), ${s.warehouses.new} warehouse(s) and ${s.stock_lines} stock line(s) to RRE. Existing RRE data is not changed or deleted.`, 'Import', async () => {
+        st.result = await api('/import/run', { method: 'POST', body: { path: st.path, org_id: +st.org, confirm: true } }); st.pv = null; toast('Import finished'); showResult();
+      });
+    };
+    const showResult = () => {
+      const r = st.result, c = r.created;
+      v.querySelector('#i-out').innerHTML = `<div class="card mb"><b>Import finished</b><p class="small" style="margin:8px 0 0">Added <b>${c.items}</b> item(s), <b>${c.customers}</b> customer(s), <b>${c.suppliers}</b> supplier(s), <b>${c.warehouses}</b> warehouse(s), <b>${c.categories}</b> categor${c.categories === 1 ? 'y' : 'ies'}, <b>${c.units}</b> unit(s) and <b>${c.stock_documents}</b> stock document(s). Matched with existing records: ${r.matched.items} item(s), ${r.matched.parties} customer/supplier(s).</p></div>
+        ${list(`Could not import (${r.failed.length})`, r.failed, (f) => `<li>${esc(f.kind)} “${esc(f.name)}” — ${esc(f.reason)}</li>`)}
+        ${list(`Skipped (${r.skipped.length})`, r.skipped, (f) => `<li>${esc(f.kind)} “${esc(f.name)}” — ${esc(f.reason)}</li>`)}
+        ${list('Notes', r.warnings, (w) => `<li>${esc(w)}</li>`)}
+        <div class="row"><button class="btn primary" data-go="items">View items</button><button class="btn" data-go="movements">View movement history</button><button class="btn" id="i-again">Import another file</button></div>`;
+      v.querySelector('#i-again').onclick = () => { st.result = null; st.pv = null; v.querySelector('#i-out').innerHTML = ''; };
+    };
+    v.innerHTML = `<div class="sp-wrap"><div class="card mb"><b>Import from StockPilot</b><p class="sub small" style="margin:6px 0 12px">Brings items, categories, units, warehouses, customers, suppliers and stock on hand from your StockPilot database into RRE. The StockPilot file is only read, never changed. You see exactly what will happen before anything is written, and running it again never creates duplicates.</p>
+      <label class="lbl">StockPilot database file</label><div class="row"><input class="input grow" id="i-path" value="${esc(st.path)}" placeholder="C:\\…\\stockpilot.db" spellcheck="false"><button class="btn primary" id="i-find">Check file</button></div>
+      ${found.length ? `<div class="hint">Found on this computer: ${found.map((f) => `<a href="#" data-p="${esc(f.path)}">${esc(f.path)}</a> (${f.size_mb} MB)`).join(', ')}</div>` : '<div class="hint">Type the full path of stockpilot.db (it is in the inventory app’s backend folder).</div>'}<div class="errtxt" id="i-err" hidden></div></div><div id="i-out"></div></div>`;
+    v.querySelector('#i-find').onclick = () => check();
+    v.querySelectorAll('a[data-p]').forEach((a) => { a.onclick = (e) => { e.preventDefault(); st.path = a.dataset.p; v.querySelector('#i-path').value = st.path; }; });
+    if (st.result) showResult(); else if (st.pv) showPreview();
+  };
 
   window.StockPilotInv = { open, close, go, _state: S };
 })();

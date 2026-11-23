@@ -9,6 +9,8 @@ const express = require('express');
 const router = express.Router();
 const inv = require('../../core/invCore');
 const ord = require('../../core/invOrders');
+const rep = require('../../core/invReports');
+const imp = require('../../core/invImport');
 const { requireAuth } = require('../../core/auth');
 
 const read = requireAuth();
@@ -84,5 +86,25 @@ router.post('/orders/:id/receive', write, handle((req) => ord.receiveGoods(id(re
 router.post('/orders/:id/invoice', write, handle((req) => ord.invoiceOrder(id(req), req.body || {}, req.user)));
 router.get('/purchase-history', read, handle((req) => ord.history('purchase', req.query, req.user)));
 router.get('/sales-history', read, handle((req) => ord.history('sales', req.query, req.user)));
+
+// ---- stage 3: reports and the StockPilot import
+router.get('/reports', read, handle((req) => rep.list(req.user)));
+router.get('/reports/:rid', read, async (req, res) => {
+  try {
+    if (req.query.format === 'csv') {
+      const c = await rep.csv(req.params.rid, req.query, req.user);
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8'); res.setHeader('Content-Disposition', `attachment; filename="${c.filename}"`);
+      return res.send(c.body);
+    }
+    res.json({ success: true, data: await rep.run(req.params.rid, req.query, req.user) });
+  } catch (err) { res.status(err.status || 500).json({ success: false, error: err.message }); }
+});
+const owner = requireAuth('canAlterCompany');
+router.get('/import/detect', owner, handle(async () => imp.detect()));
+router.post('/import/preview', owner, handle((req) => imp.preview(req.body && req.body.path, req.body && req.body.org_id)));
+router.post('/import/run', owner, handle((req) => {
+  if (!req.body || req.body.confirm !== true) { const e = new Error('Confirm the import after checking the preview.'); e.status = 400; throw e; }
+  return imp.importAll(req.body.path, req.body.org_id, req.user);
+}));
 
 module.exports = router;

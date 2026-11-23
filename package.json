@@ -34,7 +34,9 @@
     "test:asr": "node test_asr.js",
     "build:win": "electron-builder --win nsis",
     "build:portable": "electron-builder --win portable",
-    "install:desktop": "powershell -ExecutionPolicy Bypass -File create-shortcuts.ps1"
+    "install:desktop": "powershell -ExecutionPolicy Bypass -File create-shortcuts.ps1",
+    "test:invreports": "node test_invreports.js",
+    "test:invimport": "node test_invimport.js"
   },
   "repository": {
     "type": "git",

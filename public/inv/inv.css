@@ -68,3 +68,9 @@
 #sp-app .errtxt { color: #dc2626; font-size: 12px; margin-top: 8px; } #sp-app .chk { display: flex; align-items: center; gap: 6px; font-size: 13px; } #sp-app .chk input { width: auto; }
 #sp-app [data-tip] { position: relative; } #sp-app [data-tip]::after { content: attr(data-tip); position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 3px 8px; border-radius: 4px; background: rgb(33 37 41 / .95); color: #fff; font-size: 11px; pointer-events: none; opacity: 0; transition: opacity .12s ease .35s; z-index: 5; } #sp-app [data-tip]:hover::after { opacity: 1; }
 #sp-app .chart text { fill: rgb(var(--sub)); font-size: 10px; }
+
+/* stage 3: report hub */
+#sp-app .rep-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+#sp-app .rep-card{text-align:left;cursor:pointer;display:block;width:100%;padding:14px;font:inherit;color:inherit}
+#sp-app .rep-card:hover:not([disabled]){border-color:rgb(var(--brand,59 130 246))}
+#sp-app .rep-card[disabled]{opacity:.55;cursor:not-allowed}

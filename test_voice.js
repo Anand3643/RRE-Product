@@ -247,7 +247,7 @@ async function main() {
   assert(await vcount() === v0, 'No voucher was created by any voice command');
   const bal = (await get('SELECT ROUND(SUM(debit_amount),2) d, ROUND(SUM(credit_amount),2) c FROM ledger_entries'));
   assert(bal.d === bal.c, 'Debits still equal credits');
-  assert(((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 13), 'Migrations applied: 13');
+  assert(((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 14), 'Migrations applied: 14');
 
   console.log(`\n=== ${passed} passed, ${failed} failed ===`);
   process.exit(failed ? 1 : 0);

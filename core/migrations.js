@@ -492,6 +492,21 @@ const MIGRATIONS = [
       'CREATE INDEX IF NOT EXISTS idx_inv_order_docs_order ON inv_order_docs(order_id)',
       'CREATE INDEX IF NOT EXISTS idx_inv_order_docs_voucher ON inv_order_docs(voucher_id)'
     ]
+  },
+  {
+    id: '014_inventory_import',
+    description: 'Remembers which StockPilot records were imported (so an import can be re-run without duplicates)',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS inv_import_map (
+        source TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        src_id INTEGER NOT NULL,
+        rre_id INTEGER,
+        note TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (source, kind, src_id)
+      )`
+    ]
   }
 ];
 

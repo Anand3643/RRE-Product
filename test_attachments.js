@@ -125,7 +125,7 @@ async function main() {
   assert((await get('SELECT COUNT(*) c FROM voucher_attachment_data WHERE attachment_id NOT IN (SELECT id FROM voucher_attachments)')).c === 0, 'No orphaned file data remains');
   const dr = (await get('SELECT ROUND(SUM(debit_amount),2) s FROM ledger_entries')).s, cr = (await get('SELECT ROUND(SUM(credit_amount),2) s FROM ledger_entries')).s;
   assert(dr === cr, 'Total Dr == total Cr', `${dr}/${cr}`);
-  assert((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 13, 'Migration 007 recorded');
+  assert((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 14, 'Migration 007 recorded');
   void all;
 
   console.log('\n====================================================');
