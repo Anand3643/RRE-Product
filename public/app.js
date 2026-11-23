@@ -186,6 +186,11 @@ const QUICK_USERS = {
   }
 };
 
+// One-click read-only guest entry: the server issues a guest session (no password exists anywhere in the page)
+function loginAsGuest() {
+  if (window.RREAccounts) window.RREAccounts.continueAsGuest();
+}
+
 function selectQuickUser(roleKey) {
   const profile = QUICK_USERS[roleKey];
   if (!profile) return;
@@ -4035,6 +4040,7 @@ window.showLoginView = showLoginView;
 window.startWithFreshLogin = startWithFreshLogin;
 window.toggleFreshLoginStartup = toggleFreshLoginStartup;
 window.handleLogin = handleLogin;
+window.loginAsGuest = loginAsGuest;
 window.handleLogout = handleLogout;
 window.openRegisterModal = openRegisterModal;
 window.openGoogleLoginModal = openGoogleLoginModal;

@@ -128,7 +128,7 @@ async function runTests() {
   assert(!badAuth.success, 'Reject incorrect password for admin');
   assert(!(await authenticateUser('admin', '')).success, 'An empty password is never accepted (no passwordless admin shortcut)');
   assert(!(await authenticateUser('administrator', 'anything-at-all-123')).success, 'The "administrator" alias no longer logs in as the Owner');
-  assert(!(await authenticateUser('guest', 'guest')).success && !(await authenticateUser('guest', '')).success, 'Guest access is turned off');
+  assert(!(await authenticateUser('guest', 'guest')).success && !(await authenticateUser('guest', '')).success, 'The Guest account has no password: typing one never works');
 
   const nonExistent = await authenticateUser('non_existent_user_xyz', 'pwd');
   assert(!nonExistent.success, 'Reject non-existent user');
@@ -284,9 +284,11 @@ async function runTests() {
     const vListRes = await httpGet('/api/vouchers');
     assert(vListRes.statusCode === 200 && vListRes.data.success && Array.isArray(vListRes.data.data), 'GET /api/vouchers returns recorded accounting vouchers');
 
-    // Guest access is switched off
+    // Guest has no password; entry is the one-click Guest button
     const guestLoginApi = await httpPost('/api/auth/login', { username: 'guest', password: 'guest' });
     assert(guestLoginApi.statusCode === 401 && guestLoginApi.data.success === false, 'POST /api/auth/login refuses the Guest account');
+    const guestEntry = await httpPost('/api/auth/guest', {});
+    assert(guestEntry.statusCode === 200 && guestEntry.data.data.user.role === 'Guest' && guestEntry.data.data.permissions.canCreateVouchers === false, 'POST /api/auth/guest gives a read-only Guest session without a password');
 
     // Test POST login API for admin: an account on an old demo password may sign in only to choose a new one
     const adminLoginApi = await httpPost('/api/auth/login', { username: 'admin', password: 'admin123' });

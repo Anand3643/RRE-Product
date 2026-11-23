@@ -22,6 +22,9 @@ const {
   isSetupRequired,
   setupAdmin,
   changePassword,
+  guestAccessEnabled,
+  setGuestAccess,
+  startGuestSession,
   getAllUsers,
   createUser,
   updateUser,
@@ -48,7 +51,7 @@ const {
 } = require('./core/aiEngine');
 const logger = require('./core/logger');
 const { runMigrations } = require('./core/migrations');
-const { activityCaptureMiddleware } = require('./core/auth');
+const { activityCaptureMiddleware, logActivity } = require('./core/auth');
 const { startScheduler } = require('./core/scheduler');
 const { xmlEsc } = require('./core/xml');
 const { routeGuard } = require('./core/routeGuard');
@@ -385,7 +388,7 @@ app.post('/api/auth/login', rateLimitLoginMiddleware, async (req, res) => {
 // First-time setup: the person installing the application chooses the administrator password. Only possible on this computer,
 // and only while no administrator password has been set. There are no default credentials.
 app.get('/api/auth/setup-status', async (req, res) => {
-  try { res.json({ success: true, data: { setup_required: await isSetupRequired() } }); }
+  try { res.json({ success: true, data: { setup_required: await isSetupRequired(), guest_access: await guestAccessEnabled() } }); }
   catch (err) { res.status(500).json({ success: false, error: err.message }); }
 });
 
@@ -402,6 +405,32 @@ app.post('/api/auth/setup', rateLimitLoginMiddleware, async (req, res) => {
   } catch (err) {
     loginRateLimiter.recordFailure(clientMeta.ip);
     res.status(err.status || 400).json({ success: false, error: err.message });
+  }
+});
+
+// One-click read-only guest entry (no password). The Owner can switch it off. Only requests from this computer are accepted
+// unless RRE_ALLOW_REMOTE_GUEST=1 is set, so a copy of the application reachable over a network never opens itself to strangers.
+app.post('/api/auth/guest', rateLimitLoginMiddleware, async (req, res) => {
+  const ip = req.socket && req.socket.remoteAddress;
+  if (process.env.RRE_ALLOW_REMOTE_GUEST !== '1' && !['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(ip)) {
+    return res.status(403).json({ success: false, error: 'Guest entry is only available on the computer where RRE Tally is installed.' });
+  }
+  try {
+    const result = await startGuestSession({ ip, agent: req.headers['user-agent'] || 'TallyClient' });
+    res.json(result);
+  } catch (err) {
+    res.status(err.status || 400).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/auth/guest-access', async (req, res) => {
+  try {
+    const enabled = !!(req.body && req.body.enabled === true);
+    const r = await setGuestAccess(enabled);
+    await logActivity({ user: req.user, action: enabled ? 'GUEST_ACCESS_ON' : 'GUEST_ACCESS_OFF', entity: 'settings', entityId: 'guest_access' });
+    res.json({ success: true, data: r });
+  } catch (err) {
+    res.status(err.status || 500).json({ success: false, error: err.message });
   }
 });
 

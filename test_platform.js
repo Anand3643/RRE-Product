@@ -300,20 +300,20 @@ async function main() {
 
   const accountant = await login('accountant', PW.accountant);
   const auditor = await login('auditor', PW.auditor);
-  const guest = createSessionToken({ id: 99, username: 'guest', role: 'Guest' }); // Guest access is switched off: such a token is rejected
+  const guest = createSessionToken({ id: 99, username: 'guest', role: 'Guest' }); // one-click guest entry is on by default
   const ctr = (n) => ({ voucher_type: 'Contra', voucher_no: 'T/ROLE/' + n, date: '2026-06-04', entries: [{ ledger_id: cc.id, debit_amount: 1 }, { ledger_id: bk.id, credit_amount: 1 }] });
 
   // Owner keeps full access
   const own = await req('POST', '/api/vouchers', { token: admin, body: ctr('own') });
   assert(own.status === 200 && (await status('GET', '/api/reports/trial-balance', admin)) === 200 && (await status('GET', '/api/backup/list', admin)) === 200 && (await status('GET', '/api/auth/users', admin)) === 200, 'Owner: post voucher, view TB, backups, users');
   // Read-only roles
-  for (const [name, tok] of [['Viewer', viewer], ['Auditor', auditor]]) {
+  for (const [name, tok] of [['Viewer', viewer], ['Auditor', auditor], ['Guest', guest]]) {
     assert((await status('GET', '/api/masters/ledgers', tok)) === 200 && (await status('GET', '/api/reports/daybook', tok)) === 200, `${name}: can read ledgers and Day Book`);
     assert((await status('POST', '/api/vouchers', tok, ctr(name))) === 403, `${name}: cannot post vouchers`);
     assert((await status('POST', '/api/masters/ledgers', tok, { name: 'X' + name, group_id: 12 })) === 403, `${name}: cannot create masters`);
     assert((await status('DELETE', `/api/vouchers/${own.json.id}`, tok)) === 403, `${name}: cannot delete vouchers`);
   }
-  assert((await status('GET', '/api/reports/trial-balance', guest)) === 401 && (await status('GET', '/api/masters/ledgers', guest)) === 401, 'Guest: a Guest token is refused everywhere (guest access is off)');
+  assert((await status('GET', '/api/reports/trial-balance', guest)) === 200, 'Guest: financial reports visible (matches existing role definition)');
   // Data Entry
   assert((await status('GET', '/api/reports/trial-balance', clerk)) === 403 && (await status('GET', '/api/reports/profit-loss', clerk)) === 403, 'Data Entry: financial statements blocked');
   assert((await status('GET', '/api/reports/daybook', clerk)) === 200 && (await status('GET', '/api/reports/outstandings', clerk)) === 200, 'Data Entry: operational reports still available');

@@ -278,6 +278,12 @@
               <i data-lucide="arrow-right" class="w-4 h-4 text-amber-400"></i>
             </button>
 
+            <!-- One-click read-only guest entry (shown only while the administrator allows it) -->
+            <button type="button" id="btn-guest-login" onclick="loginAsGuest()" class="hidden w-full py-2.5 bg-gradient-to-r from-teal-700 to-cyan-800 hover:from-teal-800 hover:to-cyan-900 text-white rounded-lg font-bold text-xs uppercase tracking-wider shadow-md transition flex items-center justify-center space-x-2">
+              <i data-lucide="user-check" class="w-4 h-4 text-teal-300"></i>
+              <span>Continue as Guest (1-Click, Read-Only)</span>
+            </button>
+
             <button type="button" onclick="startWithFreshLogin()" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-xs border border-slate-300 transition flex items-center justify-center space-x-1.5 shadow-sm">
               <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-blue-600"></i>
               <span>Start with Fresh Login (Reset Session / Admin Mode)</span>
@@ -2347,6 +2353,11 @@
           <span class="text-sm">Tally Security Control &mdash; Users and Passwords (Alt+K)</span>
         </div>
         <button onclick="closeModal('userManagementModal')" class="text-slate-300 hover:text-white font-mono text-sm">✕</button>
+      </div>
+
+      <div id="guest-access-row" class="px-5 py-2 bg-amber-50 border-b border-amber-200 text-xs flex items-center justify-between flex-shrink-0">
+        <span><strong>Guest access:</strong> lets anyone using this computer look around, read-only, without a password.</span>
+        <label class="flex items-center space-x-2 font-semibold text-slate-700 cursor-pointer"><input type="checkbox" id="chk-guest-access" onchange="RREAccounts.setGuestAccess(this.checked)" class="w-4 h-4"><span>Allow</span></label>
       </div>
 
       <!-- Tab Navigation -->

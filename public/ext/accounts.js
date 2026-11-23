@@ -75,14 +75,49 @@
       });
   }
 
+  function showGuestButton(on) { const b = document.getElementById('btn-guest-login'); if (b) b.classList.toggle('hidden', !on); }
+
+  async function refreshGuestButton() {
+    try { const r = await (await fetch(`${base()}/auth/setup-status`)).json(); showGuestButton(!!(r && r.data && r.data.guest_access && !r.data.setup_required)); return r.data; } catch (e) { return null; }
+  }
+
+  /** One-click read-only entry. The server issues a guest session; nothing secret lives in this page. */
+  async function continueAsGuest() {
+    const errEl = document.getElementById('login-error-msg'), errText = document.getElementById('login-error-text');
+    try {
+      const d = await post('/auth/guest', {});
+      storeSession(d);
+      if (errEl) errEl.classList.add('hidden');
+      const ribbon = document.getElementById('header-ribbon'); if (ribbon) ribbon.classList.remove('opacity-40');
+      if (typeof updateUserDisplay === 'function') updateUserDisplay();
+      if (typeof applyRolePermissions === 'function') applyRolePermissions();
+      if (typeof showGateway === 'function') showGateway();
+      try { if (typeof window.loadMasters === 'function') window.loadMasters(); } catch (e) { /* ignore */ }
+    } catch (e) { if (errEl) errEl.classList.remove('hidden'); if (errText) errText.textContent = e.message; }
+  }
+
+  /** Owner: allow or stop one-click guest entry (shown inside Users & Passwords). */
+  async function setGuestAccess(enabled) {
+    try { await post('/auth/guest-access', { enabled: !!enabled }); showGuestButton(false); } catch (e) { alert(e.message); }
+    const r = await refreshGuestButton(); const c = document.getElementById('chk-guest-access'); if (c && r) c.checked = !!r.guest_access;
+  }
+
+  async function syncGuestToggle() {
+    const r = await refreshGuestButton(); const c = document.getElementById('chk-guest-access'); if (c && r) c.checked = !!r.guest_access;
+  }
+
   async function boot() {
     try {
       const res = await fetch(`${base()}/auth/setup-status`);
       const j = await res.json();
       if (j && j.success && j.data && j.data.setup_required) promptSetup();
+      showGuestButton(!!(j && j.data && j.data.guest_access && !j.data.setup_required));
     } catch (e) { /* server not reachable yet: the login screen reports that */ }
   }
 
-  window.RREAccounts = { promptPasswordChange, promptSetup };
+  window.RREAccounts = { promptPasswordChange, promptSetup, continueAsGuest, setGuestAccess };
+  // keep the login screen and the Owner's switch in step with the setting
+  const wrapOnce = (name, after) => { const f = window[name]; if (typeof f !== 'function' || f.__acctWrapped) return; const w = function () { const r = f.apply(this, arguments); try { after(); } catch (e) { /* ignore */ } return r; }; w.__acctWrapped = true; window[name] = w; };
+  window.addEventListener('load', () => { wrapOnce('startWithFreshLogin', () => setTimeout(refreshGuestButton, 50)); wrapOnce('openUserManagement', () => setTimeout(syncGuestToggle, 50)); });
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();

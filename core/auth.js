@@ -4,7 +4,7 @@
  * (permissions come from the existing getRolePermissions()).
  */
 const { verifySessionToken } = require('./security');
-const { getRolePermissions, run, getCompanyNumber } = require('./db');
+const { getRolePermissions, run, getCompanyNumber, isGuestAccessOn } = require('./db');
 
 function readToken(req) {
   const h = req.headers['authorization'] || '';
@@ -18,7 +18,7 @@ function identify(req) {
   if (!t) return null;
   const r = verifySessionToken(t);
   if (!r.valid) return null;
-  if (r.user.role === 'Guest') return null; // guest access is switched off, including tokens issued earlier
+  if (r.user.role === 'Guest' && !isGuestAccessOn()) return null; // guest access switched off: existing guest sessions stop working
   // A token only works in the company it was issued for (tokens from before multi-company belong to the original company).
   const tokenCompany = r.user.company || require('./paths').DEFAULT_COMPANY;
   if (String(tokenCompany) !== String(getCompanyNumber())) return null;

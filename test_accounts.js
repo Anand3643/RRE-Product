@@ -1,5 +1,6 @@
 /**
- * Accounts and access: first-time setup, no default credentials, guest access off, forced password change, registration,
+ * Accounts and access: first-time setup, no default credentials, one-click read-only guest entry (Owner can switch it off),
+ * forced password change, registration,
  * Google sign-in, role enforcement on the server, and nothing sensitive in the frontend or docs.
  * Runs against a DISPOSABLE data directory.   npm run test:accounts
  */
@@ -79,7 +80,9 @@ async function main() {
   const usersAfter = await all('SELECT id, username, role, full_name, email, status, must_change_password FROM users ORDER BY id');
   assert(usersAfter.length === usersBefore.length && usersBefore.every((u, i) => u.id === usersAfter[i].id && u.username === usersAfter[i].username && u.role === usersAfter[i].role && u.full_name === usersAfter[i].full_name && u.email === usersAfter[i].email), 'No account was deleted, renamed or re-roled');
   const by = Object.fromEntries(usersAfter.map((u) => [u.username, u]));
-  assert(by.guest.status === 'Inactive' && (await get('SELECT COUNT(*) c FROM user_logins WHERE user_id = ?', [guestId])).c === 1, 'Guest is switched off but kept, with its login history');
+  assert(by.guest.status === 'Active' && (await get('SELECT COUNT(*) c FROM user_logins WHERE user_id = ?', [guestId])).c === 1, 'The guest account is kept with its login history');
+  const guestRow = await get(`SELECT password FROM users WHERE username = 'guest'`);
+  assert(!require('./core/security').verifyPassword('guest', guestRow.password).valid && !require('./core/security').verifyPassword('guest123', guestRow.password).valid, 'The old shipped guest password was replaced: nobody can type their way in as guest');
   assert(['admin', 'accountant', 'dataentry', 'auditor', 'viewer'].every((u) => by[u].must_change_password === 1), 'Every account still on a demo password must choose a new one');
   assert(by.meena.must_change_password === 0 && by.oldplain.must_change_password === 0 && by.meena.status === 'Active', 'Accounts with their own password are left alone');
   assert((await get('SELECT COUNT(*) c FROM vouchers')).c === vBefore && (await get('SELECT COUNT(*) c FROM ledgers')).c === lBefore, 'Accounting data is untouched');
@@ -112,11 +115,48 @@ async function main() {
   for (const [u, p] of attempts) assert((await login(u, p)).status === 401, `Login refused: "${u}" / "${p}"`);
   const e1 = (await login('nobody-here', 'x-Pass-12345')).json.error, e2 = (await login('admin', 'Wrong-Pass-12345')).json.error;
   assert(e1 === e2, 'Unknown user and wrong password give the same message (no account guessing)');
-  const gtok = createSessionToken({ id: guestId, username: 'guest', role: 'Guest' });
-  assert((await req('GET', '/api/masters/ledgers', { token: gtok })).status === 401 && (await req('GET', '/api/platform/notifications', { token: gtok })).status === 401, 'A Guest token (even a valid one) is refused by every route');
-  await run(`UPDATE users SET status = 'Active' WHERE username = 'guest'`);
-  assert((await login('guest', 'guest')).status === 401, 'Even if the guest account is re-activated, Guest cannot sign in');
-  await run(`UPDATE users SET status = 'Inactive' WHERE username = 'guest'`);
+  assert((await login('guest', 'guest')).status === 401 && (await login('guest', '')).status === 401, 'Guest has no password: typing one is refused');
+
+  console.log('\n--- 5b. One-click read-only guest entry ---');
+  const adminTok0 = (await login('admin', STRONG)).json.data.token;
+  const deT0 = createSessionToken({ id: by.dataentry.id, username: 'dataentry', role: 'Data Entry' }), accT0 = createSessionToken({ id: by.accountant.id, username: 'accountant', role: 'Accountant' });
+  const ledg0 = (await get('SELECT id FROM ledgers LIMIT 1')).id;
+  const gs = await req('GET', '/api/auth/setup-status');
+  assert(gs.json.data.guest_access === true, 'The login screen is told that guest entry is available');
+  resetLimiter();
+  const ge = await req('POST', '/api/auth/guest', { body: {} });
+  assert(ge.status === 200 && ge.json.data.user.role === 'Guest' && !claims(ge.json.data.token).pwc && ge.json.data.must_change_password === false, 'The Guest button gives a Guest session without any password');
+  const gT = ge.json.data.token;
+  assert(ge.json.data.permissions.canCreateVouchers === false && ge.json.data.permissions.canManageUsers === false, 'Guest permissions are read-only');
+  const gStatus = async (m, p, b) => (await req(m, p, { token: gT, body: b })).status;
+  assert((await gStatus('GET', '/api/masters/ledgers')) === 200 && (await gStatus('GET', '/api/reports/daybook')) === 200 && (await gStatus('GET', '/api/reports/trial-balance')) === 200 && (await gStatus('GET', '/api/search?q=cash')) === 200, 'A guest can look around: ledgers, Day Book, reports, search');
+  const gBody = { voucher_type: 'Contra', voucher_no: 'GST/1', date: '2026-06-01', entries: [{ ledger_id: ledg0, debit_amount: 1 }, { ledger_id: ledg0, credit_amount: 1 }] };
+  const blockedForGuest = [['POST', '/api/vouchers', gBody], ['POST', '/api/masters/ledgers', { name: 'GuestMade', group_id: 12 }], ['DELETE', '/api/vouchers/1'], ['GET', '/api/auth/users'], ['GET', '/api/backup/list'], ['POST', '/api/backup/restore', { filename: 'x' }], ['POST', '/api/auth/users', { username: 'g1', full_name: 'G', password: 'Temp#Guest-2026', role: 'Owner' }], ['POST', '/api/auth/guest-access', { enabled: false }], ['POST', '/api/voice/model/install', { model: 'tiny' }], ['POST', '/api/quotations', { customer_name: 'x', items: [{ item_name: 'a', quantity: 1, rate: 1 }] }], ['POST', '/api/company/clean-slate', {}]];
+  const gLeaks = [];
+  for (const [m, p, b] of blockedForGuest) { const st = await gStatus(m, p, b); if (st !== 403) gLeaks.push(`${m} ${p}=${st}`); }
+  assert(!gLeaks.length, `A guest cannot post, edit, delete, manage users, back up or change settings (${blockedForGuest.length} checked)`, gLeaks.join('; '));
+  const gv = await req('POST', '/api/voice/execute', { token: gT, body: { text: 'create sales voucher', confirmed: true } });
+  assert(gv.json.data.status === 'denied', 'Voice cannot open a voucher form for a guest either');
+  assert((await get(`SELECT COUNT(*) c FROM vouchers WHERE voucher_no = 'GST/1'`)).c === 0 && (await get(`SELECT COUNT(*) c FROM ledgers WHERE name = 'GuestMade'`)).c === 0, 'Nothing was created by the guest');
+  assert((await get(`SELECT COUNT(*) c FROM user_logins WHERE username = 'guest'`)).c >= 2, 'Guest entries are recorded in the login audit trail');
+  assert((await req('POST', '/api/auth/change-password', { token: gT, body: { current_password: 'x', new_password: 'Guest#Chosen-2026' } })).status === 400, 'A guest cannot set a password for the shared guest account');
+
+  console.log('\n--- 5c. The Owner can switch guest entry off and on ---');
+  assert((await req('POST', '/api/auth/guest-access', { token: deT0, body: { enabled: false } })).status === 403 && (await req('POST', '/api/auth/guest-access', { token: accT0, body: { enabled: false } })).status === 403, 'Only an administrator can change it');
+  assert((await req('POST', '/api/auth/guest-access', { token: null, body: { enabled: false } })).status === 401, 'Changing it needs a login');
+  const off = await req('POST', '/api/auth/guest-access', { token: adminTok0, body: { enabled: false } });
+  assert(off.status === 200 && off.json.data.guest_access === false, 'The Owner switches it off');
+  resetLimiter();
+  assert((await req('POST', '/api/auth/guest', { body: {} })).status === 403, 'The Guest button no longer works');
+  assert((await req('GET', '/api/auth/setup-status')).json.data.guest_access === false, 'The login screen is told to hide the button');
+  assert((await req('GET', '/api/masters/ledgers', { token: gT })).status === 401, 'Guest sessions already open stop working immediately');
+  assert((await get(`SELECT status FROM users WHERE username = 'guest'`)).status === 'Inactive', 'The guest account is deactivated (kept, not deleted)');
+  assert((await get(`SELECT COUNT(*) c FROM activity_log WHERE action = 'GUEST_ACCESS_OFF'`)).c === 1, 'The change is in the audit log');
+  const on = await req('POST', '/api/auth/guest-access', { token: adminTok0, body: { enabled: true } });
+  resetLimiter();
+  assert(on.status === 200 && (await req('POST', '/api/auth/guest', { body: {} })).status === 200 && (await get(`SELECT status FROM users WHERE username = 'guest'`)).status === 'Active', 'Switched back on, guest entry works again');
+  assert((await req('POST', '/api/auth/guest-access', { token: adminTok0, body: { enabled: 'yes' } })).json.data.guest_access === false, 'Only a real boolean true turns it on');
+  await req('POST', '/api/auth/guest-access', { token: adminTok0, body: { enabled: true } });
 
   console.log('\n--- 6. Registration and Google ---');
   const reg = (b) => { resetLimiter(); return req('POST', '/api/auth/register', { body: b }); };
@@ -199,11 +239,14 @@ async function main() {
   const bad = [];
   for (const f of roots) {
     let txt = ''; try { txt = fs.readFileSync(path.join(__dirname, f), 'utf8'); } catch (e) { continue; }
-    for (const w of ['admin123', 'acc123', 'data123', 'audit123', 'view123', 'guest123', 'loginAsGuest', 'Continue as Guest', "'offline_token_' +"]) if (txt.includes(w.replace(/"/g, ''))) bad.push(`${f}: ${w}`);
+    for (const w of ['admin123', 'acc123', 'data123', 'audit123', 'view123', 'guest123', "password: 'guest'", "'offline_token_' +"]) if (txt.includes(w.replace(/"/g, ''))) bad.push(`${f}: ${w}`);
   }
-  assert(!bad.length, 'No default password, guest button or fake offline session in the frontend, launchers or docs', bad.join('; '));
+  assert(!bad.length, 'No default password or fake offline session in the frontend, launchers or docs', bad.join('; '));
   const html = fs.readFileSync(path.join(__dirname, 'public/index.html'), 'utf8');
-  assert(/id="login-password" value=""/.test(html) && !html.includes('qu-guest'), 'The login screen has no pre-filled password and no guest tile');
+  assert(/id="login-password" value=""/.test(html) && !html.includes('qu-guest'), 'The login screen has no pre-filled password');
+  assert(/id="btn-guest-login" onclick="loginAsGuest\(\)" class="hidden /.test(html), 'The Guest button exists and is hidden until the server says guest entry is allowed');
+  const appJs = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+  assert(/function loginAsGuest\(\) \{\n  if \(window\.RREAccounts\) window\.RREAccounts\.continueAsGuest\(\);/.test(appJs.replace(/\r\n/g, '\n')), 'The page asks the server for a guest session; it holds no guest password');
   assert(fs.readFileSync(path.join(__dirname, '.gitignore'), 'utf8').split(/\r?\n/).includes('.tally-profile/'), '.tally-profile/ is in .gitignore');
 
   console.log(`\n=== ${passed} passed, ${failed} failed ===`);

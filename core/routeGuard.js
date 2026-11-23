@@ -19,6 +19,7 @@ const PUBLIC = [
   ['GET', /^\/api\/auth\/permissions\/?$/],
   ['GET', /^\/api\/auth\/setup-status\/?$/],
   ['POST', /^\/api\/auth\/setup\/?$/],
+  ['POST', /^\/api\/auth\/guest\/?$/],
   ['GET', /^\/api\/health\/?$/],
   ['GET', /^\/api\/gateway\/info\/?$/],
   ['GET', /^\/api\/system\/update-status\/?$/]
@@ -26,6 +27,7 @@ const PUBLIC = [
 
 // Ordered: first match wins. perm = key in getRolePermissions(role).
 const RULES = [
+  { m: 'POST', re: /^\/api\/auth\/guest-access\/?$/, perm: 'canManageUsers' },
   { re: /^\/api\/auth\/users/, perm: 'canManageUsers' },
   { re: /^\/api\/auth\/audit-log/, perm: 'canViewAuditTrail' },
   { re: /^\/api\/system\/logs/, perm: 'canViewAuditTrail' },

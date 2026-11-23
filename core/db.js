@@ -830,10 +830,13 @@ async function hardenAccounts(force = false) {
   const users = await all('SELECT id, username, role, password, status, must_change_password, password_changed_at FROM users');
   for (const u of users) {
     if (u.role === 'Guest' || String(u.username).toLowerCase() === 'guest') {
-      if (u.status !== 'Inactive') {
-        await run("UPDATE users SET status = 'Inactive' WHERE id = ?", [u.id]);
-        console.log(`[Security] Guest account "${u.username}" was switched off (records kept).`);
-      }
+      // The guest account never has a password anyone could type: entry is only through the Guest button, and only while
+      // the administrator allows it. An old shipped guest password is replaced by an unusable random one (records are kept).
+      const guestOn = await guestAccessEnabled();
+      const known = (LEGACY_DEMO_PASSWORDS.guest || []).some((d) => verifyPassword(d, u.password).valid);
+      if (known) await run('UPDATE users SET password = ? WHERE id = ?', [hashPassword(crypto.randomBytes(24).toString('hex')), u.id]);
+      const want = guestOn ? 'Active' : 'Inactive';
+      if (u.status !== want) await run('UPDATE users SET status = ? WHERE id = ?', [want, u.id]);
       continue;
     }
     if (u.password === SETUP_MARKER || u.must_change_password || u.password_changed_at) continue;
@@ -843,7 +846,52 @@ async function hardenAccounts(force = false) {
       console.log(`[Security] Account "${u.username}" still uses a shipped demo password: a new password will be required at next login.`);
     }
   }
+  await refreshGuestFlag(); // the guest account itself is only created when someone first uses the Guest button
   hardenedFor = dbPath;
+}
+
+// ---- guest access (one-click, read-only, no password). The Owner can switch it off; it is on by default.
+let guestFlag = false;
+async function ensureSettingsTable() {
+  await run('CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)');
+}
+async function guestAccessEnabled() {
+  await ensureSettingsTable();
+  const r = await get("SELECT value FROM app_settings WHERE key = 'guest_access'");
+  return !r || r.value !== '0';
+}
+async function refreshGuestFlag() { guestFlag = await guestAccessEnabled(); return guestFlag; }
+/** Synchronous answer for the request path; kept current by refreshGuestFlag(). */
+function isGuestAccessOn() { return guestFlag; }
+
+async function ensureGuestAccount() {
+  let g = await get("SELECT * FROM users WHERE role = 'Guest' OR username = 'guest' COLLATE NOCASE ORDER BY id LIMIT 1");
+  if (!g) {
+    await run(`INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries)
+               VALUES ('guest', ?, 'Guest (read-only)', 'Guest', '', '', 'Active', 0)`, [hashPassword(crypto.randomBytes(24).toString('hex'))]);
+    g = await get("SELECT * FROM users WHERE username = 'guest' COLLATE NOCASE");
+  } else if (g.status !== 'Active') {
+    await run("UPDATE users SET status = 'Active' WHERE id = ?", [g.id]);
+    g.status = 'Active';
+  }
+  return g;
+}
+
+/** The Owner turns one-click guest entry on or off. Existing guest sessions stop working immediately when it is off. */
+async function setGuestAccess(enabled) {
+  await ensureSettingsTable();
+  await run("INSERT INTO app_settings (key, value) VALUES ('guest_access', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [enabled ? '1' : '0']);
+  if (enabled) await ensureGuestAccount();
+  else await run("UPDATE users SET status = 'Inactive' WHERE role = 'Guest'");
+  await refreshGuestFlag();
+  return { guest_access: guestFlag };
+}
+
+/** One-click guest entry: a read-only session with no password. */
+async function startGuestSession(clientMeta = {}) {
+  await seedDefaultUsers();
+  if (!(await guestAccessEnabled())) { const e = new Error('Guest access is turned off by the administrator.'); e.status = 403; throw e; }
+  return handleLoginSuccess(await ensureGuestAccount(), clientMeta);
 }
 
 async function seedDefaultUsers() {
@@ -900,7 +948,7 @@ async function authenticateUser(username, password, clientMeta = {}) {
   const generic = { success: false, error: 'Incorrect username or password.' };
   const user = u ? await get('SELECT * FROM users WHERE username = ? COLLATE NOCASE', [u]) : null;
   if (!user) return generic;
-  if (user.role === 'Guest') return { success: false, error: 'Guest access is turned off.' };
+  if (user.role === 'Guest') return { success: false, error: 'The Guest account has no password. Use the Guest button on the login screen.' };
   if (user.status !== 'Active') return { success: false, error: 'User account is deactivated. Contact Company Administrator.' };
   if (user.password === SETUP_MARKER) return { success: false, error: 'First-time setup is not finished. Open RRE Tally on this computer and choose the administrator password.' };
 
@@ -1303,6 +1351,10 @@ module.exports = {
   registerUser,
   loginWithGoogle,
   hardenAccounts,
+  isGuestAccessOn,
+  guestAccessEnabled,
+  setGuestAccess,
+  startGuestSession,
   isSetupRequired,
   setupAdmin,
   changePassword,
