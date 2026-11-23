@@ -734,7 +734,8 @@ app.get('/api/system/update-status', async (req, res) => {
     const remoteMessage = commitData.commit ? commitData.commit.message : '';
     const remoteDate = commitData.commit && commitData.commit.author ? commitData.commit.author.date : '';
 
-    const updateAvailable = Boolean(remoteSha && remoteSha !== currentCommit);
+    const isParentBuildInfo = Boolean(commitData.parents && commitData.parents.some(p => (p.sha || '').slice(0, 7) === currentCommit && /build-info/i.test(remoteMessage)));
+    const updateAvailable = Boolean(remoteSha && remoteSha !== currentCommit && !isParentBuildInfo);
 
     return res.json({
       success: true,
