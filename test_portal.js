@@ -1,3 +1,4 @@
+process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these suites verify the server-side login and role checks, which are off by default in the login-free build
 /**
  * Inventory suite, stage 4: customer portal. The heart of this suite is ISOLATION: a portal customer must reach only their own
  * orders and invoices, nothing of the staff application, and no way of changing the URL or request to see anyone else's records.

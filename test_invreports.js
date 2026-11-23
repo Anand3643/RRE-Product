@@ -1,3 +1,4 @@
+process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these suites verify the server-side login and role checks, which are off by default in the login-free build
 /**
  * Inventory suite, stage 3: reports (valuation, stock by warehouse, movement summary, reorder, dead stock, sales/purchases by
  * party and by item, open orders) and CSV export. Figures are checked against hand-calculated values and against RRE's own

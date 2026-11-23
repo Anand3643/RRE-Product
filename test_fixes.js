@@ -1,3 +1,4 @@
+process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these suites verify the server-side login and role checks, which are off by default in the login-free build
 /**
  * Regression tests for approved bug fixes (XML escaping, AI opening balances).
  * Runs against a DISPOSABLE data directory.   npm run test:fixes

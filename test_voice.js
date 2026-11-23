@@ -1,3 +1,4 @@
+process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these suites verify the server-side login and role checks, which are off by default in the login-free build
 /**
  * Multilingual voice assistant: language identification, command understanding, replies, permissions, consent and privacy.
  * It tests everything from TRANSCRIPTS (what a speech provider would return). It cannot test how well a provider recognises real

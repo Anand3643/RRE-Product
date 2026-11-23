@@ -1,3 +1,4 @@
+process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these suites verify the server-side login and role checks, which are off by default in the login-free build
 /**
  * Accounts and access: first-time setup, no default credentials, one-click read-only guest entry (Owner can switch it off),
  * forced password change, registration,
@@ -243,8 +244,9 @@ async function main() {
   }
   assert(!bad.length, 'No default password or fake offline session in the frontend, launchers or docs', bad.join('; '));
   const html = fs.readFileSync(path.join(__dirname, 'public/index.html'), 'utf8');
-  assert(/id="login-password" value=""/.test(html) && !html.includes('qu-guest'), 'The login screen has no pre-filled password');
-  assert(/id="btn-guest-login" onclick="loginAsGuest\(\)" class="hidden /.test(html), 'The Guest button exists and is hidden until the server says guest entry is allowed');
+  assert(!/id="login-password"[^>]*value="[^"]+"/.test(html) && !html.includes('qu-guest'), 'The main page has no pre-filled password or quick-user buttons');
+  const portalHtml = fs.readFileSync(path.join(__dirname, 'public/portal.html'), 'utf8');
+  assert(/type="password"/.test(portalHtml) && !/<input[^>]*type="password"[^>]*value="[^"]+"/.test(portalHtml) && portalHtml.includes('This page is for customers'), 'The customer sign-in page has no pre-filled password and turns staff away');
   const appJs = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   assert(/function loginAsGuest\(\) \{\n  if \(window\.RREAccounts\) window\.RREAccounts\.continueAsGuest\(\);/.test(appJs.replace(/\r\n/g, '\n')), 'The page asks the server for a guest session; it holds no guest password');
   assert(fs.readFileSync(path.join(__dirname, '.gitignore'), 'utf8').split(/\r?\n/).includes('.tally-profile/'), '.tally-profile/ is in .gitignore');

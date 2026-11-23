@@ -1,3 +1,4 @@
+process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these suites verify the server-side login and role checks, which are off by default in the login-free build
 /**
  * Approval workflows: rules, holding, approving, rejecting, forged passes, import/recurring.
  * Runs against a DISPOSABLE data directory.   npm run test:approvals

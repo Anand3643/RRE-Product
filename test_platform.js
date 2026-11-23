@@ -1,3 +1,4 @@
+process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these suites verify the server-side login and role checks, which are off by default in the login-free build
 /**
  * Verification for the Phase 3 platform services.
  * Always runs against a DISPOSABLE data directory (never the live company data).

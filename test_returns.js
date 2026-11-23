@@ -1,3 +1,4 @@
+process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these suites verify the server-side login and role checks, which are off by default in the login-free build
 /**
  * Credit Note / Debit Note correctness: ledger postings, stock direction, GST reports, outstandings.
  * Runs against a DISPOSABLE data directory.   npm run test:returns

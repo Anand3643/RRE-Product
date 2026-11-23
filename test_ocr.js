@@ -1,3 +1,4 @@
+process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these suites verify the server-side login and role checks, which are off by default in the login-free build
 /**
  * Invoice scanning: offline OCR + field extraction + reviewed draft. Uses a real image (test_fixtures/invoice_sample.png).
  * Runs against a DISPOSABLE data directory.   npm run test:ocr

@@ -1,3 +1,4 @@
+process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these suites verify the server-side login and role checks, which are off by default in the login-free build
 /**
  * Multiple companies: isolation, switching, tokens bound to a company, per-company backups.
  * Uses a DISPOSABLE data root (RRE_DATA_ROOT) so the real data folder is never touched.   npm run test:companies

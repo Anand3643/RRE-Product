@@ -1,3 +1,4 @@
+process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these suites verify the server-side login and role checks, which are off by default in the login-free build
 /**
  * Inventory suite (StockPilot features inside RRE): items, categories, units, warehouses, stock, movements, transfers,
  * adjustments, alerts, roles, and consistency with the accounting books.

@@ -1,3 +1,4 @@
+process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these suites verify the server-side login and role checks, which are off by default in the login-free build
 /**
  * Inventory suite, stage 3: one-time import of a StockPilot database.
  * Builds a synthetic StockPilot file (and also previews the real one if present), checks read-only access, preview-before-write,

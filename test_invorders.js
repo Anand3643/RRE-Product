@@ -1,3 +1,4 @@
+process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these suites verify the server-side login and role checks, which are off by default in the login-free build
 /**
  * Inventory suite, stage 2: customers, suppliers, purchase orders (receiving posts Purchase vouchers), sales orders (confirming
  * reserves stock; invoicing posts Sales vouchers), history, roles, approvals, concurrency and accounting consistency.
