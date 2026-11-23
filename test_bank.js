@@ -227,7 +227,7 @@ async function main() {
   assert((await get("SELECT COUNT(*) c FROM bank_statement_lines WHERE description LIKE 'CONC%'")).c === 10, 'Exactly 10 lines stored (no lost or doubled rows)');
   const fin = await counts();
   assert(fin.dr === fin.cr, 'Total Dr == total Cr after everything', `${fin.dr}/${fin.cr}`);
-  assert((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 11, 'Migration 005 recorded');
+  assert((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 12, 'Migration 005 recorded');
   assert((await req('GET', '/api/bank/summary?bank_ledger_id=' + cash, { token: admin })).status === 400, 'Summary refuses a non-bank ledger');
 
   console.log('\n====================================================');

@@ -78,6 +78,7 @@ const approvalsRouter = require('./modules/approvals/approvalsApi');
 const yearEndRouter = require('./modules/yearend/yearEndApi');
 const voiceRouter = require('./modules/voice/voiceApi');
 const searchRouter = require('./modules/search/searchApi');
+const invAppRouter = require('./modules/invapp/invApi');
 const approvals = require('./core/approvals');
 const orgTools = require('./core/orgTools');
 const companies = require('./core/companies');
@@ -538,6 +539,7 @@ app.use('/api/dashboard', dashboardRouter);
 app.use('/api/masters', mastersRouter);
 app.use('/api/vouchers', vouchersRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api/inv', invAppRouter); // new: inventory suite (items, warehouses, stock, transfers, adjustments)
 app.use('/api/search', searchRouter); // new: smart search and quick look (read-only)
 app.use('/api/voice', voiceRouter); // new: multilingual voice assistant (understanding, replies, consent)
 app.use('/api/yearend', yearEndRouter); // new: read-only year-end readiness, snapshot and opening-balance pack

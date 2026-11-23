@@ -1,0 +1,402 @@
+/**
+ * RRE Tally — Inventory workspace (StockPilot features and look, running on RRE's own data).
+ * Opens as a full-screen workspace from the Gateway menu; the rest of RRE is not touched. All data comes from /api/inv and every
+ * permission is enforced by the server — hiding a button here is a convenience, not security.
+ */
+(function () {
+  'use strict';
+  if (window.StockPilotInv) return;
+
+  // ------------------------------------------------------------------ helpers
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const num = (n, d = 3) => (Number(n) || 0).toLocaleString('en-IN', { maximumFractionDigits: d });
+  const inr = (n) => '₹' + (Number(n) || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const root = () => document.getElementById('sp-app');
+  const view = () => document.getElementById('sp-view');
+  const base = () => (typeof API_BASE !== 'undefined' ? API_BASE : '/api') + '/inv';
+  const perms = () => (typeof appState !== 'undefined' && appState.permissions) || {};
+  const can = { write: () => !!perms().canCreateVouchers, move: () => !!perms().canEditVouchers, remove: () => !!perms().canDeleteVouchers, value: () => !!perms().canViewFinancials };
+  const icons = () => { try { if (window.lucide) window.lucide.createIcons(); } catch (e) { /* icons are decoration */ } };
+  const ic = (n, cls = '') => `<i data-lucide="${n}" class="${cls}" style="width:16px;height:16px"></i>`;
+  const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
+  const today = () => new Date().toISOString().slice(0, 10);
+  const store = { get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } } };
+
+  async function api(path, opts = {}) {
+    const res = await fetch(base() + path, { method: opts.method || 'GET', headers: opts.body ? { 'Content-Type': 'application/json' } : {}, body: opts.body ? JSON.stringify(opts.body) : undefined });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || j.success === false) { const e = new Error(j.error || `Request failed (${res.status})`); e.status = res.status; throw e; }
+    return j.data;
+  }
+  const qs = (o) => Object.entries(o).filter(([, v]) => v !== '' && v != null).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join('&');
+
+  function toast(text, kind = 'ok') {
+    const box = root().querySelector('.toasts'); const t = document.createElement('div');
+    t.className = `card toast ${kind === 'err' ? 'err' : ''}`; t.textContent = text; box.appendChild(t);
+    setTimeout(() => t.remove(), kind === 'err' ? 6000 : 3500);
+  }
+
+  function modal(title, body, o = {}) {
+    const ov = document.createElement('div'); ov.className = `ov ${o.drawer ? 'right' : ''}`;
+    ov.innerHTML = o.drawer ? `<div class="drawer" role="dialog" aria-label="${esc(title)}">${body}</div>`
+      : `<div class="card dlg ${o.wide ? 'wide' : ''}" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="row between mb"><h2 style="margin:0;font-size:15px">${esc(title)}</h2><button class="btn flat sm" data-x aria-label="Close">✕</button></div>${body}</div>`;
+    const close = () => { ov.remove(); root().removeEventListener('keydown', onKey); };
+    const onKey = (e) => { if (e.key === 'Escape' && ov === [...root().querySelectorAll('.ov')].pop()) close(); };
+    ov.addEventListener('mousedown', (e) => { if (e.target === ov) close(); });
+    ov.addEventListener('click', (e) => { if (e.target.closest('[data-x]')) close(); });
+    root().addEventListener('keydown', onKey);
+    root().appendChild(ov); icons();
+    const first = ov.querySelector('input:not([type=hidden]),select,textarea'); if (first && !o.drawer) first.focus();
+    return { el: ov, close };
+  }
+
+  async function confirmBox(title, text, action, fn) {
+    const m = modal(title, `<p class="sub" style="margin:0 0 16px">${esc(text)}</p><div class="row" style="justify-content:flex-end"><button class="btn" data-x>Cancel</button><button class="btn danger" id="sp-go">${esc(action)}</button></div>`);
+    m.el.querySelector('#sp-go').onclick = async (e) => { e.target.classList.add('busy'); try { await fn(); m.close(); } catch (err) { e.target.classList.remove('busy'); toast(err.message, 'err'); } };
+  }
+
+  const skel = (n = 6) => `<div class="card">${'<div class="skel"></div>'.repeat(n)}</div>`;
+  const empty = (t, h, action = '') => `<div class="empty"><b>${esc(t)}</b>${h ? `<div>${esc(h)}</div>` : ''}${action ? `<div style="margin-top:10px">${action}</div>` : ''}</div>`;
+  const badge = (s) => ({ ok: '<span class="badge b-ok">In stock</span>', low: '<span class="badge b-warn">Low</span>', out: '<span class="badge b-bad">Out</span>' }[s] || '');
+  const status = (active) => (active ? '<span class="badge b-ok">Active</span>' : '<span class="badge b-n">Archived</span>');
+  const pager = (d, key) => d.pages <= 1 && d.total <= d.page_size ? `<div class="pager"><span>${d.total} record${d.total === 1 ? '' : 's'}</span><span></span></div>`
+    : `<div class="pager"><span>${d.total} records · page ${d.page} of ${d.pages}</span><span class="row"><button class="btn sm" data-pg="${key}:${d.page - 1}" ${d.page <= 1 ? 'disabled' : ''}>Previous</button><button class="btn sm" data-pg="${key}:${d.page + 1}" ${d.page >= d.pages ? 'disabled' : ''}>Next</button></span></div>`;
+  const field = (label, inner, full, hint) => `<div class="${full ? 'full' : ''}"><label class="lbl">${esc(label)}</label>${inner}${hint ? `<div class="hint">${esc(hint)}</div>` : ''}</div>`;
+  const opts = (list, val, sel, ph) => (ph != null ? `<option value="">${esc(ph)}</option>` : '') + list.map((x) => `<option value="${esc(val(x))}" ${String(val(x)) === String(sel) ? 'selected' : ''}>${esc(sel === undefined && false ? '' : x.__label || x.name || x.symbol)}</option>`).join('');
+
+  // ------------------------------------------------------------------ state, shell, router
+  const S = { route: 'dashboard', param: null, q: {}, cats: [], units: [], whs: [] };
+  const NAV = [
+    ['', [['dashboard', 'Dashboard', 'layout-dashboard'], ['alerts', 'Low stock alerts', 'bell-ring']]],
+    ['Items', [['items', 'Items', 'package'], ['categories', 'Categories', 'folder-tree'], ['units', 'Units', 'ruler']]],
+    ['Inventory', [['stock', 'Stock levels', 'boxes'], ['movements', 'Movement history', 'arrow-left-right'], ['warehouses', 'Warehouses', 'warehouse'], ['transfers', 'Transfers', 'arrow-right-left'], ['adjustments', 'Adjustments', 'sliders-horizontal']]]
+  ];
+  const TITLES = {}; NAV.forEach(([, l]) => l.forEach(([k, t]) => { TITLES[k] = t; }));
+
+  function build() {
+    if (root()) return;
+    const el = document.createElement('div'); el.id = 'sp-app';
+    if (store.get('sp-theme') === 'dark') el.classList.add('dark');
+    el.innerHTML = `<aside class="sp-side"><div class="sp-brand"><span class="sp-logo">${ic('boxes')}</span><span class="sp-lbl">Inventory</span></div>
+      <nav>${NAV.map(([g, links]) => `${g ? `<div class="sp-grp">${g}</div>` : ''}${links.map(([k, t, i]) => `<button class="sp-nav" data-go="${k}" title="${t}"><span class="sp-ic">${ic(i)}</span><span class="sp-lbl">${t}</span></button>`).join('')}`).join('')}</nav>
+      <div style="padding:8px;border-top:1px solid rgb(var(--line))"><button class="sp-nav" id="sp-collapse"><span class="sp-ic">${ic('chevrons-left')}</span><span class="sp-lbl">Collapse</span></button></div></aside>
+      <div class="sp-main"><header class="sp-top"><button class="btn sm" id="sp-back" data-tip="Back to RRE Tally">${ic('arrow-left')} RRE Tally</button><h1 id="sp-title"></h1>
+        <input class="input" id="sp-quick" placeholder="Search items…  ( / )" style="width:220px" aria-label="Search items"><button class="btn flat sm" id="sp-theme" data-tip="Light / dark">${ic('moon')}</button></header>
+        <div class="sp-view" id="sp-view"></div></div><div class="toasts" role="status" aria-live="polite"></div>`;
+    document.body.appendChild(el);
+    el.addEventListener('click', onClick);
+    el.querySelector('#sp-back').onclick = close;
+    el.querySelector('#sp-collapse').onclick = () => el.classList.toggle('collapsed');
+    el.querySelector('#sp-theme').onclick = () => { el.classList.toggle('dark'); store.set('sp-theme', el.classList.contains('dark') ? 'dark' : 'light'); };
+    el.querySelector('#sp-quick').addEventListener('keydown', (e) => { if (e.key === 'Enter') { S.q.items = { ...(S.q.items || {}), q: e.target.value, page: 1 }; go('items'); } });
+    // Keystrokes inside the workspace stay inside it: RRE's own global shortcuts (Esc leaves the screen, letters open menus) must not react.
+    el.addEventListener('keydown', (e) => { if (e.key === '/' && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) { e.preventDefault(); el.querySelector('#sp-quick').focus(); } e.stopPropagation(); });
+    el.addEventListener('keyup', (e) => e.stopPropagation()); el.addEventListener('keypress', (e) => e.stopPropagation());
+    // If focus has slipped to the page behind (nothing inside the workspace is focused), the key must still not reach RRE:
+    // Esc at RRE's gateway signs the user out. A capture-phase guard handles that case; Esc also closes the top dialog.
+    window.addEventListener('keydown', (e) => {
+      if (!root() || !root().classList.contains('open') || root().contains(e.target)) return;
+      e.stopPropagation();
+      if (e.key === 'Escape') { const ovs = root().querySelectorAll('.ov'); if (ovs.length) ovs[ovs.length - 1].remove(); e.preventDefault(); }
+    }, true);
+    el.tabIndex = -1; // clicks on plain areas keep keyboard focus inside the workspace
+    // Esc with nothing open closes nothing and must not fall through to RRE; a click outside any dialog does nothing either.
+    icons();
+  }
+
+  function open(route = 'dashboard', param = null) { build(); root().classList.add('open'); root().focus({ preventScroll: true }); go(route, param); }
+  function close() { if (root()) root().classList.remove('open'); }
+  function go(route, param = null) {
+    if (!PAGES[route]) route = 'dashboard';
+    S.route = route; S.param = param;
+    root().querySelectorAll('.sp-nav[data-go]').forEach((b) => b.classList.toggle('on', b.dataset.go === (route === 'warehouse' ? 'warehouses' : route)));
+    root().querySelector('#sp-title').textContent = route === 'warehouse' ? 'Warehouse' : TITLES[route] || '';
+    view().innerHTML = skel(); view().scrollTop = 0;
+    Promise.resolve(PAGES[route](view())).then(icons).catch((e) => { view().innerHTML = `<div class="card">${empty('Could not load this page', e.message, '<button class="btn" data-go="' + route + '">Try again</button>')}</div>`; });
+  }
+  const reload = () => go(S.route, S.param);
+
+  function onClick(e) {
+    const g = e.target.closest('[data-go]'); if (g && !g.closest('.ov')) { go(g.dataset.go, g.dataset.param || null); return; }
+    const p = e.target.closest('[data-pg]'); if (p) { const [k, n] = p.dataset.pg.split(':'); S.q[k] = { ...(S.q[k] || {}), page: parseInt(n, 10) }; reload(); return; }
+    const t = e.target.closest('[data-tab]'); if (t) { S.q.tab = t.dataset.tab; reload(); }
+  }
+  async function lookups() {
+    const [cats, units, whs] = await Promise.all([api('/categories'), api('/units'), api('/warehouses')]);
+    S.cats = cats; S.units = units; S.whs = whs; return { cats, units, whs };
+  }
+  const activeWhs = () => S.whs.filter((w) => w.is_active);
+
+  // generic filter bar binding: inputs carry data-f="name"; changing any of them re-queries
+  function bindFilters(key, defaults = {}) {
+    const q = (S.q[key] = { ...defaults, ...(S.q[key] || {}) });
+    view().querySelectorAll('[data-f]').forEach((el) => {
+      const apply = () => { S.q[key] = { ...S.q[key], [el.dataset.f]: el.type === 'checkbox' ? (el.checked ? '1' : '') : el.value, page: 1 }; reload(); };
+      el.addEventListener(el.tagName === 'INPUT' && el.type !== 'checkbox' && el.type !== 'date' ? 'keydown' : 'change', (ev) => { if (ev.type === 'keydown' && ev.key !== 'Enter') return; apply(); });
+    });
+    return q;
+  }
+
+  // ------------------------------------------------------------------ item picker (type to search; resolves to an id)
+  function picker(id, ph = 'Type a name or SKU…') { return `<input class="input" list="${id}-dl" data-picker="${id}" placeholder="${esc(ph)}" autocomplete="off"><datalist id="${id}-dl"></datalist>`; }
+  function bindPickers(scope, extra = '') {
+    const map = new Map();
+    const fill = debounce(async (inp) => {
+      try {
+        const d = await api(`/items?${qs({ q: inp.value, page_size: 15 })}`);
+        const dl = scope.querySelector(`#${inp.dataset.picker}-dl`); dl.innerHTML = '';
+        for (const it of d.items) { const label = `${it.name} · ${it.sku}`; map.set(label, it); const o = document.createElement('option'); o.value = label; dl.appendChild(o); }
+      } catch (e) { /* the list simply stays as it was */ }
+    }, 200);
+    scope.addEventListener('input', (e) => { if (e.target.matches('[data-picker]')) fill(e.target); });
+    return (inp) => map.get(inp.value.trim());
+  }
+
+  // ------------------------------------------------------------------ pages
+  const PAGES = {};
+
+  PAGES.dashboard = async (v) => {
+    const d = await api('/dashboard'), k = d.kpis, tile = (l, val, sub, tone = '') => `<div class="card kpi"><div class="l">${l}</div><div class="v" ${tone ? `style="color:${tone}"` : ''}>${val}</div><div class="small sub">${sub || ''}</div></div>`;
+    const maxS = Math.max(1, ...d.series.map((s) => Math.max(s.qin, s.qout))), W = 560, H = 150, bw = d.series.length ? Math.max(4, Math.min(22, (W - 20) / d.series.length - 4)) : 10;
+    const bars = d.series.map((s, i) => { const x = 10 + i * ((W - 20) / Math.max(1, d.series.length)); const hi = (s.qin / maxS) * (H - 24), ho = (s.qout / maxS) * (H - 24);
+      return `<g><title>${esc(s.d)}: in ${num(s.qin)}, out ${num(s.qout)}</title><rect x="${x}" y="${H - 14 - hi}" width="${bw / 2}" height="${hi}" rx="2" fill="rgb(var(--brand))"/><rect x="${x + bw / 2}" y="${H - 14 - ho}" width="${bw / 2}" height="${ho}" rx="2" fill="#f59e0b"/></g>`; }).join('');
+    const maxW = Math.max(1, ...d.warehouses.map((w) => w.units));
+    v.innerHTML = `<div class="sp-wrap"><div class="grid g5 mb">${tile('Items', num(k.items), 'active items')}${can.value() && k.stock_value !== undefined ? tile('Stock value', inr(k.stock_value), 'at average cost') : tile('Units in stock', num(k.units), 'all warehouses')}
+      ${tile('Low stock', k.low, 'at or below reorder level', k.low ? '#d97706' : '')}${tile('Out of stock', k.out, 'with a reorder level', k.out ? '#dc2626' : '')}${tile('Warehouses', k.warehouses, 'active')}</div>
+      <div class="grid g2 mb"><div class="card p"><h2>Stock movement — last 30 days</h2>${d.series.length ? `<svg class="chart" viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Stock in and out per day">${bars}<line x1="8" x2="${W - 8}" y1="${H - 14}" y2="${H - 14}" stroke="rgb(var(--line))"/><text x="10" y="${H - 2}">${esc(d.series[0].d)}</text><text x="${W - 10}" y="${H - 2}" text-anchor="end">${esc(d.series[d.series.length - 1].d)}</text></svg><div class="small sub row"><span style="width:10px;height:10px;background:rgb(var(--brand));border-radius:2px"></span> In <span style="width:10px;height:10px;background:#f59e0b;border-radius:2px;margin-left:10px"></span> Out</div>` : empty('No movements yet', 'Stock in and out will appear here.')}</div>
+      <div class="card p"><h2>Stock by warehouse</h2>${d.warehouses.length ? d.warehouses.map((w) => `<div style="margin:8px 0"><div class="row between small"><a href="#" data-go="warehouse" data-param="${w.id}" onclick="return false">${esc(w.name)}</a><span class="sub">${num(w.units)} units · ${w.items} items${w.low ? ` · <span class="badge b-warn">${w.low} low</span>` : ''}</span></div><div class="bar"><i style="width:${Math.round((w.units / maxW) * 100)}%"></i></div></div>`).join('') : empty('No warehouses')}</div></div>
+      <div class="grid g2"><div class="card"><div class="p row between" style="padding-bottom:0"><h2>Needs attention</h2><button class="btn sm flat" data-go="alerts">View all</button></div>
+        ${d.low_stock.length ? `<table><thead><tr><th>Item</th><th class="num">Available</th><th class="num">Reorder</th><th>Status</th></tr></thead><tbody>${d.low_stock.map((a) => `<tr><td>${esc(a.name)}<div class="small sub mono">${esc(a.sku)}</div></td><td class="num">${num(a.available)} ${esc(a.uom)}</td><td class="num">${num(a.reorder_level)}</td><td>${badge(a.status)}</td></tr>`).join('')}</tbody></table>` : empty('Nothing is running low', 'Items at or below their reorder level appear here.')}</div>
+        <div class="card"><div class="p row between" style="padding-bottom:0"><h2>Recent movements</h2><button class="btn sm flat" data-go="movements">View all</button></div>
+        ${d.recent.length ? `<table><thead><tr><th>Date</th><th>Item</th><th>Document</th><th class="num">Qty</th></tr></thead><tbody>${d.recent.map((m) => `<tr><td class="small">${esc(m.date)}</td><td>${esc(m.item)}</td><td class="small"><span class="badge b-n">${esc(m.type)}</span> ${esc(m.number)}</td><td class="num" style="color:${m.direction === 'IN' ? '#059669' : '#d97706'}">${m.direction === 'IN' ? '+' : '−'}${num(m.quantity)}</td></tr>`).join('')}</tbody></table>` : empty('No movements yet')}</div></div></div>`;
+  };
+
+  PAGES.alerts = async (v) => {
+    const d = await api('/alerts');
+    v.innerHTML = `<div class="sp-wrap"><div class="row mb"><span class="badge b-bad">${d.out} out of stock</span><span class="badge b-warn">${d.low} low</span></div><div class="card scroll-x">
+      ${d.items.length ? `<table><thead><tr><th>Item</th><th>Category</th><th class="num">On hand</th><th class="num">Reserved</th><th class="num">Available</th><th class="num">Reorder level</th><th class="num">Shortfall</th><th>Status</th><th></th></tr></thead><tbody>
+      ${d.items.map((a) => `<tr><td>${esc(a.name)}<div class="small sub mono">${esc(a.sku)}</div></td><td>${esc(a.category)}</td><td class="num">${num(a.on_hand)} ${esc(a.uom)}</td><td class="num">${num(a.reserved)}</td><td class="num">${num(a.available)}</td><td class="num">${num(a.reorder_level)}</td><td class="num">${num(a.shortfall)}</td><td>${badge(a.status)}</td>
+      <td class="num">${can.move() ? `<button class="btn sm" data-adj="${a.id}">Adjust</button>` : ''}</td></tr>`).join('')}</tbody></table>` : empty('Everything is stocked', 'No item is at or below its reorder level.')}</div></div>`;
+    v.querySelectorAll('[data-adj]').forEach((b) => { b.onclick = async () => { await lookups(); adjustmentForm(parseInt(b.dataset.adj, 10)); }; });
+  };
+
+  // ---- items
+  PAGES.items = async (v) => {
+    const { cats, whs } = await lookups();
+    const q = S.q.items = { page: 1, ...(S.q.items || {}) };
+    const d = await api(`/items?${qs({ q: q.q, category: q.category, status: q.status, warehouse: q.warehouse, archived: q.archived, page: q.page, page_size: 25, sort: q.sort })}`);
+    const val = can.value();
+    v.innerHTML = `<div class="sp-wrap"><div class="row wrap mb"><input class="input grow" data-f="q" placeholder="Search name, SKU, barcode, HSN, brand…" value="${esc(q.q || '')}" style="max-width:300px">
+      <select data-f="category" style="width:170px"><option value="">All categories</option>${cats.map((c) => `<option value="${c.id}" ${String(q.category) === String(c.id) ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select>
+      <select data-f="warehouse" style="width:170px"><option value="">All warehouses</option>${whs.map((w) => `<option value="${w.id}" ${String(q.warehouse) === String(w.id) ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}</select>
+      <select data-f="status" style="width:130px"><option value="">Any stock</option>${[['ok', 'In stock'], ['low', 'Low'], ['out', 'Out']].map(([k2, l]) => `<option value="${k2}" ${q.status === k2 ? 'selected' : ''}>${l}</option>`).join('')}</select>
+      <label class="chk"><input type="checkbox" data-f="archived" ${q.archived ? 'checked' : ''}> Archived</label><span class="grow"></span>${can.write() ? '<button class="btn primary" id="sp-new">+ New item</button>' : ''}</div>
+      <div class="card scroll-x">${d.items.length ? `<table><thead><tr><th>Item</th><th>Category</th><th class="num">On hand</th><th class="num">Reserved</th><th class="num">Available</th><th class="num">Reorder</th>${val ? '<th class="num">Value</th>' : ''}<th>Status</th></tr></thead><tbody>
+      ${d.items.map((i) => `<tr class="click" data-id="${i.id}"><td>${esc(i.name)}<div class="small sub mono">${esc(i.sku)}${i.barcode ? ' · ' + esc(i.barcode) : ''}</div></td><td>${esc(i.category)}</td><td class="num">${num(i.on_hand)} <span class="sub">${esc(i.uom)}</span></td><td class="num">${num(i.reserved)}</td><td class="num">${num(i.available)}</td><td class="num">${num(i.reorder_level)}</td>${val ? `<td class="num">${inr(i.value)}</td>` : ''}<td>${i.is_active ? badge(i.status) : status(false)}</td></tr>`).join('')}</tbody></table>${pager(d, 'items')}`
+      : empty(q.q || q.category || q.status || q.warehouse ? 'No items match' : 'No items yet', q.q ? 'Try a different search or clear the filters.' : 'Create your first item to start tracking stock.', can.write() ? '<button class="btn primary" id="sp-new2">+ New item</button>' : '')}</div></div>`;
+    bindFilters('items');
+    const nw = () => itemForm(); v.querySelector('#sp-new')?.addEventListener('click', nw); v.querySelector('#sp-new2')?.addEventListener('click', nw);
+    v.querySelectorAll('tr[data-id]').forEach((r) => r.addEventListener('click', () => itemDrawer(parseInt(r.dataset.id, 10))));
+  };
+
+  function itemForm(it) {
+    const e = !!it, c = S.cats, u = S.units;
+    const m = modal(e ? 'Edit item' : 'New item', `<form id="f" class="formgrid" novalidate>
+      ${field('Name', `<input class="input" name="name" value="${esc(it?.name)}" maxlength="120" required>`, true)}
+      ${field('SKU', `<input class="input" name="sku" value="${esc(it?.sku)}" placeholder="Automatic if empty" maxlength="40">`)}${field('Barcode', `<input class="input" name="barcode" value="${esc(it?.barcode)}" placeholder="Optional">${e ? '' : '<label class="chk" style="margin-top:6px"><input type="checkbox" name="auto_barcode"> Generate an EAN-13</label>'}`)}
+      ${field('Category', `<select name="category_id">${c.map((x) => `<option value="${x.id}" ${it?.category_id === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`)}${field('Unit', `<select name="uom_id">${u.map((x) => `<option value="${x.id}" ${it?.uom_id === x.id ? 'selected' : ''}>${esc(x.symbol)} — ${esc(x.formal_name)}</option>`).join('')}</select>`)}
+      ${field('Brand', `<input class="input" name="brand" value="${esc(it?.brand)}" maxlength="60">`)}${field('HSN / SAC', `<input class="input" name="hsn_code" value="${esc(it?.hsn_code)}" placeholder="4–8 digits">`)}
+      ${field('GST rate %', `<input class="input" name="gst_rate" type="number" min="0" max="100" step="0.01" value="${it ? it.gst_rate : 18}">`)}${field('Reorder level', `<input class="input" name="reorder_level" type="number" min="0" step="any" value="${it ? it.reorder_level : 0}">`, false, 'Alert when available stock reaches this')}
+      ${can.value() ? `${field('Selling price (₹)', `<input class="input" name="standard_price" type="number" min="0" step="0.01" value="${it?.price ?? 0}">`)}${field('Cost (₹)', `<input class="input" name="standard_cost" type="number" min="0" step="0.01" value="${it ? it.cost : 0}">`)}` : ''}
+      ${e ? '' : `${field('Opening quantity', `<input class="input" name="opening_qty" type="number" min="0" step="any" value="0">`, false, 'Goes into the first warehouse')}${field('Opening rate (₹)', `<input class="input" name="opening_rate" type="number" min="0" step="0.01" value="0">`)}`}
+      ${field('Description', `<textarea name="description" rows="2" maxlength="500">${esc(it?.description)}</textarea>`, true)}
+      <div class="full errtxt" id="err" hidden></div><div class="full row" style="justify-content:flex-end"><button type="button" class="btn" data-x>Cancel</button><button class="btn primary" type="submit">${e ? 'Save changes' : 'Create item'}</button></div></form>`, { wide: true });
+    m.el.querySelector('#f').addEventListener('submit', async (ev) => {
+      ev.preventDefault(); const f = ev.target, b = {}; new FormData(f).forEach((val, k2) => { b[k2] = val; }); if (f.auto_barcode) b.auto_barcode = f.auto_barcode.checked;
+      const btn = f.querySelector('.primary'); btn.classList.add('busy');
+      try { const saved = await api(e ? `/items/${it.id}` : '/items', { method: e ? 'PATCH' : 'POST', body: b }); m.close(); toast(e ? 'Item saved' : `Item created (${saved.sku})`); reload(); }
+      catch (err) { btn.classList.remove('busy'); const er = f.querySelector('#err'); er.hidden = false; er.textContent = err.message; }
+    });
+  }
+
+  async function itemDrawer(id) {
+    const m = modal('Item', skel(5), { drawer: true });
+    try {
+      const it = await api(`/items/${id}`), val = can.value();
+      m.el.querySelector('.drawer').innerHTML = `<div class="row between mb"><div><h2 style="font-size:16px;margin:0">${esc(it.name)}</h2><div class="small sub mono">${esc(it.sku)}${it.barcode ? ' · ' + esc(it.barcode) : ''}</div></div><button class="btn flat sm" data-x>✕</button></div>
+        <div class="row wrap mb">${it.is_active ? badge(it.status) : status(false)}<span class="badge b-n">${esc(it.category)}</span>${it.brand ? `<span class="badge b-n">${esc(it.brand)}</span>` : ''}</div>
+        <div class="grid g3 mb"><div class="card kpi"><div class="l">On hand</div><div class="v">${num(it.on_hand)}</div><div class="small sub">${esc(it.uom)}</div></div><div class="card kpi"><div class="l">Reserved</div><div class="v">${num(it.reserved)}</div></div><div class="card kpi"><div class="l">Available</div><div class="v">${num(it.available)}</div></div></div>
+        <div class="small sub mb">${val ? `Cost ${inr(it.cost)} · Selling ${inr(it.price)} · Value ${inr(it.value)} · ` : ''}GST ${num(it.gst_rate, 2)}%${it.hsn_code ? ' · HSN ' + esc(it.hsn_code) : ''} · Reorder at ${num(it.reorder_level)}</div>
+        ${it.description ? `<p class="small">${esc(it.description)}</p>` : ''}
+        <h2>By warehouse</h2><div class="card mb scroll-x"><table><thead><tr><th>Warehouse</th><th class="num">On hand</th><th class="num">Reserved</th><th class="num">Available</th></tr></thead><tbody>${it.warehouses.map((w) => `<tr><td>${esc(w.name)}</td><td class="num">${num(w.on_hand)}</td><td class="num">${num(w.reserved)}</td><td class="num">${num(w.available)}</td></tr>`).join('')}</tbody></table></div>
+        <h2>Recent movements</h2><div class="card mb scroll-x">${it.recent.length ? `<table><tbody>${it.recent.map((r) => `<tr><td class="small">${esc(r.date)}</td><td class="small"><span class="badge b-n">${esc(r.type)}</span> ${esc(r.number)}</td><td class="small">${esc(r.warehouse)}</td><td class="num" style="color:${r.direction === 'IN' ? '#059669' : '#d97706'}">${r.direction === 'IN' ? '+' : '−'}${num(r.quantity)}</td></tr>`).join('')}</tbody></table>` : empty('No movements yet')}</div>
+        <div class="row wrap">${can.write() ? '<button class="btn" id="d-edit">Edit</button>' : ''}${can.move() && it.is_active ? '<button class="btn" id="d-adj">Adjust stock</button><button class="btn" id="d-tr">Transfer</button>' : ''}${can.move() ? `<button class="btn" id="d-arch">${it.is_active ? 'Archive' : 'Restore'}</button>` : ''}${can.remove() && !it.used ? '<button class="btn danger" id="d-del">Delete</button>' : ''}
+        <button class="btn" id="d-mv">All movements</button></div>`;
+      const $ = (s) => m.el.querySelector(s);
+      $('#d-edit')?.addEventListener('click', () => { m.close(); itemForm(it); });
+      $('#d-adj')?.addEventListener('click', () => { m.close(); adjustmentForm(it.id); });
+      $('#d-tr')?.addEventListener('click', () => { m.close(); transferForm(it.id); });
+      $('#d-mv')?.addEventListener('click', () => { m.close(); S.q.movements = { item: it.id, item_label: it.name, page: 1 }; go('movements'); });
+      $('#d-arch')?.addEventListener('click', () => confirmBox(it.is_active ? 'Archive item' : 'Restore item', it.is_active ? `${it.name} will be hidden from the item list. Its history is kept.` : `${it.name} will become active again.`, it.is_active ? 'Archive' : 'Restore', async () => { await api(`/items/${it.id}/${it.is_active ? 'archive' : 'restore'}`, { method: 'POST' }); m.close(); toast('Done'); reload(); }));
+      $('#d-del')?.addEventListener('click', () => confirmBox('Delete item', `Delete ${it.name}? This cannot be undone.`, 'Delete', async () => { await api(`/items/${it.id}`, { method: 'DELETE' }); m.close(); toast('Item deleted'); reload(); }));
+    } catch (err) { m.el.querySelector('.drawer').innerHTML = `<button class="btn flat sm" data-x>✕</button>${empty('Could not load the item', err.message)}`; }
+  }
+
+  // ---- categories and units
+  PAGES.categories = async (v) => {
+    const rows = await api('/categories'); S.cats = rows;
+    v.innerHTML = `<div class="sp-wrap"><div class="row between mb"><span class="sub">${rows.length} categories</span>${can.write() ? '<button class="btn primary" id="n">+ New category</button>' : ''}</div><div class="card scroll-x">
+      ${rows.length ? `<table><thead><tr><th>Name</th><th>Parent</th><th class="num">Items</th><th></th></tr></thead><tbody>${rows.map((c) => `<tr><td>${esc(c.name)}</td><td class="sub">${esc(c.parent || '—')}</td><td class="num">${c.items}</td><td class="num">${can.write() ? `<button class="btn sm" data-e="${c.id}">Edit</button>` : ''} ${can.remove() && !c.items && !c.children ? `<button class="btn sm danger" data-d="${c.id}">Delete</button>` : ''}</td></tr>`).join('')}</tbody></table>` : empty('No categories yet')}</div></div>`;
+    const form = (c) => { const m = modal(c ? 'Edit category' : 'New category', `<form id="f">${field('Name', `<input class="input" name="name" value="${esc(c?.name)}" maxlength="60">`)}<div style="height:10px"></div>${field('Parent category', `<select name="parent_id"><option value="">None</option>${rows.filter((x) => !c || x.id !== c.id).map((x) => `<option value="${x.id}" ${c?.parent_id === x.id ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`)}<div class="errtxt" id="err" hidden></div><div class="row" style="justify-content:flex-end;margin-top:14px"><button type="button" class="btn" data-x>Cancel</button><button class="btn primary">Save</button></div></form>`);
+      m.el.querySelector('#f').onsubmit = async (ev) => { ev.preventDefault(); const b = Object.fromEntries(new FormData(ev.target)); try { await api(c ? `/categories/${c.id}` : '/categories', { method: c ? 'PATCH' : 'POST', body: b }); m.close(); toast('Saved'); reload(); } catch (er) { const x = m.el.querySelector('#err'); x.hidden = false; x.textContent = er.message; } }; };
+    v.querySelector('#n')?.addEventListener('click', () => form());
+    v.querySelectorAll('[data-e]').forEach((b) => b.addEventListener('click', () => form(rows.find((c) => c.id === +b.dataset.e))));
+    v.querySelectorAll('[data-d]').forEach((b) => b.addEventListener('click', () => confirmBox('Delete category', 'Delete this empty category?', 'Delete', async () => { await api(`/categories/${b.dataset.d}`, { method: 'DELETE' }); toast('Deleted'); reload(); })));
+  };
+
+  PAGES.units = async (v) => {
+    const rows = await api('/units'); S.units = rows;
+    v.innerHTML = `<div class="sp-wrap"><div class="row between mb"><span class="sub">${rows.length} units</span>${can.write() ? '<button class="btn primary" id="n">+ New unit</button>' : ''}</div><div class="card scroll-x">
+      ${rows.length ? `<table><thead><tr><th>Symbol</th><th>Name</th><th class="num">Decimals</th><th class="num">Items</th><th></th></tr></thead><tbody>${rows.map((u) => `<tr><td class="mono">${esc(u.symbol)}</td><td>${esc(u.formal_name)}</td><td class="num">${u.decimal_places}</td><td class="num">${u.items}</td><td class="num">${can.write() ? `<button class="btn sm" data-e="${u.id}">Edit</button>` : ''} ${can.remove() && !u.items ? `<button class="btn sm danger" data-d="${u.id}">Delete</button>` : ''}</td></tr>`).join('')}</tbody></table>` : empty('No units yet')}</div></div>`;
+    const form = (u) => { const m = modal(u ? 'Edit unit' : 'New unit', `<form id="f" class="formgrid">${field('Symbol', `<input class="input" name="symbol" value="${esc(u?.symbol)}" maxlength="12">`)}${field('Name', `<input class="input" name="formal_name" value="${esc(u?.formal_name)}" maxlength="60">`)}${field('Decimal places', `<input class="input" name="decimal_places" type="number" min="0" max="4" value="${u ? u.decimal_places : 0}">`)}<div class="full errtxt" id="err" hidden></div><div class="full row" style="justify-content:flex-end"><button type="button" class="btn" data-x>Cancel</button><button class="btn primary">Save</button></div></form>`);
+      m.el.querySelector('#f').onsubmit = async (ev) => { ev.preventDefault(); const b = Object.fromEntries(new FormData(ev.target)); try { await api(u ? `/units/${u.id}` : '/units', { method: u ? 'PATCH' : 'POST', body: b }); m.close(); toast('Saved'); reload(); } catch (er) { const x = m.el.querySelector('#err'); x.hidden = false; x.textContent = er.message; } }; };
+    v.querySelector('#n')?.addEventListener('click', () => form());
+    v.querySelectorAll('[data-e]').forEach((b) => b.addEventListener('click', () => form(rows.find((x) => x.id === +b.dataset.e))));
+    v.querySelectorAll('[data-d]').forEach((b) => b.addEventListener('click', () => confirmBox('Delete unit', 'Delete this unused unit?', 'Delete', async () => { await api(`/units/${b.dataset.d}`, { method: 'DELETE' }); toast('Deleted'); reload(); })));
+  };
+
+  // ---- warehouses
+  PAGES.warehouses = async (v) => {
+    const rows = await api('/warehouses'); S.whs = rows; const val = can.value();
+    v.innerHTML = `<div class="sp-wrap"><div class="row between mb"><span class="sub">${rows.filter((w) => w.is_active).length} active · ${rows.filter((w) => !w.is_active).length} archived</span>${can.write() ? '<button class="btn primary" id="n">+ New warehouse</button>' : ''}</div>
+      <div class="grid g3">${rows.map((w) => `<div class="card p ${w.is_active ? '' : 'sub'}" style="${w.is_active ? '' : 'opacity:.7'}"><div class="row between"><div><b>${esc(w.name)}</b><div class="small sub mono">${esc(w.code)}</div></div>${status(w.is_active)}</div>
+        <div class="small sub" style="margin:6px 0">${esc([w.address, w.city || w.location].filter(Boolean).join(', ') || 'No address')}</div>
+        <div class="row small" style="gap:16px"><span><b>${w.items}</b> items</span><span><b>${num(w.units)}</b> units</span>${val ? `<span><b>${inr(w.value)}</b></span>` : ''}${w.low ? `<span class="badge b-warn">${w.low} low</span>` : ''}</div>
+        <div class="row" style="margin-top:10px"><button class="btn sm" data-go="warehouse" data-param="${w.id}">Open</button>${can.write() ? `<button class="btn sm" data-e="${w.id}">Edit</button>` : ''}${can.move() ? `<button class="btn sm" data-a="${w.id}:${w.is_active ? 0 : 1}">${w.is_active ? 'Archive' : 'Restore'}</button>` : ''}</div></div>`).join('')}</div></div>`;
+    const form = (w) => { const m = modal(w ? 'Edit warehouse' : 'New warehouse', `<form id="f" class="formgrid">${field('Name', `<input class="input" name="name" value="${esc(w?.name)}" maxlength="60">`)}${field('Code', `<input class="input" name="code" value="${esc(w?.code)}" placeholder="Automatic" maxlength="12">`)}${field('Address', `<input class="input" name="address" value="${esc(w?.address)}">`, true)}${field('City', `<input class="input" name="city" value="${esc(w?.city)}">`)}${field('Contact person', `<input class="input" name="contact_name" value="${esc(w?.contact_name)}">`)}${field('Phone', `<input class="input" name="phone" value="${esc(w?.phone)}">`)}${field('E-mail', `<input class="input" name="email" value="${esc(w?.email)}">`)}<div class="full errtxt" id="err" hidden></div><div class="full row" style="justify-content:flex-end"><button type="button" class="btn" data-x>Cancel</button><button class="btn primary">Save</button></div></form>`, { wide: true });
+      m.el.querySelector('#f').onsubmit = async (ev) => { ev.preventDefault(); const b = Object.fromEntries(new FormData(ev.target)); try { await api(w ? `/warehouses/${w.id}` : '/warehouses', { method: w ? 'PATCH' : 'POST', body: b }); m.close(); toast('Saved'); reload(); } catch (er) { const x = m.el.querySelector('#err'); x.hidden = false; x.textContent = er.message; } }; };
+    v.querySelector('#n')?.addEventListener('click', () => form());
+    v.querySelectorAll('[data-e]').forEach((b) => b.addEventListener('click', () => form(rows.find((x) => x.id === +b.dataset.e))));
+    v.querySelectorAll('[data-a]').forEach((b) => b.addEventListener('click', async () => { const [id, on] = b.dataset.a.split(':'); try { await api(`/warehouses/${id}/${on === '1' ? 'restore' : 'archive'}`, { method: 'POST' }); toast(on === '1' ? 'Restored' : 'Archived'); reload(); } catch (er) { toast(er.message, 'err'); } }));
+  };
+
+  PAGES.warehouse = async (v) => {
+    const w = await api(`/warehouses/${S.param}`), val = can.value();
+    v.innerHTML = `<div class="sp-wrap"><div class="row mb"><button class="btn sm" data-go="warehouses">← Warehouses</button><h2 style="margin:0">${esc(w.name)}</h2><span class="mono sub">${esc(w.code)}</span>${status(w.is_active)}</div>
+      <div class="grid g4 mb"><div class="card kpi"><div class="l">Items stocked</div><div class="v">${w.items}</div></div><div class="card kpi"><div class="l">Units</div><div class="v">${num(w.units)}</div></div>${val ? `<div class="card kpi"><div class="l">Value</div><div class="v">${inr(w.value)}</div></div>` : ''}<div class="card kpi"><div class="l">Low stock</div><div class="v">${w.low}</div></div></div>
+      <div class="small sub mb">${esc([w.address, w.city, w.contact_name, w.phone, w.email].filter(Boolean).join(' · '))}</div>
+      <div class="card scroll-x mb">${w.stock.length ? `<table><thead><tr><th>Item</th><th class="num">On hand</th><th class="num">Reserved</th><th class="num">Available</th>${val ? '<th class="num">Value</th>' : ''}<th>Status</th></tr></thead><tbody>${w.stock.map((s) => `<tr><td>${esc(s.name)}<div class="small sub mono">${esc(s.sku)}</div></td><td class="num">${num(s.on_hand)} ${esc(s.uom)}</td><td class="num">${num(s.reserved)}</td><td class="num">${num(s.available)}</td>${val ? `<td class="num">${inr(s.value)}</td>` : ''}<td>${badge(s.status)}</td></tr>`).join('')}</tbody></table>` : empty('No stock here yet', 'Receive stock with a purchase, an adjustment or a transfer.')}</div>
+      <h2>Recent movements</h2><div class="card scroll-x">${w.recent.length ? `<table><tbody>${w.recent.map((r) => `<tr><td class="small">${esc(r.date)}</td><td>${esc(r.item)}</td><td class="small"><span class="badge b-n">${esc(r.type)}</span> ${esc(r.number)}</td><td class="num" style="color:${r.direction === 'IN' ? '#059669' : '#d97706'}">${r.direction === 'IN' ? '+' : '−'}${num(r.quantity)}</td></tr>`).join('')}</tbody></table>` : empty('No movements yet')}</div></div>`;
+  };
+
+  // ---- stock levels
+  PAGES.stock = async (v) => {
+    const { whs } = await lookups();
+    const q = S.q.stock = { page: 1, ...(S.q.stock || {}) };
+    const d = await api(`/stock?${qs({ q: q.q, warehouse: q.warehouse, status: q.status, page: q.page, page_size: 30 })}`), val = can.value();
+    v.innerHTML = `<div class="sp-wrap"><div class="row wrap mb"><input class="input" data-f="q" placeholder="Search item or SKU…" value="${esc(q.q || '')}" style="max-width:280px">
+      <select data-f="warehouse" style="width:190px"><option value="">All warehouses</option>${whs.map((w) => `<option value="${w.id}" ${String(q.warehouse) === String(w.id) ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}</select>
+      <select data-f="status" style="width:130px"><option value="">Any stock</option>${[['ok', 'In stock'], ['low', 'Low'], ['out', 'Out']].map(([k2, l]) => `<option value="${k2}" ${q.status === k2 ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div class="card scroll-x">${d.items.length ? `<table><thead><tr><th>Item</th><th>Warehouse</th><th class="num">On hand</th><th class="num">Reserved</th><th class="num">Available</th><th class="num">Reorder</th>${val ? '<th class="num">Value</th>' : ''}<th>Status</th></tr></thead><tbody>
+      ${d.items.map((r) => `<tr><td>${esc(r.item)}<div class="small sub mono">${esc(r.sku)}</div></td><td>${esc(r.warehouse)}</td><td class="num">${num(r.on_hand)} ${esc(r.uom)}</td><td class="num">${num(r.reserved)}</td><td class="num">${num(r.available)}</td><td class="num">${num(r.reorder_level)}</td>${val ? `<td class="num">${inr(r.value)}</td>` : ''}<td>${badge(r.status)}</td></tr>`).join('')}</tbody></table>${pager(d, 'stock')}` : empty('No stock found', 'Nothing matches these filters.')}</div></div>`;
+    bindFilters('stock');
+  };
+
+  // ---- movement history
+  PAGES.movements = async (v) => {
+    const { whs } = await lookups();
+    const q = S.q.movements = { page: 1, ...(S.q.movements || {}) };
+    const d = await api(`/movements?${qs({ q: q.q, item: q.item, warehouse: q.warehouse, type: q.type, direction: q.direction, from: q.from, to: q.to, page: q.page, page_size: 30 })}`), val = can.value();
+    const types = ['Purchase', 'Sales', 'Credit Note', 'Debit Note', 'Stock Journal'];
+    v.innerHTML = `<div class="sp-wrap"><div class="row wrap mb"><input class="input" data-f="q" placeholder="Item, SKU or document no…" value="${esc(q.q || '')}" style="max-width:230px">${q.item ? `<span class="badge b-info">Item: ${esc(q.item_label || '#' + q.item)} <a href="#" id="clr" onclick="return false">✕</a></span>` : ''}
+      <select data-f="warehouse" style="width:170px"><option value="">All warehouses</option>${whs.map((w) => `<option value="${w.id}" ${String(q.warehouse) === String(w.id) ? 'selected' : ''}>${esc(w.name)}</option>`).join('')}</select>
+      <select data-f="type" style="width:140px"><option value="">All documents</option>${types.map((t) => `<option ${q.type === t ? 'selected' : ''}>${t}</option>`).join('')}</select>
+      <select data-f="direction" style="width:110px"><option value="">In &amp; out</option><option value="IN" ${q.direction === 'IN' ? 'selected' : ''}>In</option><option value="OUT" ${q.direction === 'OUT' ? 'selected' : ''}>Out</option></select>
+      <input class="input" type="date" data-f="from" value="${esc(q.from || '')}" style="width:140px" aria-label="From"><input class="input" type="date" data-f="to" value="${esc(q.to || '')}" style="width:140px" aria-label="To"></div>
+      <div class="card scroll-x">${d.items.length ? `<table><thead><tr><th>Date</th><th>Document</th><th>Item</th><th>Warehouse</th><th class="num">In / out</th>${val ? '<th class="num">Rate</th><th class="num">Value</th>' : ''}${q.item && q.warehouse ? '<th class="num">Balance</th>' : ''}</tr></thead><tbody>
+      ${d.items.map((m) => `<tr><td class="small">${esc(m.date)}</td><td class="small"><span class="badge b-n">${esc(m.type)}</span> ${esc(m.number)}</td><td>${esc(m.item)}<div class="small sub mono">${esc(m.sku)}</div></td><td>${esc(m.warehouse)}</td><td class="num" style="color:${m.direction === 'IN' ? '#059669' : '#d97706'}">${m.direction === 'IN' ? '+' : '−'}${num(m.quantity)}</td>${val ? `<td class="num">${inr(m.rate)}</td><td class="num">${inr(m.amount)}</td>` : ''}${q.item && q.warehouse ? `<td class="num">${num(m.balance)}</td>` : ''}</tr>`).join('')}</tbody></table>${pager(d, 'movements')}` : empty('No movements found', 'Purchases, sales, transfers and adjustments appear here.')}</div></div>`;
+    bindFilters('movements'); v.querySelector('#clr')?.addEventListener('click', () => { S.q.movements = { ...q, item: '', item_label: '', page: 1 }; reload(); });
+  };
+
+  // ---- transfers
+  PAGES.transfers = async (v) => {
+    await lookups();
+    const q = S.q.transfers = { page: 1, ...(S.q.transfers || {}) };
+    const d = await api(`/transfers?${qs({ q: q.q, page: q.page, page_size: 25 })}`), val = can.value();
+    v.innerHTML = `<div class="sp-wrap"><div class="row wrap mb"><input class="input" data-f="q" placeholder="Search number or note…" value="${esc(q.q || '')}" style="max-width:260px"><span class="grow"></span>${can.move() ? '<button class="btn primary" id="n">+ New transfer</button>' : ''}</div>
+      <div class="card scroll-x">${d.items.length ? `<table><thead><tr><th>Number</th><th>Date</th><th>From</th><th>To</th><th class="num">Items</th>${val ? '<th class="num">Value</th>' : ''}<th>Note</th></tr></thead><tbody>${d.items.map((t) => `<tr class="click" data-id="${t.id}"><td class="mono">${esc(t.number)}</td><td>${esc(t.date)}</td><td>${esc(t.from_warehouse)}</td><td>${esc(t.to_warehouse)}</td><td class="num">${t.lines}</td>${val ? `<td class="num">${inr(t.value)}</td>` : ''}<td class="sub small">${esc(t.note || '')}</td></tr>`).join('')}</tbody></table>${pager(d, 'transfers')}` : empty('No transfers yet', 'Move stock between warehouses; it is recorded in the books as a Stock Journal.', can.move() ? '<button class="btn primary" id="n2">+ New transfer</button>' : '')}</div></div>`;
+    bindFilters('transfers'); v.querySelector('#n')?.addEventListener('click', () => transferForm()); v.querySelector('#n2')?.addEventListener('click', () => transferForm());
+    v.querySelectorAll('tr[data-id]').forEach((r) => r.addEventListener('click', () => docDrawer(r.dataset.id, 'Transfer')));
+  };
+
+  async function docDrawer(id, kind) {
+    const m = modal(kind, skel(4), { drawer: true });
+    try {
+      const d = await api(`/${kind === 'Transfer' ? 'transfers' : 'adjustments'}/${id}`), val = can.value();
+      m.el.querySelector('.drawer').innerHTML = `<div class="row between mb"><div><h2 style="font-size:16px;margin:0">${esc(d.number)}</h2><div class="small sub">${esc(d.date)} · by ${esc(d.created_by)}</div></div><button class="btn flat sm" data-x>✕</button></div>
+        <div class="small mb">${d.kind === 'transfer' ? `<b>${esc(d.from_warehouse)}</b> → <b>${esc(d.to_warehouse)}</b>` : `<b>${esc(d.to_warehouse)}</b> · <span class="badge b-info">${esc(d.reason)}</span>`}${d.note ? `<div class="sub" style="margin-top:4px">${esc(d.note)}</div>` : ''}</div>
+        <div class="card scroll-x"><table><thead><tr><th>Item</th><th>Warehouse</th><th class="num">Qty</th>${val ? '<th class="num">Value</th>' : ''}</tr></thead><tbody>${d.lines.map((l) => `<tr><td>${esc(l.item)}<div class="small sub mono">${esc(l.sku)}</div></td><td>${esc(l.warehouse)}</td><td class="num" style="color:${l.direction === 'IN' ? '#059669' : '#d97706'}">${l.direction === 'IN' ? '+' : '−'}${num(l.quantity)} ${esc(l.uom)}</td>${val ? `<td class="num">${inr(l.amount)}</td>` : ''}</tr>`).join('')}</tbody></table></div>`;
+    } catch (err) { m.el.querySelector('.drawer').innerHTML = `<button class="btn flat sm" data-x>✕</button>${empty('Could not load', err.message)}`; }
+  }
+
+  function lineRow(kind) {
+    return `<tr class="ln"><td style="min-width:230px">${picker('p' + Math.random().toString(36).slice(2, 7))}</td>${kind === 'adj' ? '<td style="width:110px"><select class="mode"><option value="delta">Change by</option><option value="count">Counted</option></select></td>' : ''}<td style="width:120px"><input class="input q" type="number" step="any" ${kind === 'tr' ? 'min="0"' : ''} placeholder="${kind === 'adj' ? '+/- or count' : 'Qty'}"></td><td class="hint av" style="width:150px"></td><td style="width:30px"><button type="button" class="btn flat sm rm" aria-label="Remove line">✕</button></td></tr>`;
+  }
+
+  function transferForm(itemId) {
+    const w = activeWhs(); if (w.length < 2) { toast('You need at least two active warehouses to transfer stock.', 'err'); return; }
+    const m = modal('New stock transfer', `<form id="f">
+      <div class="formgrid">${field('From warehouse', `<select name="from">${w.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select>`)}${field('To warehouse', `<select name="to">${w.map((x, i) => `<option value="${x.id}" ${i === 1 ? 'selected' : ''}>${esc(x.name)}</option>`).join('')}</select>`)}${field('Date', `<input class="input" type="date" name="date" value="${today()}">`)}${field('Note', `<input class="input" name="note" maxlength="300" placeholder="Optional">`)}</div>
+      <div class="card mt scroll-x"><table><thead><tr><th>Item</th><th>Quantity</th><th>Available</th><th></th></tr></thead><tbody id="lines">${lineRow('tr')}</tbody></table></div>
+      <button type="button" class="btn sm mt" id="add">+ Add line</button><div class="errtxt" id="err" hidden></div>
+      <div class="row" style="justify-content:flex-end;margin-top:14px"><button type="button" class="btn" data-x>Cancel</button><button class="btn primary">Transfer stock</button></div></form>`, { wide: true });
+    const f = m.el.querySelector('#f'), resolve = bindPickers(f), tb = f.querySelector('#lines');
+    const avail = async (tr) => { const it = resolve(tr.querySelector('[data-picker]')); const cell = tr.querySelector('.av'); if (!it) { cell.textContent = ''; return; } try { const d = await api(`/items/${it.id}`); const wh = d.warehouses.find((x) => String(x.id) === f.from.value); cell.textContent = `${num(wh ? wh.available : 0)} ${d.uom} in source`; } catch (e) { cell.textContent = ''; } };
+    f.addEventListener('change', (e) => { if (e.target.matches('[data-picker],[name=from]')) f.querySelectorAll('.ln').forEach(avail); });
+    f.querySelector('#add').onclick = () => { tb.insertAdjacentHTML('beforeend', lineRow('tr')); };
+    f.addEventListener('click', (e) => { if (e.target.closest('.rm') && tb.children.length > 1) e.target.closest('.ln').remove(); });
+    if (itemId) api(`/items/${itemId}`).then((it) => { const inp = tb.querySelector('[data-picker]'); inp.value = `${it.name} · ${it.sku}`; const dl = f.querySelector(`#${inp.dataset.picker}-dl`); dl.innerHTML = `<option value="${esc(inp.value)}">`; return api(`/items?${qs({ q: it.sku, page_size: 5 })}`).then((r) => { r.items.forEach((x) => { const o = document.createElement('option'); o.value = `${x.name} · ${x.sku}`; dl.appendChild(o); }); f.querySelector('input[data-picker]').dispatchEvent(new Event('input', { bubbles: true })); setTimeout(() => f.querySelectorAll('.ln').forEach(avail), 450); }); }).catch(() => {});
+    f.onsubmit = async (ev) => {
+      ev.preventDefault(); const er = f.querySelector('#err'); er.hidden = true;
+      const lines = []; for (const tr of f.querySelectorAll('.ln')) { const it = resolve(tr.querySelector('[data-picker]')); const qn = tr.querySelector('.q').value; if (!it && !qn) continue; if (!it) { er.hidden = false; er.textContent = 'Choose each item from the suggestions as you type.'; return; } lines.push({ item_id: it.id, qty: qn }); }
+      const btn = f.querySelector('.primary'); btn.classList.add('busy');
+      try { const r = await api('/transfers', { method: 'POST', body: { from_warehouse_id: +f.from.value, to_warehouse_id: +f.to.value, date: f.date.value, note: f.note.value, lines } }); m.close(); toast(`Transfer ${r.number} recorded`); go('transfers'); }
+      catch (err) { btn.classList.remove('busy'); er.hidden = false; er.textContent = err.message; }
+    };
+  }
+
+  // ---- adjustments
+  PAGES.adjustments = async (v) => {
+    await lookups();
+    const q = S.q.adjustments = { page: 1, ...(S.q.adjustments || {}) };
+    const d = await api(`/adjustments?${qs({ q: q.q, page: q.page, page_size: 25 })}`), val = can.value();
+    v.innerHTML = `<div class="sp-wrap"><div class="row wrap mb"><input class="input" data-f="q" placeholder="Search number or note…" value="${esc(q.q || '')}" style="max-width:260px"><span class="grow"></span>${can.move() ? '<button class="btn primary" id="n">+ New adjustment</button>' : ''}</div>
+      <div class="card scroll-x">${d.items.length ? `<table><thead><tr><th>Number</th><th>Date</th><th>Warehouse</th><th>Reason</th><th class="num">Items</th>${val ? '<th class="num">Value</th>' : ''}<th>By</th></tr></thead><tbody>${d.items.map((t) => `<tr class="click" data-id="${t.id}"><td class="mono">${esc(t.number)}</td><td>${esc(t.date)}</td><td>${esc(t.to_warehouse)}</td><td><span class="badge b-info">${esc(t.reason)}</span></td><td class="num">${t.lines}</td>${val ? `<td class="num">${inr(t.value)}</td>` : ''}<td class="sub">${esc(t.created_by)}</td></tr>`).join('')}</tbody></table>${pager(d, 'adjustments')}` : empty('No adjustments yet', 'Correct stock after a count, damage or a find. Each one is recorded with a reason.', can.move() ? '<button class="btn primary" id="n2">+ New adjustment</button>' : '')}</div></div>`;
+    bindFilters('adjustments'); v.querySelector('#n')?.addEventListener('click', () => adjustmentForm()); v.querySelector('#n2')?.addEventListener('click', () => adjustmentForm());
+    v.querySelectorAll('tr[data-id]').forEach((r) => r.addEventListener('click', () => docDrawer(r.dataset.id, 'Adjustment')));
+  };
+
+  async function adjustmentForm(itemId) {
+    const w = activeWhs(); const reasons = await api('/adjustment-reasons');
+    const m = modal('New stock adjustment', `<form id="f">
+      <div class="formgrid">${field('Warehouse', `<select name="wh">${w.map((x) => `<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select>`)}${field('Reason', `<select name="reason">${reasons.map((r) => `<option>${esc(r)}</option>`).join('')}</select>`)}${field('Date', `<input class="input" type="date" name="date" value="${today()}">`)}${field('Note', `<input class="input" name="note" maxlength="300" placeholder="Optional">`)}</div>
+      <div class="card mt scroll-x"><table><thead><tr><th>Item</th><th>Type</th><th>Quantity</th><th>In this warehouse</th><th></th></tr></thead><tbody id="lines">${lineRow('adj')}</tbody></table></div>
+      <button type="button" class="btn sm mt" id="add">+ Add line</button><div class="hint">“Change by” adds or removes that quantity (use a minus sign to remove). “Counted” sets the stock to what you counted.</div><div class="errtxt" id="err" hidden></div>
+      <div class="row" style="justify-content:flex-end;margin-top:14px"><button type="button" class="btn" data-x>Cancel</button><button class="btn primary">Record adjustment</button></div></form>`, { wide: true });
+    const f = m.el.querySelector('#f'), resolve = bindPickers(f), tb = f.querySelector('#lines');
+    const avail = async (tr) => { const it = resolve(tr.querySelector('[data-picker]')); const cell = tr.querySelector('.av'); if (!it) { cell.textContent = ''; return; } try { const d = await api(`/items/${it.id}`); const wh = d.warehouses.find((x) => String(x.id) === f.wh.value); cell.textContent = `${num(wh ? wh.on_hand : 0)} ${d.uom}`; } catch (e) { cell.textContent = ''; } };
+    f.addEventListener('change', (e) => { if (e.target.matches('[data-picker],[name=wh]')) f.querySelectorAll('.ln').forEach(avail); });
+    f.querySelector('#add').onclick = () => { tb.insertAdjacentHTML('beforeend', lineRow('adj')); };
+    f.addEventListener('click', (e) => { if (e.target.closest('.rm') && tb.children.length > 1) e.target.closest('.ln').remove(); });
+    if (itemId) { try { const it = await api(`/items/${itemId}`); const inp = tb.querySelector('[data-picker]'); inp.value = `${it.name} · ${it.sku}`; const dl = f.querySelector(`#${inp.dataset.picker}-dl`); dl.innerHTML = `<option value="${esc(inp.value)}">`; const r = await api(`/items?${qs({ q: it.sku, page_size: 5 })}`); r.items.forEach((x) => { const o = document.createElement('option'); o.value = `${x.name} · ${x.sku}`; dl.appendChild(o); }); inp.dispatchEvent(new Event('input', { bubbles: true })); setTimeout(() => f.querySelectorAll('.ln').forEach(avail), 450); } catch (e) { /* the user can pick it by hand */ } }
+    f.onsubmit = async (ev) => {
+      ev.preventDefault(); const er = f.querySelector('#err'); er.hidden = true;
+      const lines = []; for (const tr of f.querySelectorAll('.ln')) { const it = resolve(tr.querySelector('[data-picker]')); const qn = tr.querySelector('.q').value; if (!it && !qn) continue; if (!it) { er.hidden = false; er.textContent = 'Choose each item from the suggestions as you type.'; return; } lines.push(tr.querySelector('.mode').value === 'count' ? { item_id: it.id, new_qty: qn } : { item_id: it.id, delta: qn }); }
+      const btn = f.querySelector('.primary'); btn.classList.add('busy');
+      try { const r = await api('/adjustments', { method: 'POST', body: { warehouse_id: +f.wh.value, reason: f.reason.value, date: f.date.value, note: f.note.value, lines } }); m.close(); toast(`Adjustment ${r.number} recorded`); go('adjustments'); }
+      catch (err) { btn.classList.remove('busy'); er.hidden = false; er.textContent = err.message; }
+    };
+  }
+
+  window.StockPilotInv = { open, close, go, _state: S };
+})();

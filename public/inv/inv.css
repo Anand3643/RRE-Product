@@ -1,0 +1,70 @@
+/* RRE Tally — Inventory workspace. Visual language taken from StockPilot (neutral light palette, teal brand, compact cards and
+   tables, grouped sidebar, drawers/modals/toasts). Everything is scoped under #sp-app so no other RRE screen is affected. */
+#sp-app { --bg: 246 247 249; --surface: 255 255 255; --muted: 241 243 246; --line: 222 226 231; --ink: 33 37 41; --sub: 108 117 125; --brand: 8 145 133;
+  --shadow-1: 0 1px 2px rgb(16 24 40 / .05); --shadow-2: 0 4px 12px -2px rgb(16 24 40 / .10), 0 2px 4px -2px rgb(16 24 40 / .06); --shadow-3: 0 16px 40px -8px rgb(16 24 40 / .24); --ease: cubic-bezier(.2, .8, .2, 1);
+  position: fixed; inset: 0; z-index: 90; display: none; background: rgb(var(--bg)); color: rgb(var(--ink)); font: 14px/1.4 Inter, ui-sans-serif, system-ui, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+#sp-app.open { display: flex; }
+#sp-app.dark { --bg: 24 25 28; --surface: 32 34 38; --muted: 42 45 50; --line: 58 62 68; --ink: 232 234 237; --sub: 156 163 172; --brand: 45 190 175;
+  --shadow-1: 0 1px 2px rgb(0 0 0 / .3); --shadow-2: 0 4px 12px -2px rgb(0 0 0 / .45); --shadow-3: 0 16px 40px -8px rgb(0 0 0 / .6); }
+#sp-app *, #sp-app *::before, #sp-app *::after { box-sizing: border-box; border-color: rgb(var(--line)); }
+#sp-app button { font: inherit; cursor: pointer; } #sp-app a { color: rgb(var(--brand)); }
+@keyframes sp-fade { from { opacity: 0 } to { opacity: 1 } } @keyframes sp-up { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
+@keyframes sp-pop { from { opacity: 0; transform: scale(.96) translateY(-4px) } to { opacity: 1; transform: none } } @keyframes sp-drawer { from { transform: translateX(100%) } to { transform: none } }
+@keyframes sp-toast { from { opacity: 0; transform: translateX(28px) } to { opacity: 1; transform: none } } @keyframes sp-shimmer { from { background-position: 200% 0 } to { background-position: -200% 0 } }
+@keyframes sp-spin { to { transform: rotate(360deg) } }
+@media (prefers-reduced-motion: reduce) { #sp-app * { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+/* layout */
+#sp-app .sp-side { width: 232px; flex: none; background: rgb(var(--surface)); border-right: 1px solid rgb(var(--line)); display: flex; flex-direction: column; transition: width .2s var(--ease); overflow: hidden; }
+#sp-app.collapsed .sp-side { width: 58px; } #sp-app.collapsed .sp-lbl, #sp-app.collapsed .sp-grp { display: none; }
+#sp-app .sp-brand { display: flex; align-items: center; gap: 10px; padding: 14px 16px; font-weight: 700; font-size: 15px; border-bottom: 1px solid rgb(var(--line)); }
+#sp-app .sp-logo { width: 28px; height: 28px; border-radius: 7px; background: rgb(var(--brand)); color: #fff; display: grid; place-items: center; font-size: 15px; flex: none; }
+#sp-app nav { flex: 1; overflow-y: auto; padding: 8px; }
+#sp-app .sp-grp { margin: 12px 8px 4px; font-size: 10px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: rgb(var(--sub)); }
+#sp-app .sp-nav { display: flex; align-items: center; gap: 10px; width: 100%; padding: 7px 10px; border: 0; border-radius: 6px; background: none; color: rgb(var(--ink)); text-align: left; font-size: 13px; transition: background-color .15s; white-space: nowrap; }
+#sp-app .sp-nav:hover { background: rgb(var(--muted)); } #sp-app .sp-nav.on { background: rgb(var(--brand) / .12); color: rgb(var(--brand)); font-weight: 600; }
+#sp-app .sp-ic { width: 18px; text-align: center; flex: none; opacity: .85; }
+#sp-app .sp-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#sp-app .sp-top { height: 52px; flex: none; display: flex; align-items: center; gap: 10px; padding: 0 18px; background: rgb(var(--surface)); border-bottom: 1px solid rgb(var(--line)); }
+#sp-app .sp-top h1 { font-size: 15px; font-weight: 600; margin: 0; flex: 1; }
+#sp-app .sp-view { flex: 1; overflow-y: auto; padding: 18px 22px 40px; } #sp-app .sp-view > * { animation: sp-up .26s var(--ease) backwards; }
+#sp-app .sp-wrap { max-width: 1280px; margin: 0 auto; }
+
+/* components */
+#sp-app .card { background: rgb(var(--surface)); border: 1px solid rgb(var(--line)); border-radius: 6px; box-shadow: var(--shadow-1); }
+#sp-app .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: 500; border: 1px solid rgb(var(--line)); background: rgb(var(--surface)); color: rgb(var(--ink)); transition: background-color .15s, box-shadow .15s, transform .1s; white-space: nowrap; }
+#sp-app .btn:hover:not(:disabled) { background: rgb(var(--muted)); } #sp-app .btn:active:not(:disabled) { transform: scale(.97); } #sp-app .btn:disabled { opacity: .5; cursor: not-allowed; }
+#sp-app .btn.primary { background: rgb(var(--brand)); border-color: rgb(var(--brand)); color: #fff; box-shadow: var(--shadow-1); } #sp-app .btn.primary:hover:not(:disabled) { filter: brightness(.95); box-shadow: var(--shadow-2); background: rgb(var(--brand)); }
+#sp-app.dark .btn.primary { color: #0f172a; } #sp-app .btn.danger { background: #dc2626; border-color: #dc2626; color: #fff; } #sp-app .btn.danger:hover:not(:disabled) { background: #b91c1c; }
+#sp-app .btn.sm { padding: 3px 8px; font-size: 12px; } #sp-app .btn.flat { border-color: transparent; background: transparent; } #sp-app .btn.busy { color: transparent !important; position: relative; pointer-events: none; }
+#sp-app .btn.busy::after { content: ""; position: absolute; width: 14px; height: 14px; border: 2px solid rgb(var(--line)); border-top-color: rgb(var(--brand)); border-radius: 50%; animation: sp-spin .7s linear infinite; }
+#sp-app .input, #sp-app select, #sp-app textarea { width: 100%; padding: 6px 10px; font: inherit; font-size: 13px; border-radius: 6px; border: 1px solid rgb(var(--line)); background: rgb(var(--surface)); color: rgb(var(--ink)); outline: none; transition: border-color .15s, box-shadow .15s; }
+#sp-app .input:focus, #sp-app select:focus, #sp-app textarea:focus { border-color: rgb(var(--brand)); box-shadow: 0 0 0 3px rgb(var(--brand) / .22); } #sp-app .input.err { border-color: #ef4444; }
+#sp-app label.lbl { display: block; margin-bottom: 4px; font-size: 12px; font-weight: 500; color: rgb(var(--sub)); } #sp-app .hint { font-size: 11px; color: rgb(var(--sub)); margin-top: 3px; }
+#sp-app table { width: 100%; border-collapse: collapse; } #sp-app th { text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: rgb(var(--sub)); white-space: nowrap; border-bottom: 1px solid rgb(var(--line)); }
+#sp-app td { padding: 8px 12px; font-size: 13px; border-bottom: 1px solid rgb(var(--line) / .6); vertical-align: middle; } #sp-app tbody tr:hover { background: rgb(var(--muted) / .6); } #sp-app tr.click { cursor: pointer; }
+#sp-app .num { text-align: right; font-variant-numeric: tabular-nums; } #sp-app .sub { color: rgb(var(--sub)); } #sp-app .small { font-size: 12px; } #sp-app .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+#sp-app .badge { display: inline-flex; align-items: center; padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 500; }
+#sp-app .b-ok { background: rgb(16 185 129 / .15); color: #059669; } #sp-app .b-warn { background: rgb(245 158 11 / .15); color: #d97706; } #sp-app .b-bad { background: rgb(239 68 68 / .15); color: #dc2626; }
+#sp-app .b-info { background: rgb(14 165 233 / .15); color: #0369a1; } #sp-app .b-n { background: rgb(var(--muted)); color: rgb(var(--sub)); }
+#sp-app .row { display: flex; align-items: center; gap: 10px; } #sp-app .wrap { flex-wrap: wrap; } #sp-app .grow { flex: 1; min-width: 0; } #sp-app .between { justify-content: space-between; }
+#sp-app .grid { display: grid; gap: 14px; } #sp-app .g2 { grid-template-columns: repeat(2, 1fr); } #sp-app .g3 { grid-template-columns: repeat(3, 1fr); } #sp-app .g4 { grid-template-columns: repeat(4, 1fr); } #sp-app .g5 { grid-template-columns: repeat(5, 1fr); }
+@media (max-width: 1000px) { #sp-app .g5, #sp-app .g4 { grid-template-columns: repeat(2, 1fr); } #sp-app .g3 { grid-template-columns: 1fr; } #sp-app .sp-side { width: 58px; } #sp-app .sp-lbl, #sp-app .sp-grp { display: none; } }
+@media (max-width: 640px) { #sp-app .g2, #sp-app .g5, #sp-app .g4 { grid-template-columns: 1fr; } #sp-app .sp-view { padding: 12px; } }
+#sp-app .mt { margin-top: 14px; } #sp-app .mb { margin-bottom: 14px; } #sp-app .p { padding: 14px; } #sp-app .scroll-x { overflow-x: auto; }
+#sp-app .kpi { padding: 14px; } #sp-app .kpi .v { font-size: 22px; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; } #sp-app .kpi .l { font-size: 12px; color: rgb(var(--sub)); }
+#sp-app h2 { font-size: 14px; font-weight: 600; margin: 0 0 8px; } #sp-app .bar { height: 8px; border-radius: 4px; background: rgb(var(--muted)); overflow: hidden; } #sp-app .bar > i { display: block; height: 100%; background: rgb(var(--brand)); border-radius: 4px; }
+#sp-app .skel { height: 34px; border-radius: 4px; margin: 8px 12px; background: rgb(var(--muted)); background-image: linear-gradient(90deg, transparent, rgb(var(--line) / .6), transparent); background-size: 200% 100%; animation: sp-shimmer 1.5s linear infinite; }
+#sp-app .empty { text-align: center; padding: 38px 16px; color: rgb(var(--sub)); } #sp-app .empty b { display: block; color: rgb(var(--ink)); margin-bottom: 4px; }
+#sp-app .pager { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; font-size: 12px; color: rgb(var(--sub)); border-top: 1px solid rgb(var(--line)); }
+#sp-app .tabs { display: flex; gap: 2px; border-bottom: 1px solid rgb(var(--line)); margin-bottom: 14px; } #sp-app .tab { padding: 8px 14px; border: 0; background: none; color: rgb(var(--sub)); border-bottom: 2px solid transparent; font-size: 13px; } #sp-app .tab.on { color: rgb(var(--brand)); border-color: rgb(var(--brand)); font-weight: 600; }
+#sp-app .ov { position: fixed; inset: 0; z-index: 95; background: rgb(0 0 0 / .4); display: flex; align-items: flex-start; justify-content: center; padding: 8vh 16px 16px; overflow-y: auto; animation: sp-fade .18s var(--ease); }
+#sp-app .ov.right { justify-content: flex-end; padding: 0; align-items: stretch; }
+#sp-app .dlg { width: 100%; max-width: 460px; padding: 18px; animation: sp-pop .16s var(--ease); box-shadow: var(--shadow-3); } #sp-app .dlg.wide { max-width: 760px; }
+#sp-app .drawer { width: 100%; max-width: 520px; height: 100%; overflow-y: auto; padding: 18px; background: rgb(var(--surface)); box-shadow: var(--shadow-3); animation: sp-drawer .26s var(--ease); }
+#sp-app .toasts { position: fixed; right: 16px; bottom: 16px; z-index: 100; display: flex; flex-direction: column; gap: 8px; width: 320px; max-width: calc(100vw - 32px); }
+#sp-app .toast { padding: 10px 12px; font-size: 13px; border-left: 4px solid #10b981; animation: sp-toast .26s var(--ease); } #sp-app .toast.err { border-left-color: #ef4444; }
+#sp-app .formgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; } #sp-app .formgrid .full { grid-column: 1 / -1; } @media (max-width: 560px) { #sp-app .formgrid { grid-template-columns: 1fr; } }
+#sp-app .errtxt { color: #dc2626; font-size: 12px; margin-top: 8px; } #sp-app .chk { display: flex; align-items: center; gap: 6px; font-size: 13px; } #sp-app .chk input { width: auto; }
+#sp-app [data-tip] { position: relative; } #sp-app [data-tip]::after { content: attr(data-tip); position: absolute; bottom: calc(100% + 6px); left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 3px 8px; border-radius: 4px; background: rgb(33 37 41 / .95); color: #fff; font-size: 11px; pointer-events: none; opacity: 0; transition: opacity .12s ease .35s; z-index: 5; } #sp-app [data-tip]:hover::after { opacity: 1; }
+#sp-app .chart text { fill: rgb(var(--sub)); font-size: 10px; }

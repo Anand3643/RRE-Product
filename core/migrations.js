@@ -381,6 +381,51 @@ const MIGRATIONS = [
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`
     ]
+  },
+  {
+    id: '012_inventory_suite',
+    description: 'Inventory suite: SKU/brand on items, warehouse details, stock documents, reservations',
+    statements: [
+      'ALTER TABLE stock_items ADD COLUMN sku TEXT',
+      'ALTER TABLE stock_items ADD COLUMN brand TEXT',
+      'ALTER TABLE stock_items ADD COLUMN description TEXT',
+      "UPDATE stock_items SET sku = 'SKU-' || printf('%05d', id) WHERE sku IS NULL OR sku = ''",
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_stock_items_sku ON stock_items(sku)',
+      'ALTER TABLE godowns ADD COLUMN code TEXT',
+      'ALTER TABLE godowns ADD COLUMN address TEXT',
+      'ALTER TABLE godowns ADD COLUMN city TEXT',
+      'ALTER TABLE godowns ADD COLUMN contact_name TEXT',
+      'ALTER TABLE godowns ADD COLUMN phone TEXT',
+      'ALTER TABLE godowns ADD COLUMN email TEXT',
+      "UPDATE godowns SET code = 'WH-' || printf('%02d', id) WHERE code IS NULL OR code = ''",
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_godowns_code ON godowns(code)',
+      'CREATE INDEX IF NOT EXISTS idx_inventory_entries_item_godown ON inventory_entries(stock_item_id, godown_id)',
+      `CREATE TABLE IF NOT EXISTS inv_docs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        kind TEXT NOT NULL,
+        number TEXT NOT NULL UNIQUE,
+        voucher_id INTEGER NOT NULL,
+        from_godown_id INTEGER,
+        to_godown_id INTEGER,
+        reason TEXT,
+        note TEXT,
+        created_by TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY(voucher_id) REFERENCES vouchers(id) ON DELETE CASCADE
+      )`,
+      'CREATE INDEX IF NOT EXISTS idx_inv_docs_kind ON inv_docs(kind, id)',
+      `CREATE TABLE IF NOT EXISTS inv_reservations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        item_id INTEGER NOT NULL,
+        godown_id INTEGER NOT NULL,
+        qty REAL NOT NULL,
+        ref_type TEXT NOT NULL,
+        ref_id INTEGER NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`,
+      'CREATE INDEX IF NOT EXISTS idx_inv_reservations_item ON inv_reservations(item_id, godown_id)',
+      'CREATE INDEX IF NOT EXISTS idx_inv_reservations_ref ON inv_reservations(ref_type, ref_id)'
+    ]
   }
 ];
 

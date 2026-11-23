@@ -37,6 +37,8 @@ async function main() {
     });
     r.on('error', reject); if (data) r.write(data); r.end();
   });
+  // start from empty books: the development database accumulates test vouchers from other suites, which would skew "usual amounts"
+  await require('./core/db').run('DELETE FROM vouchers');
   const L = async (n) => (await get('SELECT id FROM ledgers WHERE name = ?', [n])).id;
   const hdfc = await L('HDFC Bank Current A/c'), cash = await L('Cash'), rent = await L('Office Rent'), phone = await L('Telephone & Internet Charges'), bankCh = await L('Bank Charges');
   const southern = await L('Southern Textiles & Spinning Mills'), chennai = await L('Chennai Auto Components Pvt Ltd'), elgi = await L('Elgi Equipments Spares Ltd'), bharat = await L('Bharat Electric Motors Vendor');
