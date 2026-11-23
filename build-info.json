@@ -1,8 +1,8 @@
 {
   "productName": "RRE Entries",
   "version": "1.0.0",
-  "commit": "0ea5f00",
-  "buildDate": "2026-11-23T12:24:00+05:30",
+  "commit": "24eaf9b",
+  "buildDate": "2026-11-23T12:29:35+05:30",
   "repository": "https://github.com/Anand3643/RRE-Product",
   "setupInstaller": "dist/RRE Entries Setup 1.0.0.exe"
 }
