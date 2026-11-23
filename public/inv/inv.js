@@ -68,7 +68,7 @@
   const S = { route: 'dashboard', param: null, q: {}, cats: [], units: [], whs: [] };
   const NAV = [
     ['', [['dashboard', 'Dashboard', 'layout-dashboard'], ['alerts', 'Low stock alerts', 'bell-ring']]],
-    ['Sales', [['customers', 'Customers', 'contact'], ['sales-orders', 'Sales orders', 'shopping-cart'], ['sales-history', 'Sales history', 'receipt']]],
+    ['Sales', [['customers', 'Customers', 'contact'], ['sales-orders', 'Sales orders', 'shopping-cart'], ['sales-history', 'Sales history', 'receipt'], ['portal-users', 'Customer portal logins', 'key-round']]],
     ['Purchases', [['suppliers', 'Suppliers', 'store'], ['purchase-orders', 'Purchase orders', 'clipboard-list'], ['purchase-history', 'Purchase history', 'history']]],
     ['Items', [['items', 'Items', 'package'], ['categories', 'Categories', 'folder-tree'], ['units', 'Units', 'ruler']]],
     ['Inventory', [['stock', 'Stock levels', 'boxes'], ['movements', 'Movement history', 'arrow-left-right'], ['warehouses', 'Warehouses', 'warehouse'], ['transfers', 'Transfers', 'arrow-right-left'], ['adjustments', 'Adjustments', 'sliders-horizontal']]],
@@ -113,8 +113,10 @@
   function go(route, param = null) {
     if (!PAGES[route]) route = 'dashboard';
     if (route === 'import' && !perms().canAlterCompany) route = 'dashboard';
+    if (route === 'portal-users' && !perms().canManageUsers) route = 'dashboard';
     S.route = route; S.param = param;
     { const imp = root().querySelector('.sp-nav[data-go="import"]'); if (imp) { const show = !!perms().canAlterCompany; imp.hidden = !show; if (imp.previousElementSibling) imp.previousElementSibling.hidden = !show; } }
+    { const pu = root().querySelector('.sp-nav[data-go="portal-users"]'); if (pu) pu.hidden = !perms().canManageUsers; }
     root().querySelectorAll('.sp-nav[data-go]').forEach((b) => b.classList.toggle('on', b.dataset.go === (route === 'warehouse' ? 'warehouses' : route === 'report' ? 'reports' : route)));
     root().querySelector('#sp-title').textContent = route === 'warehouse' ? 'Warehouse' : route === 'report' ? 'Report' : TITLES[route] || '';
     view().innerHTML = skel(); view().scrollTop = 0;
@@ -485,7 +487,7 @@
       <select data-f="status" style="width:170px"><option value="">Any status</option><option value="open" ${q.status === 'open' ? 'selected' : ''}>Open</option>${states.map((s) => `<option value="${s}" ${q.status === s ? 'selected' : ''}>${s.replace('_', ' ')}</option>`).join('')}</select>
       <input class="input" type="date" data-f="from" value="${esc(q.from || '')}" style="width:140px" aria-label="From"><input class="input" type="date" data-f="to" value="${esc(q.to || '')}" style="width:140px" aria-label="To"><span class="grow"></span>${can.write() ? `<button class="btn primary" id="n">+ New ${K.word} order</button>` : ''}</div>
       <div class="card scroll-x">${d.items.length ? `<table><thead><tr><th>Number</th><th>Date</th><th>${K.party}</th><th>Warehouse</th><th class="num">Lines</th><th class="num">Total</th><th>Status</th></tr></thead><tbody>
-      ${d.items.map((o) => `<tr class="click" data-id="${o.id}"><td class="mono">${esc(o.number)}</td><td class="small">${esc(o.order_date)}${o.expected_date ? `<div class="sub">due ${esc(o.expected_date)}</div>` : ''}</td><td>${esc(o.party)}</td><td class="small">${esc(o.warehouse)}</td><td class="num">${o.lines}</td><td class="num">${inr(o.total)}</td><td>${obadge(o.status)}${o.overdue ? ' <span class="badge b-bad">overdue</span>' : ''}</td></tr>`).join('')}</tbody></table>${pager(d, kind)}`
+      ${d.items.map((o) => `<tr class="click" data-id="${o.id}"><td class="mono">${esc(o.number)}${o.portal ? ' <span class="badge b-n" title="Requested by the customer through the portal">Portal</span>' : ''}</td><td class="small">${esc(o.order_date)}${o.expected_date ? `<div class="sub">due ${esc(o.expected_date)}</div>` : ''}</td><td>${esc(o.party)}</td><td class="small">${esc(o.warehouse)}</td><td class="num">${o.lines}</td><td class="num">${inr(o.total)}</td><td>${obadge(o.status)}${o.overdue ? ' <span class="badge b-bad">overdue</span>' : ''}</td></tr>`).join('')}</tbody></table>${pager(d, kind)}`
       : empty(`No ${K.word} orders`, q.q || q.status ? 'Nothing matches these filters.' : kind === 'purchase-orders' ? 'Order goods from a supplier; receiving them adds stock and posts a Purchase voucher.' : 'Confirming an order reserves the stock; invoicing it posts a Sales voucher.', can.write() ? `<button class="btn primary" id="n2">+ New ${K.word} order</button>` : '')}</div></div>`;
     bindFilters(kind);
     v.querySelector('#n')?.addEventListener('click', () => orderForm(kind)); v.querySelector('#n2')?.addEventListener('click', () => orderForm(kind));
@@ -590,6 +592,33 @@
   }
   PAGES['sales-history'] = (v) => historyPage(v, 'sales-history');
   PAGES['purchase-history'] = (v) => historyPage(v, 'purchase-history');
+
+  // ---- customer portal logins (administrators only; the server enforces this too)
+  PAGES['portal-users'] = async (v) => {
+    const list = await api('/portal-users');
+    v.innerHTML = `<div class="sp-wrap"><div class="row wrap mb"><span class="sub small grow">Give a customer a login to the customer portal: they see the catalogue (selling price and availability only), send order requests, and see only their own orders and invoices.</span><button class="btn primary" id="pu-new">+ New portal login</button></div>
+      <div class="card scroll-x">${list.length ? `<table><thead><tr><th>Customer</th><th>Login</th><th>Status</th><th class="num">Orders placed</th><th>Last sign-in</th><th></th></tr></thead><tbody>${list.map((u) => `<tr><td>${esc(u.customer || '—')}</td><td>${esc(u.username)}<div class="small sub">${esc(u.full_name)}${u.email ? ' · ' + esc(u.email) : ''}</div></td><td>${u.status === 'Active' ? '<span class="badge b-ok">Active</span>' : '<span class="badge b-n">Disabled</span>'}${u.must_change ? ' <span class="badge b-warn" title="Has not chosen their own password yet">Temporary password</span>' : ''}</td><td class="num">${u.orders}</td><td class="small">${u.last_login ? esc(String(u.last_login).slice(0, 16).replace('T', ' ')) : '<span class="sub">never</span>'}</td>
+        <td style="white-space:nowrap"><button class="btn sm" data-reset="${u.id}">Reset password</button> <button class="btn sm ${u.status === 'Active' ? 'danger' : ''}" data-toggle="${u.id}" data-on="${u.status === 'Active' ? 1 : 0}">${u.status === 'Active' ? 'Disable' : 'Enable'}</button></td></tr>`).join('')}</tbody></table>` : empty('No portal logins yet', 'Create one for a customer who should be able to order online.', '<button class="btn primary" id="pu-new2">+ New portal login</button>')}</div></div>`;
+    const create = async () => {
+      const cs = (await api('/customers?page_size=500')).items;
+      const m = modal('New portal login', `<form id="f" class="formgrid" novalidate>${field('Customer', `<select class="input" name="party_id"><option value="">Choose a customer…</option>${cs.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>`, true)}
+        ${field('Login name', '<input class="input" name="username" maxlength="40" autocomplete="off" placeholder="e.g. acme.purchasing">')}${field('Person\'s name', '<input class="input" name="full_name" maxlength="80" placeholder="Optional">')}
+        ${field('Temporary password', '<input class="input" type="text" name="password" autocomplete="off" placeholder="At least 10 characters">', true)}${field('E-mail', '<input class="input" name="email" maxlength="100" placeholder="Optional">', true)}
+        <p class="full hint">Give the customer the login name and this temporary password. They are made to choose their own the first time they sign in. They can see only their own orders and invoices.</p><div class="full errtxt" id="err" hidden></div><div class="full row" style="justify-content:flex-end"><button type="button" class="btn" data-x>Cancel</button><button class="btn primary">Create login</button></div></form>`);
+      m.el.querySelector('#f').onsubmit = async (ev) => { ev.preventDefault(); const btn = ev.target.querySelector('.primary'); btn.classList.add('busy');
+        try { await api('/portal-users', { method: 'POST', body: Object.fromEntries(new FormData(ev.target)) }); m.close(); toast('Portal login created'); reload(); } catch (er) { btn.classList.remove('busy'); const x = m.el.querySelector('#err'); x.hidden = false; x.textContent = er.message; } };
+    };
+    v.querySelector('#pu-new')?.addEventListener('click', create); v.querySelector('#pu-new2')?.addEventListener('click', create);
+    v.querySelectorAll('[data-toggle]').forEach((b) => b.addEventListener('click', () => {
+      const on = b.dataset.on === '1', id = b.dataset.toggle;
+      const doit = async () => { await api(`/portal-users/${id}/${on ? 'disable' : 'enable'}`, { method: 'POST' }); toast(on ? 'Login disabled' : 'Login enabled'); reload(); };
+      if (on) confirmBox('Disable this login?', 'The customer is signed out straight away and cannot sign in again until you enable it. Their orders and invoices are kept.', 'Disable', doit); else doit().catch((e) => toast(e.message, 'err'));
+    }));
+    v.querySelectorAll('[data-reset]').forEach((b) => b.addEventListener('click', () => {
+      const m = modal('Reset password', `<form id="f"><label class="lbl">New temporary password</label><input class="input" type="text" name="password" autocomplete="off" placeholder="At least 10 characters"><p class="hint">The customer must choose their own password the next time they sign in. Their current password stops working now.</p><div class="errtxt" id="err" hidden></div><div class="row" style="justify-content:flex-end;margin-top:12px"><button type="button" class="btn" data-x>Cancel</button><button class="btn primary">Reset password</button></div></form>`);
+      m.el.querySelector('#f').onsubmit = async (ev) => { ev.preventDefault(); try { await api(`/portal-users/${b.dataset.reset}/reset-password`, { method: 'POST', body: { password: ev.target.password.value } }); m.close(); toast('Password reset'); reload(); } catch (er) { const x = m.el.querySelector('#err'); x.hidden = false; x.textContent = er.message; } };
+    }));
+  };
 
   // ---- reports (stage 3)
   PAGES.reports = async (v) => {

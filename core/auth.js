@@ -29,11 +29,15 @@ function identify(req) {
  * requireAuth()                  -> any logged-in user
  * requireAuth('canViewFinancials') -> user whose role has that permission
  */
-function requireAuth(permissionKey) {
+function requireAuth(permissionKey, opts = {}) {
   return (req, res, next) => {
     const user = identify(req);
     if (!user) {
       return res.status(401).json({ success: false, error: 'Authentication required. Please log in again.' });
+    }
+    // A customer-portal login may only use the portal. Every other route (reads included) refuses it unless it opts in.
+    if (user.role === 'Customer' && !opts.allowCustomer) {
+      return res.status(403).json({ success: false, error: 'Customer portal accounts can only use the customer portal.', code: 'PORTAL_ONLY' });
     }
     if (user.pwc) {
       return res.status(403).json({ success: false, error: 'You must choose a new password before continuing.', code: 'PASSWORD_CHANGE_REQUIRED', must_change_password: true });

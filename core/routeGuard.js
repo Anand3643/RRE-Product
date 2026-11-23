@@ -69,6 +69,10 @@ function routeGuard(req, res, next) {
     return res.status(403).json({ success: false, error: 'You must choose a new password before continuing.', code: 'PASSWORD_CHANGE_REQUIRED', must_change_password: true });
   }
 
+  if (user.role === 'Customer' && !/^\/api\/portal(\/|$)/.test(url) && !(req.method === 'POST' && /^\/api\/auth\/change-password\/?$/.test(url))) {
+    return res.status(403).json({ success: false, error: 'Customer portal accounts can only use the customer portal.', code: 'PORTAL_ONLY' });
+  }
+
   const rule = RULES.find((r) => (!r.m || r.m === req.method) && r.re.test(url));
   if (rule) {
     const perms = getRolePermissions(user.role);

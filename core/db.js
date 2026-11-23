@@ -1056,6 +1056,21 @@ function getRolePermissions(role) {
         badgeColor: 'emerald',
         allowedVoucherTypes: []
       };
+    case 'Customer':
+      // portal customers have NO staff permissions at all; they can only use /api/portal (see core/portal.js)
+      return {
+        role: 'Customer',
+        canCreateVouchers: false,
+        canEditVouchers: false,
+        canDeleteVouchers: false,
+        canViewFinancials: false,
+        canViewAuditTrail: false,
+        canManageUsers: false,
+        canAlterCompany: false,
+        canCleanSlate: false,
+        badgeColor: 'sky',
+        allowedVoucherTypes: []
+      };
     case 'Guest':
       return {
         role: 'Guest',
@@ -1124,7 +1139,9 @@ async function updateUser(id, userData) {
   const user = await get('SELECT * FROM users WHERE id = ?', [id]);
   if (!user) throw new Error('User not found.');
 
-  if (role && !ASSIGNABLE_ROLES.includes(role)) throw new Error(`Role must be one of: ${ASSIGNABLE_ROLES.join(', ')}.`);
+  if (user.role === 'Customer' && role && role !== 'Customer') throw new Error('A customer portal login cannot be turned into a staff account. Create a separate staff user instead.');
+  if (role && role !== 'Customer' && !ASSIGNABLE_ROLES.includes(role)) throw new Error(`Role must be one of: ${ASSIGNABLE_ROLES.join(', ')}.`);
+  if (role === 'Customer' && user.role !== 'Customer') throw new Error('Portal logins are created from the customer\'s page in Inventory > Portal users.');
   if (user.role === 'Owner' && role && role !== 'Owner') {
     const ownerCount = await get("SELECT COUNT(*) as c FROM users WHERE role = 'Owner' AND status = 'Active'");
     if (ownerCount.c <= 1) {
@@ -1156,6 +1173,10 @@ async function updateUser(id, userData) {
 async function deleteUser(id) {
   const user = await get('SELECT * FROM users WHERE id = ?', [id]);
   if (!user) throw new Error('User not found.');
+  if (user.role === 'Customer') {
+    const used = await get('SELECT COUNT(*) AS c FROM inv_orders WHERE portal_user_id = ?', [id]).catch(() => ({ c: 0 }));
+    if (used.c) throw new Error(`"${user.username}" has placed ${used.c} order(s) through the portal, so the login cannot be deleted. Deactivate it instead.`);
+  }
   if (user.role === 'Owner') {
     const ownerCount = await get("SELECT COUNT(*) as c FROM users WHERE role = 'Owner' AND status = 'Active'");
     if (ownerCount.c <= 1) {

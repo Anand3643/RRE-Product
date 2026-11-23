@@ -507,6 +507,16 @@ const MIGRATIONS = [
         PRIMARY KEY (source, kind, src_id)
       )`
     ]
+  },
+  {
+    id: '015_customer_portal',
+    description: 'Customer portal: a login can be tied to one customer account; orders remember the portal login that placed them',
+    statements: [
+      'ALTER TABLE users ADD COLUMN party_id INTEGER',
+      'ALTER TABLE inv_orders ADD COLUMN portal_user_id INTEGER',
+      'CREATE INDEX IF NOT EXISTS idx_users_party ON users(party_id)',
+      'CREATE INDEX IF NOT EXISTS idx_inv_orders_portal ON inv_orders(portal_user_id, id)'
+    ]
   }
 ];
 

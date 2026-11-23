@@ -539,6 +539,7 @@ app.use('/api/dashboard', dashboardRouter);
 app.use('/api/masters', mastersRouter);
 app.use('/api/vouchers', vouchersRouter);
 app.use('/api/reports', reportsRouter);
+app.use('/api/portal', require('./modules/portal/portalApi')); // new: customer portal (a customer sees only their own orders and invoices)
 app.use('/api/inv', invAppRouter); // new: inventory suite (items, warehouses, stock, transfers, adjustments)
 app.use('/api/search', searchRouter); // new: smart search and quick look (read-only)
 app.use('/api/voice', voiceRouter); // new: multilingual voice assistant (understanding, replies, consent)

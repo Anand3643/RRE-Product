@@ -197,13 +197,13 @@ async function writeLines(orderId, lines) {
   for (const l of lines) await run('INSERT INTO inv_order_lines (order_id, item_id, qty, rate, discount_pct, gst_rate) VALUES (?, ?, ?, ?, ?, ?)', [orderId, l.item_id, l.qty, l.rate, l.discount_pct, l.gst_rate]);
 }
 
-async function createOrder(kind, b, user) {
+async function createOrder(kind, b, user, extra = {}) {
   const c = await cleanOrder(kind, b);
   const t = compute(c.lines, await isIntra(c.party.id));
   return withTransaction(async () => {
     const number = await nextNumber('inv_orders', 'number', kind === 'sales' ? 'SO' : 'PO');
-    const r = await run(`INSERT INTO inv_orders (kind, number, party_ledger_id, status, order_date, expected_date, warehouse_id, reference, notes, subtotal, tax, total, created_by) VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [kind, number, c.party.id, c.order_date, c.expected, c.wh.id, c.reference, c.notes, t.taxable, t.tax, t.total, user.username]);
+    const r = await run(`INSERT INTO inv_orders (kind, number, party_ledger_id, status, order_date, expected_date, warehouse_id, reference, notes, subtotal, tax, total, created_by, portal_user_id) VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [kind, number, c.party.id, c.order_date, c.expected, c.wh.id, c.reference, c.notes, t.taxable, t.tax, t.total, user.username, extra.portalUserId || null]);
     await writeLines(r.lastID, c.lines);
     await logActivity({ user, action: 'INV_ORDER_CREATE', entity: 'inv_order', entityId: r.lastID, details: { number, party: c.party.name, total: t.total } });
     return r.lastID;
@@ -239,7 +239,7 @@ async function listOrders(kind, q, user) {
   if (q.q) { where.push("(o.number LIKE ? ESCAPE '\\' OR l.name LIKE ? ESCAPE '\\' OR o.reference LIKE ? ESCAPE '\\')"); const n = like(q.q); p.push(n, n, n); }
   const base = `FROM inv_orders o JOIN ledgers l ON l.id = o.party_ledger_id JOIN godowns w ON w.id = o.warehouse_id WHERE ${where.join(' AND ')}`;
   const total = (await get(`SELECT COUNT(*) c ${base}`, p)).c, pg = page(q, total);
-  const rows = await all(`SELECT o.id, o.number, o.status, o.order_date, o.expected_date, o.total, o.reference, l.name AS party, w.name AS warehouse,
+  const rows = await all(`SELECT o.id, o.number, o.status, o.order_date, o.expected_date, o.total, o.reference, l.name AS party, w.name AS warehouse, CASE WHEN o.portal_user_id IS NOT NULL THEN 1 ELSE 0 END AS portal,
     (SELECT COUNT(*) FROM inv_order_lines WHERE order_id = o.id) AS lines,
     CASE WHEN o.expected_date IS NOT NULL AND o.expected_date < date('now') AND o.status IN (${[...open, 'draft'].map(() => '?').join(',')}) THEN 1 ELSE 0 END AS overdue
     ${base} ORDER BY o.id DESC LIMIT ? OFFSET ?`, [...open, 'draft', ...p, pg.page_size, pg.offset]);
@@ -445,5 +445,5 @@ async function history(kind, q, user) {
 }
 
 module.exports = {
-  listParties, partyDetail, saveParty, setPartyActive, createOrder, getOrder, listOrders, updateOrder, deleteOrder, confirmOrder, cancelOrder, receiveGoods, invoiceOrder, history, compute
+  loadOrder, isIntra, listParties, partyDetail, saveParty, setPartyActive, createOrder, getOrder, listOrders, updateOrder, deleteOrder, confirmOrder, cancelOrder, receiveGoods, invoiceOrder, history, compute
 };

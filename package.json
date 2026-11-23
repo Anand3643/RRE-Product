@@ -36,7 +36,8 @@
     "build:portable": "electron-builder --win portable",
     "install:desktop": "powershell -ExecutionPolicy Bypass -File create-shortcuts.ps1",
     "test:invreports": "node test_invreports.js",
-    "test:invimport": "node test_invimport.js"
+    "test:invimport": "node test_invimport.js",
+    "test:portal": "node test_portal.js"
   },
   "repository": {
     "type": "git",

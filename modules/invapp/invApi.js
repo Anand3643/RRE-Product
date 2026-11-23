@@ -11,6 +11,7 @@ const inv = require('../../core/invCore');
 const ord = require('../../core/invOrders');
 const rep = require('../../core/invReports');
 const imp = require('../../core/invImport');
+const portal = require('../../core/portal');
 const { requireAuth } = require('../../core/auth');
 
 const read = requireAuth();
@@ -106,5 +107,13 @@ router.post('/import/run', owner, handle((req) => {
   if (!req.body || req.body.confirm !== true) { const e = new Error('Confirm the import after checking the preview.'); e.status = 400; throw e; }
   return imp.importAll(req.body.path, req.body.org_id, req.user);
 }));
+
+// ---- stage 4: customer portal logins (administrators only)
+const admins = requireAuth('canManageUsers');
+router.get('/portal-users', admins, handle((req) => portal.listPortalUsers(req.query)));
+router.post('/portal-users', admins, handle((req) => portal.createPortalUser(req.body || {}, req.user)));
+router.post('/portal-users/:id/disable', admins, handle((req) => portal.setPortalUserStatus(id(req), false, req.user)));
+router.post('/portal-users/:id/enable', admins, handle((req) => portal.setPortalUserStatus(id(req), true, req.user)));
+router.post('/portal-users/:id/reset-password', admins, handle((req) => portal.resetPortalPassword(id(req), req.body && req.body.password, req.user)));
 
 module.exports = router;
