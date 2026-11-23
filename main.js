@@ -94,16 +94,6 @@ async function createWindow() {
           click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openUserManagement && window.openUserManagement()')
         },
         {
-          label: 'Start with Fresh Login (Ctrl+Shift+L)',
-          accelerator: 'CmdOrCtrl+Shift+L',
-          click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.startWithFreshLogin && window.startWithFreshLogin()')
-        },
-        {
-          label: 'Shut Company / Fresh Login (Ctrl+F3)',
-          accelerator: 'Ctrl+F3',
-          click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.startWithFreshLogin && window.startWithFreshLogin()')
-        },
-        {
           label: 'Start Clean Slate (₹0 Books)',
           click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.startCleanSlate && window.startCleanSlate()')
         },

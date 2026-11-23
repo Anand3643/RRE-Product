@@ -11,7 +11,7 @@
 const { identify } = require('./auth');
 const { getRolePermissions } = require('./db');
 
-const ENFORCE = process.env.RRE_ENFORCE_AUTH !== '0';
+const ENFORCE = process.env.RRE_ENFORCE_AUTH === '1';
 
 // Public: needed before login or harmless read-only status.
 const PUBLIC = [

@@ -5,14 +5,27 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>RRE Tally (V5 Edition)</title>
   <link rel="icon" type="image/x-icon" href="favicon.ico">
-  <!-- Pure 100% Offline Native Typography (Zero External Network Calls) -->
+  <!-- Pure 100% Offline Native Typography & Universal Smoothing (Zero External Network Calls) -->
   <style>
     :root {
       --font-tally-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
       --font-tally-mono: "Consolas", "Cascadia Code", "JetBrains Mono", "Courier New", monospace;
     }
+    *, *::before, *::after {
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
+      box-sizing: border-box;
+    }
+    html {
+      scroll-behavior: smooth;
+      -webkit-text-size-adjust: 100%;
+    }
     body {
       font-family: var(--font-tally-sans);
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      text-rendering: optimizeLegibility;
     }
   </style>
   <!-- Offline Standalone Bundled Libraries (Zero Internet Required) -->
@@ -86,25 +99,22 @@
         </button>
       </div>
 
-      <!-- Right: User Session & Theme & Quit -->
+      <!-- Right: User Access & Theme -->
       <div class="flex items-center space-x-2">
-        <div id="top-user-badge" class="flex items-center space-x-1.5 bg-slate-800/90 px-2.5 py-0.5 rounded-full border border-slate-700 text-xs shadow-inner">
-          <i data-lucide="shield" class="w-3.5 h-3.5 text-amber-400"></i>
-          <span id="top-user-name" class="text-white font-bold text-[11px]">Not Logged In</span>
-          <span id="top-user-role" class="px-1.5 py-0.2 rounded text-[9px] font-extrabold uppercase bg-slate-700 text-slate-300 border border-slate-600">Login Required</span>
-        </div>
-        <button onclick="openUserManagement()" id="btn-top-users" title="Users & Passwords (Alt+K)" class="hidden px-2 py-0.5 bg-purple-900/60 hover:bg-purple-800 text-purple-200 border border-purple-700/60 rounded text-[11px] font-bold flex items-center space-x-1 transition shadow-sm">
-          <i data-lucide="users" class="w-3 h-3 text-purple-400"></i>
-          <span>Alt+K</span>
-        </button>
+        <span class="hidden sm:inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-800/90 text-emerald-300 border border-slate-700 shadow-inner">
+          <i data-lucide="shield-check" class="w-3 h-3 text-emerald-400"></i>
+          <span>Full Access (No Login)</span>
+        </span>
         <button onclick="openThemeSelectorModal()" id="btn-top-theme" title="Change Theme Palette (Alt+T)" class="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-amber-300 border border-slate-600 rounded text-[11px] font-bold flex items-center space-x-1 transition shadow-sm">
           <i data-lucide="palette" class="w-3 h-3 text-amber-400"></i>
           <span>Alt+T</span>
         </button>
-        <button onclick="startWithFreshLogin()" title="Shut Company & Fresh Login (Ctrl+F3)" class="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-rose-300 border border-slate-600 rounded text-[11px] font-bold transition flex items-center space-x-1">
-          <i data-lucide="log-out" class="w-3 h-3 text-rose-400"></i>
-          <span>Shut Co. (Ctrl+F3)</span>
-        </button>
+        <!-- Compatibility elements -->
+        <div id="top-user-badge" class="hidden">
+          <span id="top-user-name">Administrator</span>
+          <span id="top-user-role">Owner</span>
+        </div>
+        <button id="btn-top-users" class="hidden"></button>
       </div>
     </div>
 
@@ -152,193 +162,9 @@
     <main class="flex-1 p-4 md:p-6 w-full overflow-y-auto flex flex-col items-center">
 
     <!-- ============================================== -->
-    <!-- VIEW -1: TALLYPRIME MULTI-USER LOGIN & SECURITY -->
+    <!-- VIEW -1: LOGIN REMOVED (DIRECT STANDALONE ACCESS) -->
     <!-- ============================================== -->
-    <section id="view-login" class="w-full max-w-xl bg-white border border-slate-300 rounded-xl shadow-2xl overflow-hidden fade-in hidden">
-      <!-- Window Title Band -->
-      <div class="bg-[#1f3a52] text-white px-6 py-4 flex items-center justify-between border-b border-slate-700">
-        <div class="flex items-center space-x-3">
-          <img src="tally_icon.png" alt="Tally" class="w-8 h-8 rounded shadow">
-          <div>
-            <div class="font-black text-sm tracking-wider uppercase flex items-center space-x-2">
-              <span>RRE Tally</span>
-              <span class="bg-amber-400 text-slate-900 text-[10px] px-1.5 py-0.2 rounded font-mono font-bold">5.0</span>
-            </div>
-            <div class="text-[11px] text-slate-300">Multi-User Security Control &amp; Company Login</div>
-          </div>
-        </div>
-        <span class="text-[10px] bg-slate-800/80 text-amber-300 px-2.5 py-1 rounded border border-slate-600 font-mono flex items-center space-x-1">
-          <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i>
-          <span>Multi-User Gold</span>
-        </span>
-      </div>
-
-      <div class="p-6 space-y-4">
-        <!-- Active Loaded Company Summary Card -->
-        <div class="bg-gradient-to-br from-slate-50 to-blue-50/40 p-4 rounded-lg border border-slate-200 space-y-2">
-          <div class="flex items-start justify-between">
-            <div>
-              <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Active Company</span>
-              <h2 class="text-base font-black text-slate-900" id="login-company-name">RRE Tally</h2>
-              <div class="text-xs text-slate-600 font-mono" id="login-company-details">Company No: 100000 | Tamil Nadu (33)</div>
-            </div>
-            <button onclick="openModal('alterCompanyModal')" class="text-xs text-blue-600 hover:text-blue-800 font-bold hover:underline flex items-center space-x-1">
-              <i data-lucide="edit-3" class="w-3.5 h-3.5"></i>
-              <span>Alter Company</span>
-            </button>
-          </div>
-
-          <div class="flex items-center justify-between pt-2 border-t border-slate-200/70 text-xs">
-            <span class="text-slate-500">Period: <strong class="text-slate-800 font-mono">1-Apr-2026 to 31-Mar-2027</strong></span>
-            <span id="login-status-badge" class="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
-              Clean Slate
-            </span>
-          </div>
-        </div>
-
-        <!-- Quick Multi-User Role Selector -->
-        <div>
-          <div class="flex items-center justify-between mb-1.5">
-            <label class="text-[10px] font-black text-slate-500 uppercase tracking-wider">Select User Account (Tally Security Control)</label>
-            <span class="text-[10px] text-blue-600 font-semibold cursor-pointer hover:underline" onclick="selectQuickUser('admin')">Default: admin</span>
-          </div>
-          <div class="grid grid-cols-5 gap-1.5" id="quick-user-selector">
-            <button type="button" onclick="selectQuickUser('admin')" id="qu-admin" class="qu-btn active p-2 rounded-lg border border-purple-400 bg-purple-50 text-purple-900 text-center hover:bg-purple-100 transition shadow-sm">
-              <div class="text-xs font-black">👑 admin</div>
-              <div class="text-[9px] font-bold text-purple-700">Owner</div>
-            </button>
-            <button type="button" onclick="selectQuickUser('accountant')" id="qu-accountant" class="qu-btn p-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-center hover:bg-blue-50 hover:text-blue-900 hover:border-blue-300 transition">
-              <div class="text-xs font-black">💼 acc</div>
-              <div class="text-[9px] font-bold text-slate-500">Accountant</div>
-            </button>
-            <button type="button" onclick="selectQuickUser('dataentry')" id="qu-dataentry" class="qu-btn p-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-center hover:bg-amber-50 hover:text-amber-900 hover:border-amber-300 transition">
-              <div class="text-xs font-black">✍️ entry</div>
-              <div class="text-[9px] font-bold text-slate-500">Data Entry</div>
-            </button>
-            <button type="button" onclick="selectQuickUser('auditor')" id="qu-auditor" class="qu-btn p-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-center hover:bg-emerald-50 hover:text-emerald-900 hover:border-emerald-300 transition">
-              <div class="text-xs font-black">🔍 auditor</div>
-              <div class="text-[9px] font-bold text-slate-500">Auditor</div>
-            </button>
-            <button type="button" onclick="selectQuickUser('viewer')" id="qu-viewer" class="qu-btn p-2 rounded-lg border border-slate-200 bg-slate-50 text-slate-700 text-center hover:bg-slate-100 hover:text-slate-900 hover:border-slate-400 transition">
-              <div class="text-xs font-black">👁️ viewer</div>
-              <div class="text-[9px] font-bold text-slate-500">Viewer</div>
-            </button>
-          </div>
-          <div id="role-desc-box" class="mt-2 px-3 py-1.5 bg-purple-50/70 border border-purple-200/80 rounded text-[11px] text-purple-900 flex items-center justify-between">
-            <span id="role-desc-text"><strong>Owner Permissions:</strong> Full Administrative access to all vouchers, financial reports, user security & company alteration.</span>
-          </div>
-        </div>
-
-        <!-- Login Form -->
-        <form id="form-login" onsubmit="handleLogin(event)" class="space-y-3">
-          <div class="space-y-1">
-            <label class="block text-xs font-bold text-slate-700">Username</label>
-            <div class="relative">
-              <input type="text" id="login-username" value="admin" required
-                     class="w-full border border-slate-300 rounded-lg p-2.5 text-xs font-bold text-slate-800 pl-9 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-              <i data-lucide="user" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
-            </div>
-          </div>
-
-          <div class="space-y-1">
-            <div class="flex items-center justify-between">
-              <label class="block text-xs font-bold text-slate-700">Password</label>
-              <span id="pwd-hint" class="text-[10px] text-slate-400 font-mono">Enter your password</span>
-            </div>
-            <div class="relative">
-              <input type="password" id="login-password" value="" placeholder="Enter password" autocomplete="current-password"
-                     class="w-full border border-slate-300 rounded-lg p-2.5 text-xs text-slate-800 pl-9 pr-9 focus:ring-2 focus:ring-blue-500 focus:outline-none">
-              <i data-lucide="lock" class="w-4 h-4 text-slate-400 absolute left-3 top-3"></i>
-              <button type="button" onclick="togglePasswordVisibility('login-password')" class="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600">
-                <i data-lucide="eye" class="w-4 h-4" id="eye-login-password"></i>
-              </button>
-            </div>
-          </div>
-
-          <div id="login-error-msg" class="hidden p-2.5 bg-rose-50 border border-rose-200 text-rose-800 text-xs rounded-lg font-semibold flex items-center space-x-2">
-            <i data-lucide="alert-circle" class="w-4 h-4 text-rose-600 flex-shrink-0"></i>
-            <span id="login-error-text">Incorrect credentials</span>
-          </div>
-
-          <!-- Fresh Login Startup Preference & Fast Reset -->
-          <div class="flex items-center justify-between text-xs pt-1 px-0.5">
-            <label class="flex items-center space-x-2 text-slate-700 cursor-pointer select-none">
-              <input type="checkbox" id="chk-always-fresh-login" checked onchange="toggleFreshLoginStartup(this.checked)" class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500">
-              <span class="font-semibold text-[11px] text-slate-600">Start with fresh login on app startup</span>
-            </label>
-            <button type="button" onclick="startWithFreshLogin()" class="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center space-x-1 hover:underline">
-              <i data-lucide="rotate-ccw" class="w-3 h-3"></i>
-              <span>Fresh Login</span>
-            </button>
-          </div>
-
-          <div class="pt-1 space-y-2">
-            <button type="submit" id="btn-login-submit" class="w-full py-3 bg-[#1f3a52] hover:bg-[#162a3b] text-white rounded-lg font-bold text-xs uppercase tracking-wider shadow-md transition flex items-center justify-center space-x-2">
-              <span>Login &amp; Enter Gateway (Enter)</span>
-              <i data-lucide="arrow-right" class="w-4 h-4 text-amber-400"></i>
-            </button>
-
-            <!-- One-click read-only guest entry (shown only while the administrator allows it) -->
-            <button type="button" id="btn-guest-login" onclick="loginAsGuest()" class="hidden w-full py-2.5 bg-gradient-to-r from-teal-700 to-cyan-800 hover:from-teal-800 hover:to-cyan-900 text-white rounded-lg font-bold text-xs uppercase tracking-wider shadow-md transition flex items-center justify-center space-x-2">
-              <i data-lucide="user-check" class="w-4 h-4 text-teal-300"></i>
-              <span>Continue as Guest (1-Click, Read-Only)</span>
-            </button>
-
-            <button type="button" onclick="startWithFreshLogin()" class="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-xs border border-slate-300 transition flex items-center justify-center space-x-1.5 shadow-sm">
-              <i data-lucide="refresh-cw" class="w-3.5 h-3.5 text-blue-600"></i>
-              <span>Start with Fresh Login (Reset Session / Admin Mode)</span>
-            </button>
-
-            <!-- OR CONTINUATION -->
-            <div class="relative my-2.5 flex items-center justify-center">
-              <div class="border-t border-slate-200 w-full"></div>
-              <span class="bg-white px-2 text-[10px] uppercase font-bold text-slate-400 tracking-wider">or authenticate with</span>
-            </div>
-
-            <!-- Sign In with Google -->
-            <button type="button" onclick="openGoogleLoginModal()" class="w-full py-2.5 bg-white hover:bg-slate-50 text-slate-700 rounded-lg font-bold text-xs border border-slate-300 transition flex items-center justify-center space-x-2.5 shadow-sm">
-              <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24">
-                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-                <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
-                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
-              </svg>
-              <span>Continue with Google</span>
-            </button>
-
-            <!-- Create Account / Register with Email -->
-            <button type="button" onclick="openRegisterModal()" class="w-full py-2 bg-blue-50 hover:bg-blue-100 text-blue-900 rounded-lg font-bold text-xs border border-blue-200 transition flex items-center justify-center space-x-2">
-              <i data-lucide="user-plus" class="w-3.5 h-3.5 text-blue-700"></i>
-              <span>Create New Account / Register via Email</span>
-            </button>
-          </div>
-        </form>
-
-        <!-- Quick Environment Actions (Clean vs Demo) -->
-        <div class="pt-3 border-t border-slate-200">
-          <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
-            Environment &amp; Workspace Modes
-          </div>
-          <div class="grid grid-cols-2 gap-2.5">
-            <button type="button" onclick="startCleanSlate()" class="p-3 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg text-left transition group">
-              <div class="flex items-center space-x-1.5 text-emerald-800 font-bold text-xs">
-                <i data-lucide="sparkles" class="w-3.5 h-3.5 text-emerald-600"></i>
-                <span>Clean Slate (₹0)</span>
-              </div>
-              <p class="text-[10px] text-emerald-700/80 mt-1">Reset to 0 vouchers for real production business</p>
-            </button>
-
-            <button type="button" onclick="loadDemoData()" class="p-3 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg text-left transition group">
-              <div class="flex items-center space-x-1.5 text-amber-900 font-bold text-xs">
-                <i data-lucide="database" class="w-3.5 h-3.5 text-amber-600"></i>
-                <span>Load Demo Data</span>
-              </div>
-              <p class="text-[10px] text-amber-800/80 mt-1">Restore sample screw compressor demo vouchers</p>
-            </button>
-          </div>
-        </div>
-      </div>
-    </section>
+    <section id="view-login" class="hidden" style="display: none !important;"></section>
 
     <!-- ============================================== -->
     <!-- VIEW 0: TALLYPRIME 4.x/5.x MODERN DASHBOARD    -->
@@ -952,11 +778,11 @@
             </div>
           </div>
 
-          <!-- QUIT / FRESH LOGIN -->
+          <!-- QUIT / GATEWAY -->
           <div class="pt-1 border-t border-slate-200">
-            <div onclick="startWithFreshLogin()" class="gateway-item text-rose-800">
-              <span><span class="hotkey">Q</span>uit (Fresh Login)</span>
-              <span class="text-[10px] text-rose-500 font-mono">Ctrl+F3</span>
+            <div onclick="showGateway()" class="gateway-item text-slate-700">
+              <span><span class="hotkey">Q</span>uit (Esc)</span>
+              <span class="text-[10px] text-slate-400 font-mono">Esc</span>
             </div>
           </div>
         </div>
@@ -2074,9 +1900,9 @@
       <span class="fn-badge bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-300 shrink-0">F3</span>
       <span class="truncate">Company</span>
     </button>
-    <button onclick="startWithFreshLogin()" class="tally-v-btn" title="Shut Company & Fresh Login (Ctrl+F3)">
-      <span class="fn-badge bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-300 shrink-0">^F3</span>
-      <span class="truncate">Shut Co.</span>
+    <button onclick="showGateway()" class="tally-v-btn" title="Gateway / Home (Esc)">
+      <span class="fn-badge bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold border border-slate-300 shrink-0">Esc</span>
+      <span class="truncate">Gateway</span>
     </button>
 
     <div class="h-[1px] bg-slate-300 my-1"></div>
