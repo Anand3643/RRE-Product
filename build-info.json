@@ -1,8 +1,8 @@
 {
   "productName": "RRE Tally",
   "version": "1.0.0",
-  "commit": "df05e37",
-  "buildDate": "2026-11-23T12:08:00+05:30",
+  "commit": "27d0421",
+  "buildDate": "2026-11-23T12:14:00+05:30",
   "repository": "https://github.com/Anand3643/RRE-Product",
   "setupInstaller": "dist/RRE Tally Setup 1.0.0.exe"
 }
