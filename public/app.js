@@ -148,10 +148,10 @@ let appState = {
   uoms: [],
   voucherMode: 'invoice', // 'invoice' or 'manual'
   currentVoucherType: 'Sales',
-  currentView: 'view-login',
+  currentView: 'view-gateway',
   activeBankLedgerId: null,
-  currentUser: null,
-  permissions: null
+  currentUser: { id: 1, username: 'Administrator', role: 'Owner' },
+  permissions: getOfflineRolePermissions('Owner')
 };
 
 // ========================================================
@@ -297,38 +297,15 @@ document.addEventListener('DOMContentLoaded', () => {
     setupKeyboardShortcuts();
     if (window.lucide) window.lucide.createIcons();
 
-    // Check "Start with fresh login on app startup" preference (default: true)
-    const alwaysFresh = localStorage.getItem('tally_always_fresh_login') !== 'false';
-    const chkFresh = document.getElementById('chk-always-fresh-login');
-    if (chkFresh) chkFresh.checked = alwaysFresh;
-
-    let hasValidSession = false;
-
-    if (!alwaysFresh) {
-      const savedSessionStr = localStorage.getItem('tally_user_session');
-      if (savedSessionStr) {
-        try {
-          const session = JSON.parse(savedSessionStr);
-          if (session && session.user && session.permissions) {
-            appState.currentUser = session.user;
-            appState.permissions = session.permissions;
-            updateUserDisplay();
-            applyRolePermissions();
-            showGateway();
-            hasValidSession = true;
-          }
-        } catch (e) {
-          localStorage.removeItem('tally_user_session');
-        }
-      }
-    }
-
-    if (!hasValidSession) {
-      startWithFreshLogin();
-    }
+    // Direct Standalone Access (Logins removed - Default Full Administrator Access)
+    appState.currentUser = { id: 1, username: 'Administrator', role: 'Owner' };
+    appState.permissions = getOfflineRolePermissions('Owner');
+    updateUserDisplay();
+    applyRolePermissions();
+    showGateway();
   } catch (initErr) {
     console.error('Initial mount error:', initErr);
-    startWithFreshLogin();
+    showGateway();
   } finally {
     // Asynchronously load backend data in background without blocking UI rendering
     Promise.allSettled([loadGatewayInfo(), loadMasters()]).then(() => {
@@ -431,77 +408,19 @@ function applyRolePermissions() {
 }
 
 function checkPermission(permKey, actionName) {
-  // If user is currently on login screen or not logged in, suppress Access Denied modal
-  if (appState.currentView === 'view-login' || !appState.currentUser) {
-    const errEl = document.getElementById('login-error-msg');
-    const errText = document.getElementById('login-error-text');
-    if (errEl && errText) {
-      errEl.classList.remove('hidden');
-      errText.textContent = `Please login as Administrator (Owner) to access ${actionName}.`;
-    }
-    return false;
-  }
-
-  const perms = appState.permissions || {};
-  if (perms[permKey] === true) {
-    return true;
-  }
-
-  // Access Denied Modal for logged-in users with insufficient privileges
-  const titleEl = document.getElementById('denied-title');
-  const msgEl = document.getElementById('denied-message');
-  const userEl = document.getElementById('denied-user');
-  const roleEl = document.getElementById('denied-role');
-
-  if (titleEl) titleEl.textContent = `Access Restricted: ${actionName}`;
-  if (msgEl) {
-    const role = appState.currentUser?.role || 'Guest';
-    let detail = `Your assigned role "${role}" does not have authorization to access ${actionName}.`;
-    if (role === 'Data Entry') {
-      detail += ' Data Entry operators are restricted to accounting vouchers and cannot access Financial Statements or Alter Company.';
-    } else if (role === 'Auditor' || role === 'Viewer') {
-      detail += ' This account is configured for inspection/viewing only.';
-    }
-    msgEl.textContent = detail;
-  }
-  if (userEl) userEl.textContent = appState.currentUser?.username || 'user';
-  if (roleEl) roleEl.textContent = appState.currentUser?.role || 'Guest';
-
-  openModal('accessDeniedModal');
-  return false;
+  return true;
 }
 
 function showLoginView() {
-  showView('view-login');
-  appState.currentUser = null;
-  appState.permissions = null;
-  updateUserDisplay();
-  const topUsersBtn = document.getElementById('btn-top-users');
-  if (topUsersBtn) topUsersBtn.classList.add('hidden');
-  const ribbon = document.getElementById('header-ribbon');
-  if (ribbon) ribbon.classList.add('opacity-40');
-  setTimeout(() => {
-    const input = document.getElementById('login-username');
-    if (input) input.focus();
-  }, 100);
+  showGateway();
 }
 
 function startWithFreshLogin() {
-  localStorage.removeItem('tally_user_session');
-  appState.currentUser = null;
-  appState.permissions = null;
-  showLoginView();
-  selectQuickUser('admin');
-  const chkFresh = document.getElementById('chk-always-fresh-login');
-  if (chkFresh) {
-    chkFresh.checked = (localStorage.getItem('tally_always_fresh_login') !== 'false');
-  }
-  const errEl = document.getElementById('login-error-msg');
-  if (errEl) errEl.classList.add('hidden');
+  showGateway();
 }
 
 function toggleFreshLoginStartup(checked) {
-  localStorage.setItem('tally_always_fresh_login', checked ? 'true' : 'false');
+  // Direct standalone access mode
 }
 
 async function handleLogin(e) {
@@ -957,7 +876,6 @@ function populateStockDropdowns() {
 // 2. VIEW MANAGEMENT (GATEWAY, DASHBOARD & REPORTS)
 // ========================================================
 const VIEWS = [
-  'view-login',
   'view-dashboard',
   'view-gateway',
   'view-display-more',
@@ -3542,12 +3460,11 @@ function setupKeyboardShortcuts() {
         showGateway();
         return;
       }
-      if (appState.currentView !== 'view-gateway' && appState.currentView !== 'view-login') {
+      if (appState.currentView !== 'view-gateway') {
         showGateway();
         return;
       }
       if (appState.currentView === 'view-gateway') {
-        startWithFreshLogin();
         return;
       }
       return;
@@ -3668,8 +3585,6 @@ function setupKeyboardShortcuts() {
     // Function keys (F1 to F12)
     if (e.key === 'F1') { e.preventDefault(); openHelpModal(); return; }
     if (e.key === 'F2') { e.preventDefault(); openChangeDateModal(); return; }
-    if (e.ctrlKey && e.shiftKey && (e.key === 'L' || e.key === 'l')) { e.preventDefault(); startWithFreshLogin(); return; }
-    if (e.ctrlKey && (e.key === 'F3')) { e.preventDefault(); startWithFreshLogin(); return; }
     if (e.key === 'F3') { e.preventDefault(); openAlterCompany(); return; }
     if (e.key === 'F4') { e.preventDefault(); openVoucherScreen('Contra'); return; }
     if (e.key === 'F5') { e.preventDefault(); openVoucherScreen('Payment'); return; }
@@ -3698,7 +3613,7 @@ function setupKeyboardShortcuts() {
       if (k === 'S') { e.preventDefault(); openReport('stock-summary'); return; }
       if (k === 'R') { e.preventDefault(); openReport('ratio-analysis'); return; }
       if (k === 'D') { e.preventDefault(); showDisplayMoreMenu(); return; }
-      if (k === 'Q') { e.preventDefault(); startWithFreshLogin(); return; }
+      if (k === 'Q') { e.preventDefault(); showGateway(); return; }
     }
 
     // Display More Reports Single-Key Shortcuts
