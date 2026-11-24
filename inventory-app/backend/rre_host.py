@@ -127,6 +127,13 @@ def rre_sso(body: dict, request: Request):
         raise HTTPException(403, "This link cannot be used to sign in.")
     with SessionLocal() as db:
         user = _project(db, data, kind == "admin")
+        if kind == "admin":
+            org = db.get(Organization, user.org_id)
+            if org is not None:
+                if not org.state and data.get("org_state"):
+                    org.state = str(data["org_state"])[:100]
+                if (not org.name or org.name == "RRE Entries") and data.get("org_name"):
+                    org.name = str(data["org_name"])[:200]
         if not user.is_active:
             raise HTTPException(403, "This account is deactivated. Contact your administrator.")
         user.last_login = datetime.now(timezone.utc)
@@ -169,7 +176,7 @@ async def _one_identity(request: Request, call_next):
     path = request.url.path
     if not path.startswith("/api/rre/"):
         _LAST[0] = time.time()  # real use (not RRE's own checks): lets RRE stop an idle customer inventory
-    if path in _CLOSED or path == "/api/users" or path.startswith("/api/users/") and not path.startswith("/api/users/directory"):
+    if path in _CLOSED or path == "/api/users" or path.startswith("/api/users/") and not path.startswith("/api/users/directory") or path.startswith("/api/monitor") or (path.startswith("/api/support/") and path.endswith("/reply")):
         return JSONResponse({"detail": "Accounts are managed in RRE Entries. Sign in there."}, status_code=410)
     return await call_next(request)
 
@@ -186,7 +193,8 @@ window.addEventListener('message',function(e){if(e.source!==window.parent)return
 var p=new URLSearchParams(location.search),t=p.get('sso'),m=p.get('mode');if(m)mode(m);
 function clear(){['sp_access','sp_refresh'].forEach(function(k){localStorage.removeItem(k);sessionStorage.removeItem(k);});}
 var NOLOGIN=/^\/(login|signup|register|forgot-password|reset-password)(\/|$)/;
-function guard(){if(NOLOGIN.test(location.pathname))location.replace('/rre-signin');}
+var GONE=/^\/admin\/(team|users|login-activity|support|settings)(\/|$)/;
+function guard(){if(NOLOGIN.test(location.pathname))location.replace('/rre-signin');else if(GONE.test(location.pathname))location.replace('/admin/dashboard');}
 guard();setInterval(guard,400);
 if(t){var x=new XMLHttpRequest();x.open('POST','/api/rre/sso',false);x.setRequestHeader('Content-Type','application/json');x.send(JSON.stringify({token:t}));
 if(x.status===200){var d=JSON.parse(x.responseText);clear();localStorage.setItem('sp_access',d.access_token);localStorage.setItem('sp_refresh',d.refresh_token);}else{clear();location.replace('/rre-signin?e='+x.status);}}
@@ -208,7 +216,7 @@ def rre_signin():
 
 
 # RRE look for the inventory screens (colours and shapes only), loaded after the application's own style sheet
-_THEME_LINK = '<link rel="stylesheet" href="/rre-theme.css"><style>a[href="/team"],a[href="/login-activity"],a[href="/users"],a[href="/sessions"]{display:none!important}</style>'  # users are managed in RRE: its own user screens are hidden
+_THEME_LINK = '<link rel="stylesheet" href="/rre-theme.css"><style>a[href^="/admin/"][href$="/team"],a[href^="/admin/"][href$="/users"],a[href^="/admin/"][href$="/login-activity"],a[href^="/admin/"][href$="/support"],a[href^="/admin/"][href$="/settings"],a[href$="/sessions"]{display:none!important}</style>'  # people, sign-ins, tickets and settings are handled in RRE: those admin screens are removed
 THEME_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "rre_theme.css")
 
 

@@ -5,23 +5,19 @@ import { api, tokens, dt } from "./api";
 import { useToast, Modal } from "./ui";
 import { ChangePasswordModal, ForcedPasswordChange, ForgotPage, LoginPage, ResetPage } from "./Auth";
 import AdminDashboard from "./pages/AdminDashboard";
-import AdminSupport from "./pages/AdminSupport";
 import UserPortal from "./portal/UserPortal";
 import { ADMIN, ext, redirectFor, toInternal, underBase } from "./portalPaths";
-import LoginActivity from "./pages/LoginActivity";
 import Dashboard from "./pages/Dashboard";
 import Products from "./pages/Products";
 import { ItemDetail, ItemFormPage } from "./pages/ItemPages";
 import { PartyDetail, PartyForm, PartyList } from "./pages/Parties";
 import { POList, POForm, PODetail } from "./pages/PurchaseOrders";
-import SettingsPage from "./pages/Settings";
 import { SODetail, SOForm, SOList } from "./pages/SalesOrders";
 import { PackageList, ShipmentDetail, ShipmentList } from "./pages/Shipments";
 import { AdjDetail, AdjForm, AdjList } from "./pages/Adjustments";
 import { ReportsHome, ReportView } from "./pages/Reports";
 import Inventory from "./pages/Inventory";
 import Warehouses, { WarehouseFormPage } from "./pages/Warehouses";
-import UsersPage from "./pages/UsersPage";
 import WarehouseDetail from "./pages/WarehouseDetail";
 import Transfers from "./pages/Transfers";
 import Insights from "./pages/Insights";
@@ -53,10 +49,6 @@ const NAV: { to: string; label: string; icon: any; mod: string; group: string; a
   { to: "/transfers", label: "Transfers", icon: ArrowRightLeft, mod: "inventory", group: "Inventory" },
   { to: "/reports", label: "Reports", icon: BarChart3, mod: "reports", group: "Insights" },
   { to: "/insights", label: "AI Insights", icon: Sparkles, mod: "inventory", group: "Insights" },
-  { to: "/team", label: "Users", icon: Users, mod: "users", group: "Admin" },
-  { to: "/login-activity", label: "Login history", icon: Activity, mod: "", group: "Admin", admin: true },
-  { to: "/support", label: "Support tickets", icon: LifeBuoy, mod: "", group: "Admin", admin: true },
-  { to: "/settings", label: "Settings", icon: Settings, mod: "settings", group: "Admin" },
 ];
 
 type PalItem = { key: string; group: string; label: string; hint?: string; icon: any; run: () => void };
@@ -163,9 +155,7 @@ export function ModuleRoutes({ location }: { location: any }) {
   return (
     <Routes location={location}>
                 <Route path="/admin" element={<AdminDashboard />} />
-                <Route path="/login-activity" element={<LoginActivity />} />
                 <Route path="/" element={<Dashboard />} />
-                <Route path="/support" element={<AdminSupport />} />
                 <Route path="/products" element={<Products />} />
                 <Route path="/products/new" element={<ItemFormPage />} />
                 <Route path="/products/:id" element={<ItemDetail />} />
@@ -194,7 +184,6 @@ export function ModuleRoutes({ location }: { location: any }) {
                 <Route path="/adjustments/:id" element={<AdjDetail />} />
                 <Route path="/reports" element={<ReportsHome />} />
                 <Route path="/reports/:key" element={<ReportView />} />
-                <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/inventory" element={<Inventory />} />
                 <Route path="/warehouses" element={<Warehouses />} />
                 <Route path="/warehouses/new" element={<WarehouseFormPage />} />
@@ -202,7 +191,6 @@ export function ModuleRoutes({ location }: { location: any }) {
                 <Route path="/warehouses/:id/edit" element={<WarehouseFormPage />} />
                 <Route path="/transfers" element={<Transfers />} />
                 <Route path="/insights" element={<Insights />} />
-                <Route path="/team" element={<UsersPage />} />
                 <Route path="*" element={<Navigate to="/" />} />
               </Routes>
   );
@@ -222,7 +210,7 @@ function AccessDenied({ home }: { home: string }) {
   );
 }
 
-const CHORDS: Record<string, string> = { d: "/", p: "/products", c: "/customers", v: "/vendors", o: "/purchase-orders", j: "/adjustments", e: "/reports", s: "/settings", r: "/sales-orders", k: "/packages", h: "/shipments", i: "/inventory", w: "/warehouses", t: "/transfers", a: "/insights", u: "/team" };
+const CHORDS: Record<string, string> = { d: "/", p: "/products", c: "/customers", v: "/vendors", o: "/purchase-orders", j: "/adjustments", e: "/reports", r: "/sales-orders", k: "/packages", h: "/shipments", i: "/inventory", w: "/warehouses", t: "/transfers", a: "/insights", u: "/team" };
 
 function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
   const [collapsed, setCollapsed] = useState(localStorage.getItem("sp_collapsed") === "1");
@@ -285,7 +273,6 @@ function Shell({ me, onLogout }: { me: Me; onLogout: () => void }) {
             <div className="ml-auto flex items-center gap-1">
               <span className="mr-2 hidden text-[13px] text-sub lg:block">{me.org.name}</span>
               <Bells />
-              {can("settings") && <button className="btn-ghost !border-transparent !bg-transparent !px-2 hover:!bg-muted" data-tip="Settings" onClick={() => go(ext("/settings", ADMIN))} aria-label="Settings"><Settings className="h-4 w-4" /></button>}
               <ProfileMenu me={me} dark={dark} toggleTheme={toggleTheme} onLogout={onLogout} showShortcuts={() => setKeys(true)} changePassword={() => setPwOpen(true)} />
             </div>
           </header>

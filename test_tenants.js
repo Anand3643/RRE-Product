@@ -147,6 +147,11 @@ async function main() {
     const listA = JSON.stringify((await sp(la, '/api/products', sa.json.access_token)).json), listB = JSON.stringify((await sp(lb, '/api/products', sb.json.access_token)).json);
     assert(pa2.status < 300 && listA.includes('Alice Only Product') && !listB.includes('Alice Only Product'), 'what Alice stores in her inventory is not in Bob\'s');
     assert((await sp(la, '/api/auth/login', null, 'POST', { email: 'alice@t.example', password: 'x' })).status === 410, 'there is still no separate inventory login');
+    assert((await sp(la, '/api/monitor/sessions', sa.json.access_token)).status === 410 && (await sp(la, '/api/users', sa.json.access_token)).status === 410, 'the removed admin screens (login history, users) are closed on the server');
+    const page = await (await fetch(`http://127.0.0.1:${portOf(la)}/admin/settings`)).text();
+    assert(/GONE=/.test(page) && page.includes('a[href^="/admin/"][href$="/settings"]'),'the inventory page hides Login history, Support tickets, Users and Settings and sends direct visits back to the dashboard');
+    const org = (await sp(la, '/api/organization', sa.json.access_token)).json;
+    assert(org && org.state === 'Tamil Nadu' && /Alice Trader/.test(org.name || ''), 'the inventory organisation (name, GST state) comes from the RRE company, since its Settings screen is gone', JSON.stringify(org).slice(0, 120));
     const ownL = await req('POST', '/api/inventory-app/launch', { token: OWN, body: { nowait: false } });
     assert(ownL.status === 200 && portOf(ownL) !== portOf(la) && portOf(ownL) !== portOf(lb), 'the owner\'s inventory is a third, separate one');
     assert((await req('POST', '/api/auth/users/' + (await get("SELECT id FROM users WHERE email = 'alice@t.example'")).id + '/sign-out', { token: OWN })).json.success, 'the administrator can end a customer\'s session');

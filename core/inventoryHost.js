@@ -154,7 +154,7 @@ function ssoToken(claims = {}) {
   const as = c.as || 'user';
   const payload = { exp: Math.floor(Date.now() / 1000) + 60, jti: crypto.randomBytes(12).toString('hex'), as };
   if (as !== 'admin') Object.assign(payload, { email: String(c.email || '').toLowerCase(), name: String(c.name || '').slice(0, 120), role: INV_ROLE[c.role] || 'viewer', active: c.active !== false });
-  else Object.assign(payload, { email: String(c.email || '').toLowerCase(), name: String(c.name || '').slice(0, 120) });
+  else Object.assign(payload, { email: String(c.email || '').toLowerCase(), name: String(c.name || '').slice(0, 120), org_name: String(c.org_name || '').slice(0, 200), org_state: String(c.org_state || '').slice(0, 100) });
   const body = b64(JSON.stringify(payload));
   return `${body}.${crypto.createHmac('sha256', bridgeSecret()).update(body).digest('base64url')}`;
 }
@@ -165,7 +165,9 @@ async function launch({ user = null, admin = false, path: sub = '/', wait = true
   if (!wait && !(state.port && (await ping(state.port, 800)))) { ensureStarted().catch(() => { /* the reason is kept in state.error and shown by status() */ }); return { starting: true }; } // answer at once; the screen waits for the start-up
   await ensureStarted();
   const p = /^\/[A-Za-z0-9\-_/]*$/.test(sub) ? sub : '/';
-  const claims = user ? { as: INV_ROLE[user.role] === 'owner' || user.own_company ? 'admin' : 'user', email: user.email, name: user.full_name || user.username, role: user.role } : { as: admin ? 'admin' : 'user', role: admin ? 'Owner' : 'Viewer' };
+  // the inventory's organisation (name, GST state) is taken from the RRE company: its own Settings screen is gone
+  let co = null; try { co = await require('./db').get('SELECT name, state FROM company_info LIMIT 1'); } catch (e) { /* optional */ }
+  const claims = user ? { org_name: co && co.name, org_state: co && co.state, as: INV_ROLE[user.role] === 'owner' || user.own_company ? 'admin' : 'user', email: user.email, name: user.full_name || user.username, role: user.role } : { as: admin ? 'admin' : 'user', role: admin ? 'Owner' : 'Viewer' };
   return { url: `http://127.0.0.1:${state.port}${p}?sso=${ssoToken(claims)}`, port: state.port };
 }
 
