@@ -3076,3 +3076,14 @@ body.au-rail-open #au-rail button.item { padding: 0 14px; }
 
 /* the palette button duplicated the side bar Theme item (kept in the DOM: the Light/Dark switch is placed next to it) */
 [data-theme="aurora"] #btn-top-theme { display: none !important; }
+
+/* ---------- performance: no 3D transforms or continuous animation (same look, flat and light) ---------- */
+#aurora-bg .grid { transform: none !important; }
+#aurora-bg .blob, .au-orb, .au-float, .au-stat::before, .au-hero .au-eyebrow i { animation: none !important; will-change: auto !important; }
+.au-orb .r1, .au-orb .r2, .au-orb .r3, .au-float.f1, .au-float.f2, .au-float.f3 { transform: none !important; }
+.au-stage, .au-orb, .au-tilt, .au-hero { transform-style: flat !important; perspective: none !important; }
+.au-tilt.au-tilting, .au-motion .au-reveal.is-in.au-tilt.au-tilting { transform: none !important; }
+.au-tilt::after { display: none !important; }
+.au-motion .au-reveal, .au-motion .au-reveal.is-in, .au-motion .au-reveal.is-in.au-depth { transform: none !important; will-change: auto !important; transition: opacity .25s ease !important; }
+.au-motion main > section[id^="view-"].au-enter { animation: auFade .2s ease both !important; }
+@keyframes auFade { from { opacity: 0; } to { opacity: 1; } }

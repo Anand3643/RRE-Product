@@ -50,7 +50,7 @@ svg { width: 18px; height: 18px; fill: currentColor; flex: none; }
 
 /* ---------------------------------------------------------------- animated background */
 .bg { position: fixed; inset: 0; overflow: hidden; z-index: 0; pointer-events: none; }
-.orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: .9; will-change: transform; }
+.orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: .9; animation: none !important; }
 .o1 { width: 52vmax; height: 52vmax; left: -14vmax; top: -18vmax; background: radial-gradient(circle, var(--orb1), transparent 65%); animation: drift 22s ease-in-out infinite alternate; }
 .o2 { width: 44vmax; height: 44vmax; right: -12vmax; bottom: -16vmax; background: radial-gradient(circle, var(--orb2), transparent 65%); animation: drift 26s ease-in-out -6s infinite alternate-reverse; }
 .o3 { width: 30vmax; height: 30vmax; right: 18vmax; top: -8vmax; background: radial-gradient(circle, var(--orb3), transparent 65%); animation: drift 30s ease-in-out -12s infinite alternate; }

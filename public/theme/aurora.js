@@ -38,8 +38,8 @@
     bgEls = { b: $$('.blob', bg), g: $('.grid', bg) };
     let px = 0, py = 0, tick = false;
     window.addEventListener('pointermove', (e) => {
-      if (!motionOn() || mqCoarse.matches) return;
-      px = e.clientX / window.innerWidth - .5; py = e.clientY / window.innerHeight - .5;
+      return; // pointer parallax removed (3D effects off)
+      px =e.clientX / window.innerWidth - .5; py = e.clientY / window.innerHeight - .5;
       if (tick) return; tick = true;
       requestAnimationFrame(() => { tick = false; bgEls.b.forEach((b, i) => { b.style.translate = `${(px * (i + 1) * -26).toFixed(1)}px ${(py * (i + 1) * -18).toFixed(1)}px`; }); bgEls.g.style.translate = `${(px * 30).toFixed(1)}px 0`; });
     }, { passive: true });
@@ -133,9 +133,7 @@
   function onScroll() { if (ticking || !motionOn()) return; ticking = true; requestAnimationFrame(update); }
   function update() {
     ticking = false; const top = scrollTopNow(), vh = viewH(), mid = vh / 2;
-    $$('#au-portfolio [data-speed]').forEach((e) => { e.style.translate = `0 ${(top * parseFloat(e.dataset.speed)).toFixed(1)}px`; });
-    const hero = $('#au-hero'); if (hero) { const k = Math.min(1, top / 520); hero.style.setProperty('--hk', k.toFixed(3)); hero.style.opacity = String(1 - k * .55); hero.style.transform = `perspective(1200px) rotateX(${(k * 7).toFixed(2)}deg) scale(${(1 - k * .05).toFixed(3)})`; }
-    $$('#au-portfolio .au-depth.is-in').forEach((e) => { const r = e.getBoundingClientRect(); if (r.bottom < 0 || r.top > window.innerHeight) return; const dp = Math.max(-1, Math.min(1, ((r.top + r.height / 2) - mid) / (vh / 2))); e.style.setProperty('--dp', dp.toFixed(3)); });
+    const hero = $('#au-hero'); if (hero) { const k = Math.min(1, top / 520); hero.style.setProperty('--hk', k.toFixed(3)); hero.style.opacity = String(1 - k * .55); }
   }
   function tilt() {
     let cur = null;
@@ -307,7 +305,7 @@
     new MutationObserver(enable).observe(html, { attributes: true, attributeFilter: ['data-theme'] });
     mqReduce.addEventListener && mqReduce.addEventListener('change', () => { syncMotion(); observe(portfolioEl); });
     window.addEventListener('scroll', onScroll, { passive: true }); const mn = $('main'); if (mn) mn.addEventListener('scroll', onScroll, { passive: true });
-    tilt(); enable();
+    enable();
     // the inventory screen is a full-screen overlay: keep the rail indicator honest
     setInterval(() => { if (isOn()) moveInd(); }, 700);
     // start on the portfolio dashboard (Esc still returns to the Gateway, as always)
