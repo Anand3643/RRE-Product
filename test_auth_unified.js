@@ -331,7 +331,8 @@ async function main() {
   const nm = await signup({ ...good, email: 'nomail@shop.example', full_name: 'No Mail Customer' });
   const nmUser = await get("SELECT role, status FROM users WHERE email = 'nomail@shop.example'");
   assert(nm.status === 201 && nm.json.activated === true && nmUser.role === 'Customer' && nmUser.status === 'Active', 'without e-mail set up a customer can still create an account: it is active at once and is always a Customer');
-  calm(); assert((await login('nomail@shop.example', good.password, 'customer')).status === 200, 'and can sign in straight away');
+  assert(nm.json.data && nm.json.data.token && nm.json.data.home === 'app', 'the new customer is signed in at once and goes into the main application');
+  calm(); assert((await login('nomail@shop.example', good.password, 'customer')).status === 200, 'and can sign in again with the password');
   assert((await signup({ ...good, email: 'nomail@shop.example' })).status === 409, 'a duplicate is refused');
   assert((await signup({ ...good, email: 'nomail2@shop.example', role: 'Owner' })).status === 201 && (await get("SELECT role FROM users WHERE email = 'nomail2@shop.example'")).role === 'Customer', 'the role still cannot be chosen');
   mailer.setTransport({ sendMail: async (m) => { outbox.push(m); } });

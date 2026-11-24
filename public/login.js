@@ -111,7 +111,7 @@
     if (!body.full_name || !body.email || !body.phone) return err('m-signup', 'Please fill in your name, e-mail address and mobile number.');
     if (body.password !== body.confirm) return err('m-signup', 'The two passwords are not the same.');
     busy('sg-go', true);
-    try { const r = await api('POST', '/auth/signup', body); $('sg-pw').value = ''; $('sg-pw2').value = ''; if (r.activated) { $('si-id').value = body.email; show('verified'); $('v-verified').querySelector('h2').textContent = 'Account created'; $('v-verified').querySelector('p').textContent = 'Your account is ready. Sign in to open your customer dashboard.'; } else { $('signup-sent-text').textContent = r.message; show('signup-sent'); } }
+    try { const r = await api('POST', '/auth/signup', body); $('sg-pw').value = ''; $('sg-pw2').value = ''; if (r.activated && r.data) { saveSession(r.data, false); enter(r.data); return; } if (r.activated) { $('si-id').value = body.email; show('verified'); $('v-verified').querySelector('h2').textContent = 'Account created'; $('v-verified').querySelector('p').textContent = 'Your account is ready. Sign in to open your customer dashboard.'; } else { $('signup-sent-text').textContent = r.message; show('signup-sent'); } }
     catch (x) { err('m-signup', x.message); }
     finally { busy('sg-go', false); }
   });

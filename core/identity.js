@@ -309,7 +309,11 @@ async function signup(b = {}, meta = {}) {
   const r = await run(`INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries, must_change_password, party_id, email_verified) VALUES (?, ?, ?, 'Customer', ?, ?, ?, 0, 0, ?, 0)`, [username, hashPassword(pw), name, email, phone, noMail ? 'Active' : 'Pending', party]);
   const created = await get('SELECT * FROM users WHERE id = ?', [r.lastID]);
   await audit('AUTH_SIGNUP', { user: created, ip: meta.ip, details: { activated_without_email: noMail } });
-  if (noMail) { await refreshUser(created.id); return { success: true, activated: true, message: 'Your account is ready. You can sign in now.' }; }
+  if (noMail) { // no confirmation step: the new customer is signed straight in and lands in the application
+    await refreshUser(created.id);
+    const session = await issueLogin(created, meta);
+    return { success: true, activated: true, message: 'Your account is ready.', data: session.data };
+  }
   const token = await makeToken(created.id, 'verify', VERIFY_HOURS * 60, null, meta.ip), sent = await mailLink(created, token, 'verify');
   if (!sent.sent) throw bad('We could not send the confirmation e-mail. Please try again in a few minutes.', 502);
   return generic;
