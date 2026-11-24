@@ -11,7 +11,7 @@
  */
 const crypto = require('crypto');
 const db = require('./db');
-const { hashPassword, verifyPassword, needsRehash, createSessionToken } = require('./security');
+const { hashPassword, verifyPassword, verifyPasswordAsync, needsRehash, createSessionToken } = require('./security');
 const { checkPassword } = require('./passwordPolicy');
 const mailer = require('./mailer');
 
@@ -196,7 +196,7 @@ async function authenticate(identifier, password, meta = {}, { loginType = null,
   if (user.locked_until && Date.parse(user.locked_until) > Date.now()) { await audit('AUTH_LOGIN_BLOCKED', { user, ip: meta.ip, details: { reason: 'locked' } }); return generic; }
   if (user.password === db.SETUP_MARKER) return { success: false, error: 'First-time setup is not finished. Open RRE Entries on this computer and choose the administrator password.' };
   if (!p) return generic;
-  const v = verifyPassword(p, user.password);
+  const v = await verifyPasswordAsync(p, user.password);
   if (!v.valid) {
     const fails = (user.failed_logins || 0) + 1, lock = fails >= MAX_FAILS;
     await run('UPDATE users SET failed_logins = ?, locked_until = ? WHERE id = ?', [lock ? 0 : fails, lock ? iso(Date.now() + LOCK_MINUTES * 60e3) : null, user.id]);

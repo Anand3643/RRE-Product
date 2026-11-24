@@ -2,7 +2,7 @@ const sqlite3 = require('sqlite3').verbose();
 const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
-const { hashPassword, verifyPassword, createSessionToken } = require('./security');
+const { hashPassword, verifyPassword, verifyPasswordAsync, createSessionToken } = require('./security');
 const { checkPassword } = require('./passwordPolicy');
 
 // Determine the active company's data directory (see core/paths.js). One folder + database per company.
@@ -1080,7 +1080,10 @@ async function hardenAccounts(force = false) {
       // The guest account never has a password anyone could type: entry is only through the Guest button, and only while
       // the administrator allows it. An old shipped guest password is replaced by an unusable random one (records are kept).
       const guestOn = await guestAccessEnabled();
-      const known = (LEGACY_DEMO_PASSWORDS.guest || []).some((d) => verifyPassword(d, u.password).valid);
+      let known = false;
+      for (const d of (LEGACY_DEMO_PASSWORDS.guest || [])) {
+        if ((await verifyPasswordAsync(d, u.password)).valid) { known = true; break; }
+      }
       if (known) await run('UPDATE users SET password = ? WHERE id = ?', [hashPassword(crypto.randomBytes(24).toString('hex')), u.id]);
       const want = guestOn ? 'Active' : 'Inactive';
       if (u.status !== want) await run('UPDATE users SET status = ? WHERE id = ?', [want, u.id]);
@@ -1088,7 +1091,11 @@ async function hardenAccounts(force = false) {
     }
     if (u.password === SETUP_MARKER || u.must_change_password || u.password_changed_at) continue;
     const defaults = LEGACY_DEMO_PASSWORDS[String(u.username).toLowerCase()] || [];
-    if (defaults.some((d) => verifyPassword(d, u.password).valid)) {
+    let isDefault = false;
+    for (const d of defaults) {
+      if ((await verifyPasswordAsync(d, u.password)).valid) { isDefault = true; break; }
+    }
+    if (isDefault) {
       await run('UPDATE users SET must_change_password = 1 WHERE id = ?', [u.id]);
       console.log(`[Security] Account "${u.username}" still uses a shipped demo password: a new password will be required at next login.`);
     }
@@ -1181,10 +1188,10 @@ async function setupAdmin(password, clientMeta = {}) {
 async function changePassword(userId, currentPassword, newPassword, clientMeta = {}) {
   const user = await get('SELECT * FROM users WHERE id = ?', [userId]);
   if (!user || user.status !== 'Active') { const e = new Error('Account not available.'); e.status = 403; throw e; }
-  if (user.password === SETUP_MARKER || !verifyPassword(currentPassword || '', user.password).valid) { const e = new Error('The current password is not correct.'); e.status = 400; throw e; }
+  if (user.password === SETUP_MARKER || !(await verifyPasswordAsync(currentPassword || '', user.password)).valid) { const e = new Error('The current password is not correct.'); e.status = 400; throw e; }
   const weak = checkPassword(newPassword, { username: user.username });
   if (weak) { const e = new Error(weak); e.status = 400; throw e; }
-  if (verifyPassword(newPassword || '', user.password).valid) { const e = new Error('The new password must be different from the current one.'); e.status = 400; throw e; }
+  if ((await verifyPasswordAsync(newPassword || '', user.password)).valid) { const e = new Error('The new password must be different from the current one.'); e.status = 400; throw e; }
   await run('UPDATE users SET password = ?, must_change_password = 0, password_changed_at = ? WHERE id = ?', [hashPassword(newPassword.trim()), new Date().toISOString(), user.id]);
   return handleLoginSuccess(await get('SELECT * FROM users WHERE id = ?', [user.id]), clientMeta);
 }

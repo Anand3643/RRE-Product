@@ -74,7 +74,8 @@ async function runTests() {
   try {
     const testPlain = 'SecurePass_2026!';
     const hashed = hashPassword(testPlain);
-    assert(hashed.startsWith('argon2id$') && hashed.split('$').length === 5 && !hashed.includes(testPlain), 'Password hashed with salted Argon2id');
+    const validFormat = (hashed.startsWith('argon2id$') && hashed.split('$').length === 5) || (hashed.startsWith('scrypt$') && hashed.split('$').length === 4);
+    assert(validFormat && !hashed.includes(testPlain), 'Password hashed with salted Argon2id / scrypt');
     assert(verifyPassword(testPlain, require('./core/security').hashPasswordPbkdf2(testPlain)).valid === true, 'Older PBKDF2 hashes still verify (and are upgraded at the next sign-in)');
 
     const checkMatch = verifyPassword(testPlain, hashed);

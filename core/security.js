@@ -49,10 +49,20 @@ const PBKDF2_DIGEST = 'sha512';
  * @param {string} password 
  * @returns {string} Format: pbkdf2$iterations$salt$hash
  */
-// New passwords are stored with Argon2id (memory-hard; built into Node 24). If a runtime lacks it (older Electron/Node), scrypt is used instead.
-// Older PBKDF2 hashes keep working and are upgraded to Argon2id the next time their owner signs in.
+// New passwords are stored with Argon2id (memory-hard; built into Node 24). If a runtime lacks it (e.g. Electron BoringSSL), scrypt is used instead.
+// Older PBKDF2 hashes keep working and are upgraded to current algorithm the next time their owner signs in.
 const ARGON = { memory: 19456, passes: 2, parallelism: 1, tagLength: 32 }; // OWASP-recommended minimum for Argon2id
-const HAS_ARGON2 = typeof crypto.argon2Sync === 'function';
+
+function probeArgon2() {
+  try {
+    if (typeof crypto.argon2Sync !== 'function') return false;
+    crypto.argon2Sync('argon2id', { message: Buffer.from('t'), nonce: Buffer.alloc(16), memory: 1024, passes: 1, parallelism: 1, tagLength: 16 });
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+const HAS_ARGON2 = probeArgon2();
 const b64u = (b) => Buffer.from(b).toString('base64url');
 const SCRYPT = { N: 32768, r: 8, p: 1, keylen: 32, maxmem: 96 * 1024 * 1024 };
 
@@ -62,8 +72,12 @@ function hashPassword(password) {
   }
   const nonce = crypto.randomBytes(16);
   if (HAS_ARGON2) {
-    const tag = crypto.argon2Sync('argon2id', { message: Buffer.from(password), nonce, ...ARGON });
-    return `argon2id$v=19$m=${ARGON.memory},t=${ARGON.passes},p=${ARGON.parallelism}$${b64u(nonce)}$${b64u(tag)}`;
+    try {
+      const tag = crypto.argon2Sync('argon2id', { message: Buffer.from(password), nonce, ...ARGON });
+      return `argon2id$v=19$m=${ARGON.memory},t=${ARGON.passes},p=${ARGON.parallelism}$${b64u(nonce)}$${b64u(tag)}`;
+    } catch (e) {
+      // Fall through to scrypt if runtime throws "Argon2 algorithm not supported"
+    }
   }
   const tag = crypto.scryptSync(password, nonce, SCRYPT.keylen, { N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p, maxmem: SCRYPT.maxmem });
   return `scrypt$N=${SCRYPT.N},r=${SCRYPT.r},p=${SCRYPT.p}$${b64u(nonce)}$${b64u(tag)}`;
@@ -147,6 +161,45 @@ function verifyPassword(inputPassword, storedHash) {
     valid: isPlainMatch,
     needsMigration: isPlainMatch // flag to immediately re-hash in database
   };
+}
+
+/**
+ * Async password verifier with WASM fallback for Argon2id in environments like Electron
+ * where native crypto.argon2Sync is unsupported.
+ */
+async function verifyPasswordAsync(inputPassword, storedHash) {
+  const p = (inputPassword || '').trim();
+  const stored = (storedHash || '').trim();
+
+  // Try sync verification first (handles native argon2Sync, scrypt, pbkdf2, plaintext)
+  const syncRes = verifyPassword(p, stored);
+  if (syncRes.valid) return syncRes;
+
+  // If stored with argon2id but native crypto.argon2Sync failed or is unsupported (e.g. Electron)
+  if (stored.startsWith('argon2id$')) {
+    try {
+      const [, , params, salt, tag] = stored.split('$');
+      const m = /m=(\d+),t=(\d+),p=(\d+)/.exec(params);
+      if (!m) return { valid: false, needsMigration: false };
+      const want = Buffer.from(tag, 'base64url');
+      const { argon2id } = require('hash-wasm');
+      const raw = await argon2id({
+        password: p,
+        salt: Buffer.from(salt, 'base64url'),
+        iterations: +m[2],
+        memorySize: +m[1],
+        parallelism: +m[3],
+        hashLength: want.length,
+        outputType: 'binary'
+      });
+      const valid = same(Buffer.from(raw), want);
+      return { valid, needsMigration: true }; // Upgrade to scrypt in this runtime
+    } catch (e) {
+      return { valid: false, needsMigration: false };
+    }
+  }
+
+  return syncRes;
 }
 
 /**
@@ -350,6 +403,7 @@ function deriveSecret(purpose) {
 }
 
 module.exports = {
+  HAS_ARGON2,
   needsRehash: (stored) => !String(stored || '').startsWith(HAS_ARGON2 ? 'argon2id$' : 'scrypt$'),
   hashPasswordPbkdf2,
   deriveSecret,
@@ -358,6 +412,7 @@ module.exports = {
   setCompanyProvider,
   hashPassword,
   verifyPassword,
+  verifyPasswordAsync,
   createSessionToken,
   verifySessionToken,
   loginRateLimiter,
