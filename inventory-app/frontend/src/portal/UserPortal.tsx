@@ -296,7 +296,7 @@ function PortalFrame({ me, nav, workHome, dark, toggle, menu, setMenu, refEl, on
     <div className="min-h-screen bg-bg" data-portal="user">
       <header className="sticky top-0 z-30 border-b bg-surface/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-6xl items-center gap-4 px-4">
-          <Link to="/user/dashboard" className="flex items-center gap-2"><Boxes className="h-6 w-6 text-brand" /><span className="text-lg font-bold tracking-tight">StockPilot</span><span className="rounded-full bg-brand/15 px-2 py-0.5 text-[11px] font-semibold text-brand">Customer portal</span></Link>
+          <Link to="/user/dashboard" className="flex items-center gap-2"><Boxes className="h-6 w-6 text-brand" /><span className="text-lg font-bold tracking-tight">RRE Inventory</span><span className="rounded-full bg-brand/15 px-2 py-0.5 text-[11px] font-semibold text-brand">Customer portal</span></Link>
           <div className="ml-auto flex items-center gap-2">
             <CartButton />
             {workHome && <Link to={workHome} className="btn-ghost hidden sm:inline-flex"><Briefcase className="h-4 w-4" />Workspace</Link>}

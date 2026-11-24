@@ -28,7 +28,7 @@
     if (root()) return;
     const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
     const el = document.createElement('div'); el.id = 'rre-inv-host';
-    el.innerHTML = '<div class="bar"><button id="rre-inv-back">← Back to RRE</button><b>Inventory</b><span class="grow"></span><span id="rre-inv-books" title="Purchases, sales, transfers and adjustments made in Inventory are posted to the RRE books automatically" style="opacity:.9"></span><button id="rre-inv-sync" hidden>Post to books now</button><button id="rre-inv-win" title="Open in its own window">Open in new window</button></div><div class="msg" id="rre-inv-msg"></div>';
+    el.innerHTML = '<div class="bar"><button id="rre-inv-back">← Back to RRE Entries</button><b>RRE Inventory</b><span class="grow"></span><span id="rre-inv-books" title="Purchases, sales, transfers and adjustments made in RRE Inventory are posted to the RRE Entries books automatically" style="opacity:.9"></span><button id="rre-inv-sync" hidden>Post to books now</button><button id="rre-inv-win" title="Open in its own window">Open in new window</button></div><div class="msg" id="rre-inv-msg"></div>';
     document.body.appendChild(el);
     el.querySelector('#rre-inv-back').onclick = close;
     el.querySelector('#rre-inv-win').onclick = () => openWindow();
