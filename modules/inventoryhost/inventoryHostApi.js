@@ -17,9 +17,9 @@ const fail = (res, status, message) => res.status(status).json({ success: false,
 // When an RRE account changes (role, deactivation, password reset, sign-out) the inventory application follows at once.
 async function follow(userId) {
   try {
-    const u = await db.get('SELECT id, username, full_name, email, role, status FROM users WHERE id = ?', [userId]);
+    const u = await db.sys.get('SELECT id, username, full_name, email, role, status, company_id FROM users WHERE id = ?', [userId]);
     if (u && u.role === 'Guest') u.email = 'guest@rre-entries.app';
-    if (u && u.email && u.role !== 'Customer') await host.syncUser(u, { active: u.status === 'Active' });
+    if (u && u.email) await host.syncUser(u, { active: u.status === 'Active', company: u.company_id || undefined });
   } catch (e) { /* the inventory application may not be running */ }
 }
 identity.onRevoke((userId) => { follow(userId); });
@@ -31,11 +31,12 @@ router.post('/launch', async (req, res) => {
   try {
     const user = identify(req);
     if (!user) return fail(res, 401, 'Please sign in.');
-    if (user.role === 'Customer') return fail(res, 403, 'Use Inventory Management from the Gateway: it works on your own company.');
+    if (user.role === 'Customer' && !user.companyId) return fail(res, 403, 'Customer accounts linked to a customer record use the customer dashboard.');
     if (Array.isArray(user.modules) && !['Owner', 'Administrator'].includes(user.role) && !user.modules.includes('inventory')) return fail(res, 403, 'Your account does not have access to Inventory. Ask your administrator.');
-    const row = await db.get('SELECT id, username, full_name, email, role FROM users WHERE id = ? AND status = ?', [user.userId, 'Active']);
+    const row = await db.sys.get('SELECT id, username, full_name, email, role FROM users WHERE id = ? AND status = ?', [user.userId, 'Active']);
     if (!row) return fail(res, 401, 'This account is not active.');
     if (row.role === 'Guest') row.email = 'guest@rre-entries.app'; // read-only guest: a viewer in Inventory
+    if (user.role === 'Customer') row.own_company = true; // the owner of an inventory of their own
     if (!row.email && !['Owner', 'Administrator'].includes(row.role)) return fail(res, 409, 'Your account has no e-mail address, which Inventory needs to recognise you. Ask your administrator to add one.');
     const out = await host.launch({ user: row, path: req.body && req.body.path, wait: !(req.body && req.body.nowait) });
     if (out.starting) return res.status(202).json({ success: true, data: { starting: true } }); // still starting: the screen asks again

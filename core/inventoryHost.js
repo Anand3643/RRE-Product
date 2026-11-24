@@ -21,7 +21,14 @@ const { DEFAULT_COMPANY } = require('./paths');
 const APP_DIR = path.resolve(__dirname, '..', 'inventory-app');
 const BACKEND = path.join(APP_DIR, 'backend');
 const isWin = process.platform === 'win32';
-const state = { proc: null, port: null, company: null, python: null, error: null, starting: null, adopted: false };
+// One inventory process per company: the owner's company, and every customer's own company (started on first use, stopped when idle).
+const states = new Map();
+const IDLE_MINUTES = parseInt(process.env.RRE_INVENTORY_IDLE_MINUTES || '20', 10);
+function S(company = String(getCompanyNumber())) {
+  let st = states.get(String(company));
+  if (!st) { st = { proc: null, port: null, company: String(company), python: null, error: null, starting: null, adopted: false }; states.set(String(company), st); }
+  return st;
+}
 
 const dir = () => path.join(getDataDir(), 'inventory');
 const dbFile = () => path.join(dir(), 'stockpilot.db');
@@ -89,6 +96,7 @@ async function killTree(pid) {
 }
 
 async function adopt() {
+  const state = S();
   try {
     const i = JSON.parse(fs.readFileSync(infoFile(), 'utf8'));
     if (i && i.port && i.pid && alive(i.pid) && (await ping(i.port))) { Object.assign(state, { proc: null, port: i.port, pid: i.pid, adopted: true, company: String(getCompanyNumber()), error: null }); return true; }
@@ -97,6 +105,7 @@ async function adopt() {
 }
 
 async function doStart() {
+  const state = S();
   if (state.port && String(state.company) === String(getCompanyNumber()) && (await ping(state.port))) return;
   await stop(); // a different company (or a dead process) needs a fresh one
   if (await adopt()) return;
@@ -122,11 +131,13 @@ async function doStart() {
 }
 
 function ensureStarted() {
+  const state = S();
   if (!state.starting) state.starting = doStart().then(() => { state.error = null; }, (e) => { state.error = e.message; throw e; }).finally(() => { state.starting = null; });
   return state.starting;
 }
 
 async function stop() {
+  const state = S();
   const { proc, pid } = state;
   state.proc = null; state.port = null; state.pid = null; state.adopted = false;
   try { await killTree(pid || (proc && proc.pid)); if (proc && proc.pid !== pid) await killTree(proc.pid); } catch (e) { /* already gone */ }
@@ -150,27 +161,32 @@ function ssoToken(claims = {}) {
 
 /** Starts the inventory application if needed and returns the address to open. `admin` signs the administrator in; otherwise the original login is shown. */
 async function launch({ user = null, admin = false, path: sub = '/', wait = true } = {}) {
+  const state = S();
   if (!wait && !(state.port && (await ping(state.port, 800)))) { ensureStarted().catch(() => { /* the reason is kept in state.error and shown by status() */ }); return { starting: true }; } // answer at once; the screen waits for the start-up
   await ensureStarted();
   const p = /^\/[A-Za-z0-9\-_/]*$/.test(sub) ? sub : '/';
-  const claims = user ? { as: INV_ROLE[user.role] === 'owner' ? 'admin' : 'user', email: user.email, name: user.full_name || user.username, role: user.role } : { as: admin ? 'admin' : 'user', role: admin ? 'Owner' : 'Viewer' };
+  const claims = user ? { as: INV_ROLE[user.role] === 'owner' || user.own_company ? 'admin' : 'user', email: user.email, name: user.full_name || user.username, role: user.role } : { as: admin ? 'admin' : 'user', role: admin ? 'Owner' : 'Viewer' };
   return { url: `http://127.0.0.1:${state.port}${p}?sso=${ssoToken(claims)}`, port: state.port };
 }
 
 function status() {
+  const state = S();
   return { available: fs.existsSync(path.join(APP_DIR, 'frontend', 'dist', 'index.html')), running: !!state.port, starting: !!state.starting, port: state.port, error: state.error, database: fs.existsSync(dbFile()) ? 'ready' : 'not created yet' };
 }
 
 // when RRE quits normally the inventory process goes with it (after a hard kill it keeps running and RRE adopts it again on the next start)
 process.on('exit', () => {
   try {
-    const pid = state.pid || (state.proc && state.proc.pid);
-    if (pid) { if (isWin) require('child_process').spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true }); else process.kill(pid); }
+    for (const state of states.values()) {
+      const pid = state.pid || (state.proc && state.proc.pid);
+      if (pid) { if (isWin) require('child_process').spawnSync('taskkill', ['/PID', String(pid), '/T', '/F'], { windowsHide: true }); else process.kill(pid); }
+    }
   } catch (e) { /* ignore */ }
 });
 
 /** Tells the running inventory application that an RRE account changed (role, name, deactivated, signed out): it updates its projection and ends that person's inventory sessions. */
-function syncUser(user, { active = true } = {}) {
+function syncUser(user, { active = true, company = null } = {}) {
+  const state = S(company == null ? String(require('./db').getActiveCompanyNumber()) : company);
   return new Promise((resolve) => {
     if (!state.port || !user || !user.email) return resolve(false);
     const body = JSON.stringify({ token: ssoToken({ as: 'sync', email: user.email, name: user.full_name || user.username, role: user.role, active }) });
@@ -179,4 +195,20 @@ function syncUser(user, { active = true } = {}) {
   });
 }
 
-module.exports = { launch, status, ensureStarted, stop, findPython, _state: state, ssoToken, syncUser, INV_ROLE };
+// a customer's inventory process is stopped after it has been idle for a while (the next visit starts it again, data is kept)
+async function sweepIdle() {
+  const active = String(require('./db').getActiveCompanyNumber());
+  for (const [company, state] of states) {
+    if (company === active || !state.port || state.starting) continue;
+    const idle = await new Promise((resolve) => {
+      const req = http.get({ host: '127.0.0.1', port: state.port, path: '/api/rre/ping', timeout: 2000 }, (res) => { let b = ''; res.on('data', (c) => (b += c)); res.on('end', () => { try { resolve(JSON.parse(b).idle_seconds); } catch (e) { resolve(null); } }); });
+      req.on('error', () => resolve(null)); req.on('timeout', () => { req.destroy(); resolve(null); });
+    });
+    if (idle !== null && idle > IDLE_MINUTES * 60) {
+      try { await require('./db').withCompany(company, () => stop()); console.log('[Inventory] stopped the idle inventory of company ' + company); } catch (e) { /* ignore */ }
+    }
+  }
+}
+const sweeper = setInterval(() => { sweepIdle().catch(() => {}); }, 60000); if (sweeper.unref) sweeper.unref();
+
+module.exports = { launch, status, ensureStarted, stop, findPython, get _state() { return S(); }, ssoToken, syncUser, INV_ROLE, _states: states };

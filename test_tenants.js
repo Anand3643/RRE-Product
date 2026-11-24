@@ -91,7 +91,7 @@ async function main() {
   assert(mix.every((r) => r.status === 200), 'simultaneous work in different companies does not interfere');
 
   console.log('\n--- 4. What a customer can NOT do ---');
-  const deny = ['/api/auth/users', '/api/auth/login-activity', '/api/companies', '/api/system/logs', '/api/backup/list', '/api/inventory-app/status', '/api/auth/audit-log'];
+  const deny = ['/api/auth/users', '/api/auth/login-activity', '/api/companies', '/api/system/logs', '/api/backup/list', '/api/auth/audit-log'];
   for (const p of deny) assert([403, 404].includes((await req('GET', p, { token: A.token })).status), 'refused: ' + p);
   assert((await req('POST', '/api/companies', { token: A.token, body: { name: 'Hack Co' } })).status === 403 && (await req('POST', '/api/companies/switch', { token: A.token, body: { number: '100000' } })).status === 403, 'a customer can neither create nor switch companies');
   assert((await req('POST', '/api/auth/users', { token: A.token, body: { full_name: 'Evil Admin', email: 'evil@t.example', role: 'Owner', password: PW } })).status === 403, 'a customer cannot create users or an administrator');
@@ -129,6 +129,29 @@ async function main() {
   assert((await get('SELECT company_id FROM users WHERE id = ?', [u2.lastID])).company_id === null, 'a customer an administrator linked to a customer account is left as a portal customer');
   assert((await get("SELECT COUNT(*) c FROM ledgers WHERE name = 'Old Signup Person'")).c === 1, 'their earlier ledger is kept');
   assert((await require('./core/identity').upgradeSelfRegistered()) === 0, 'running it again changes nothing');
+
+  console.log('\n--- 7. Inventory for everyone: a private inventory per company ---');
+  const hostMod = require('./core/inventoryHost');
+  if (!(await hostMod.findPython())) console.log('  (Python with the inventory requirements was not found: this section is skipped)');
+  else {
+    const open = async (tk) => { for (let i = 0; i < 60; i++) { const r = await req('POST', '/api/inventory-app/launch', { token: tk, body: { nowait: true } }); if (r.status !== 202) return r; await new Promise((x) => setTimeout(x, 1500)); } return { status: 0, json: {} }; };
+    const [la, lb] = [await open(A.token), await open(B.token)];
+    assert(la.status === 200 && lb.status === 200, 'every customer can open Inventory from the side bar', JSON.stringify([la.json, lb.json]).slice(0, 200));
+    const portOf = (r) => new URL(r.json.data.url).port;
+    assert(portOf(la) !== portOf(lb), 'each company runs its own inventory (separate process and database)');
+    const sp = async (r, p, tok, m = 'GET', body) => { const base2 = `http://127.0.0.1:${portOf(r)}`; const res = await fetch(base2 + p, { method: m, headers: { ...(tok ? { Authorization: 'Bearer ' + tok } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined }); return { status: res.status, json: await res.json().catch(() => ({})) }; };
+    const sa = await sp(la, '/api/rre/sso', null, 'POST', { token: new URL(la.json.data.url).searchParams.get('sso') });
+    const sb = await sp(lb, '/api/rre/sso', null, 'POST', { token: new URL(lb.json.data.url).searchParams.get('sso') });
+    assert(sa.status === 200 && sa.json.user && sa.json.user.role === 'owner' && sa.json.user.email === 'alice@t.example', 'Alice is signed in as the owner of her own inventory (no second login)', JSON.stringify(sa.json).slice(0, 160));
+    const pa2 = await sp(la, '/api/products', sa.json.access_token, 'POST', { name: 'Alice Only Product', sku: 'AO-1', purchase_price: 10, selling_price: 15, tax_rate: 18 });
+    const listA = JSON.stringify((await sp(la, '/api/products', sa.json.access_token)).json), listB = JSON.stringify((await sp(lb, '/api/products', sb.json.access_token)).json);
+    assert(pa2.status < 300 && listA.includes('Alice Only Product') && !listB.includes('Alice Only Product'), 'what Alice stores in her inventory is not in Bob\'s');
+    assert((await sp(la, '/api/auth/login', null, 'POST', { email: 'alice@t.example', password: 'x' })).status === 410, 'there is still no separate inventory login');
+    const ownL = await req('POST', '/api/inventory-app/launch', { token: OWN, body: { nowait: false } });
+    assert(ownL.status === 200 && portOf(ownL) !== portOf(la) && portOf(ownL) !== portOf(lb), 'the owner\'s inventory is a third, separate one');
+    assert((await req('POST', '/api/auth/users/' + (await get("SELECT id FROM users WHERE email = 'alice@t.example'")).id + '/sign-out', { token: OWN })).json.success, 'the administrator can end a customer\'s session');
+    for (const st of hostMod._states.values()) { try { await require('./core/db').withCompany(st.company, () => hostMod.stop()); } catch (e) { /* ignore */ } }
+  }
 
   console.log(`\nTenants: ${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);

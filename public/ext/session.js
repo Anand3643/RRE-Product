@@ -25,7 +25,7 @@
     const canUsers = !!(perms && perms.canManageUsers);
     document.querySelectorAll('#au-rail [data-act="users"]').forEach((b) => { b.style.display = canUsers ? '' : 'none'; });
     const inv = document.querySelector('#au-rail button.item.inv'), sub = document.getElementById('au-inv-sub');
-    const invOk = allowedModule('inventory') && me.role !== 'Customer'; // the sidecar inventory is the owner's; customers use Inventory Management in the Gateway (their own company)
+    const invOk = allowedModule('inventory') && !(me.role === 'Customer' && !me.own_company); // every person with books of their own has their own inventory
     const canCompanies = canUsers || (me.role !== 'Customer' && Array.isArray(me.extras) && me.extras.includes('companies'));
     const co = document.getElementById('btn-companies'); if (co) co.style.display = canCompanies ? '' : 'none';
     if (inv) inv.style.display = invOk ? '' : 'none'; if (sub && !invOk) sub.style.display = 'none';

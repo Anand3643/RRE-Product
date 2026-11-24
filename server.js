@@ -66,7 +66,6 @@ const tallyXmlGateway = require('./modules/gateway/tallyXmlGateway');
 const platformRouter = require('./modules/platform/platformApi');
 const gstRouter = require('./modules/gst/gstApi');
 const bankRouter = require('./modules/bank/bankApi');
-const inventoryRouter = require('./modules/inventory/inventoryApi');
 const automationRouter = require('./modules/automation/automationApi');
 const { recurringRouter, importRouter } = require('./modules/bulk/bulkApi');
 const attachmentsRouter = require('./modules/attachments/attachmentsApi');
@@ -567,7 +566,6 @@ app.use('/api/attachments', attachmentsRouter); // new: documents attached to vo
 app.use('/api/recurring', recurringRouter); // new: recurring voucher drafts (human-confirmed)
 app.use('/api/import', importRouter); // new: previewed, all-or-nothing CSV voucher import
 app.use('/api/automation', automationRouter); // new: duplicates, suggestions, unusual transactions, reminders
-app.use('/api/inventory', inventoryRouter); // new: reorder, demand, dead stock, godown, supplier prices
 app.use('/api/bank', bankRouter); // new: statement import, smart reconciliation
 app.use('/api/gst', gstRouter); // new: GSTIN/HSN validation, tax checks, GSTR-2B reconciliation
 app.use('/api/platform', platformRouter); // new: notifications, search, export, activity log, backup verify

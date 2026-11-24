@@ -55,7 +55,7 @@ const RULES = [
 ];
 
 // Administration of the application as a whole (people, companies, updates, backups, the sidecar inventory): never for a customer
-const ADMIN_ONLY = [/^\/api\/auth\/(users|login-activity|migration|guest-access|modules|audit-log)/, /^\/api\/companies/, /^\/api\/system\//, /^\/api\/backup\//, /^\/api\/inventory-app/, /^\/api\/portal(\/|$)/];
+const ADMIN_ONLY = [/^\/api\/auth\/(users|login-activity|migration|guest-access|modules|audit-log)/, /^\/api\/companies/, /^\/api\/system\//, /^\/api\/backup\//, /^\/api\/portal(\/|$)/];
 
 const KNOWN_VOUCHER_TYPES = ['Contra', 'Payment', 'Receipt', 'Journal', 'Sales', 'Purchase', 'Debit Note', 'Credit Note'];
 

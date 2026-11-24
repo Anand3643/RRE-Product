@@ -161,9 +161,14 @@ def rre_sync(body: dict):
 _CLOSED = ("/api/auth/login", "/api/auth/signup", "/api/auth/forgot", "/api/auth/reset", "/api/auth/change-password")
 
 
+_LAST = [time.time()]
+
+
 @app.middleware("http")
 async def _one_identity(request: Request, call_next):
     path = request.url.path
+    if not path.startswith("/api/rre/"):
+        _LAST[0] = time.time()  # real use (not RRE's own checks): lets RRE stop an idle customer inventory
     if path in _CLOSED or path == "/api/users" or path.startswith("/api/users/") and not path.startswith("/api/users/directory"):
         return JSONResponse({"detail": "Accounts are managed in RRE Entries. Sign in there."}, status_code=410)
     return await call_next(request)
@@ -171,7 +176,7 @@ async def _one_identity(request: Request, call_next):
 
 @app.get("/api/rre/ping", tags=["rre"])
 def rre_ping():
-    return {"ok": True, "app": "stockpilot", "version": app.version}
+    return {"ok": True, "app": "stockpilot", "version": app.version, "idle_seconds": int(time.time() - _LAST[0])}
 
 
 # ---- the original web interface ----------------------------------------------------------------------------------------

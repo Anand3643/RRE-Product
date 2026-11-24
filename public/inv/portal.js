@@ -58,7 +58,7 @@
   function saveCart() { store.set(cartKey(), JSON.stringify([...S.cart.values()])); updateCartBadge(); }
   function loadCart() { S.cart = new Map(); try { for (const l of JSON.parse(store.get(cartKey()) || '[]')) if (l && l.id && l.qty > 0) S.cart.set(l.id, l); } catch (e) { /* start empty */ } }
   function updateCartBadge() { const n = S.cart.size, b = root() && root().querySelector('.pt-count'); if (b) { b.textContent = n; b.hidden = !n; } }
-  const TABS = [['home', 'Dashboard'], ['catalogue', 'Browse Products'], ['orders', 'My Orders'], ['packages', 'Track Packages'], ['history', 'Purchase History'], ['invoices', 'My Invoices'], ['assistant', 'AI Assistant'], ['profile', 'My Profile']];
+  const TABS = [['home', 'Dashboard'], ['catalogue', 'Browse Products'], ['orders', 'My Orders'], ['packages', 'Track Packages'], ['history', 'Purchase History'], ['invoices', 'My Invoices'], ['profile', 'My Profile']];
 
   function build() {
     if (root()) return;
@@ -170,19 +170,6 @@
       ${d.items.length ? `<div class="grid g2">${d.items.map(card).join('')}</div>` : `<div class="card">${empty('No packages yet', 'Your orders and their delivery progress will appear here.')}</div>`}</div>`;
   };
 
-  PAGES.assistant = async (v) => {
-    v.innerHTML = `<div class="sp-wrap"><div class="card" style="padding:14px;max-width:760px;margin:0 auto"><div class="row between"><b>${ic('sparkles')} Your assistant</b><span class="sub small">Answers only from your own orders and purchases</span></div>
-      <div id="as-log" style="margin:12px 0;display:grid;gap:10px;max-height:52vh;overflow:auto"></div>
-      <div class="row wrap" id="as-chips" style="gap:6px;margin-bottom:8px">${['Where is my latest order?', 'Show my pending orders', 'How much have I spent?', 'Explain my last invoice', 'What is in stock?', 'Recommend something for me'].map((t) => `<button class="btn flat sm" data-q="${esc(t)}">${esc(t)}</button>`).join('')}</div>
-      <form id="as-form" class="row" style="gap:8px"><input class="input" id="as-in" placeholder="Ask about your orders, packages, invoices or products…" maxlength="400" autocomplete="off" style="flex:1"><button class="btn primary" type="submit">Ask</button></form></div></div>`;
-    const log = v.querySelector('#as-log'), input = v.querySelector('#as-in');
-    const add = (who, text) => { const d = document.createElement('div'); d.style.cssText = 'padding:10px 12px;border-radius:12px;white-space:pre-wrap;max-width:92%;' + (who === 'me' ? 'justify-self:end;background:rgb(var(--brand)/.14)' : 'background:rgb(var(--muted))'); d.textContent = text; log.appendChild(d); log.scrollTop = log.scrollHeight; return d; };
-    add('bot', 'Hello! Ask me about your orders, delivery status, invoices or products. I only see your own records.');
-    const ask = async (text) => { if (!text.trim()) return; add('me', text); input.value = ''; const wait = add('bot', '…'); try { const r = await api('/assistant', { method: 'POST', body: { question: text } }); wait.textContent = r.answer; } catch (e) { wait.textContent = 'Sorry, I could not answer that: ' + e.message; } };
-    v.querySelector('#as-form').onsubmit = (e) => { e.preventDefault(); ask(input.value); };
-    v.querySelectorAll('[data-q]').forEach((b) => { b.onclick = () => ask(b.dataset.q); });
-    input.focus();
-  };
 
   PAGES.catalogue = async (v) => {
     const q = S.q.catalogue = { page: 1, ...(S.q.catalogue || {}) };

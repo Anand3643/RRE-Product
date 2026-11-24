@@ -15,7 +15,6 @@
     "test:fixes": "node test_fixes.js",
     "test:returns": "node test_returns.js",
     "test:gstengine": "node test_gstengine.js",
-    "test:inventory": "node test_inventory.js",
     "test:automation": "node test_automation.js",
     "test:bulk": "node test_bulk.js",
     "test:attachments": "node test_attachments.js",

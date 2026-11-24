@@ -1,5 +1,5 @@
 /**
- * Customer dashboard extras (package tracking, purchase history, dashboard summary, customer assistant).
+ * Customer dashboard extras (package tracking, purchase history, dashboard summary).
  * Every function receives `portal` = { partyId, ... } built by portal.portalOnly from the DATABASE (the signed-in customer's own
  * linked customer account), never from anything the browser sends. Every query is filtered by that id.
  */
@@ -109,85 +109,4 @@ async function dashboard(p) {
     packages: pkg.counts, recent_purchases: (await history(p, {})).items.slice(0, 5), notifications: notes.slice(0, 8) };
 }
 
-// ---------------------------------------------------------------------------------------------------- customer assistant
-const HELP = 'I can help with your own orders and purchases. Try: "Where is my latest order?", "Show my pending orders", "How much have I spent?", "Explain my last invoice", "What is in stock?", or "Recommend something for me".';
-const hasAny = (q, words) => words.some((w) => q.includes(w));
-
-async function assistant(p, questionRaw) {
-  const question = String(questionRaw || '').trim().slice(0, 400);
-  if (question.length < 2) return { answer: HELP, suggestions: ['Where is my latest order?', 'How much have I spent?', 'Recommend something for me'] };
-  const q = question.toLowerCase();
-  const numberMatch = /\b([A-Za-z]{1,6}[-/ ]?\d{2,}[A-Za-z0-9\-/]*)\b/.exec(question);
-  const orders = await all("SELECT id, number, status, order_date, expected_date, total FROM inv_orders WHERE kind = 'sales' AND party_ledger_id = ? ORDER BY id DESC LIMIT 100", [p.partyId]);
-  const ST = { draft: 'awaiting confirmation by the business', confirmed: 'confirmed and being processed', invoiced: 'invoiced', cancelled: 'cancelled' };
-  const name = (portalName) => portalName;
-
-  // a specific number (only ever looked up inside THIS customer's records)
-  if (numberMatch && hasAny(q, ['order', 'invoice', 'package', 'shipment', 'track', 'status', 'where'])) {
-    const no = numberMatch[1].replace(/\s+/g, '').toLowerCase();
-    const o = orders.find((x) => x.number.replace(/\s+/g, '').toLowerCase() === no);
-    if (o) {
-      const lines = await all('SELECT s.name, l.qty, l.amount FROM inv_order_lines l JOIN stock_items s ON s.id = l.item_id WHERE l.order_id = ?', [o.id]);
-      const ship = (await inventoryShipments(p.partyId)).find((s) => s.order_number === o.number);
-      return { answer: `Order ${o.number} (${o.order_date}) is ${ST[o.status] || o.status}. Total ${money(o.total)}. Items: ${lines.map((l) => `${l.name} × ${l.qty}`).join(', ') || 'none'}.${ship ? ` Package: ${ship.status_label}${ship.carrier ? ' with ' + ship.carrier : ''}${ship.tracking_number ? ', tracking ' + ship.tracking_number : ''}${ship.expected_delivery ? ', expected ' + ship.expected_delivery : ''}.` : ''}`, data: { order: o.number } };
-    }
-    const v = await get("SELECT id, voucher_no, date, total_amount FROM vouchers WHERE party_ledger_id = ? AND voucher_type IN ('Sales','Credit Note') AND REPLACE(LOWER(voucher_no), ' ', '') = ?", [p.partyId, no]);
-    if (v) return { answer: await explainInvoice(p, v.id) };
-    return { answer: `I could not find "${numberMatch[1]}" in your orders or invoices. Check the number on your order or invoice.` };
-  }
-
-  if (hasAny(q, ['track', 'where is', 'delivery', 'deliver', 'package', 'shipment', 'shipped', 'dispatch', 'courier'])) {
-    const pk = await packages(p);
-    if (!pk.items.length) return { answer: 'You have no orders or packages yet.' };
-    const lines = pk.items.slice(0, 4).map((s) => `${s.order_number}: ${s.status_label}${s.carrier ? ' (' + s.carrier + (s.tracking_number ? ', ' + s.tracking_number : '') + ')' : ''}${s.expected_delivery ? ', expected ' + s.expected_delivery : ''}`);
-    return { answer: `Your latest packages:\n${lines.join('\n')}`, data: { go: 'packages' } };
-  }
-  if (hasAny(q, ['pending', 'awaiting', 'open order', 'not confirmed'])) {
-    const pend = orders.filter((o) => o.status === 'draft' || o.status === 'confirmed');
-    return { answer: pend.length ? `You have ${pend.length} pending order(s): ${pend.slice(0, 6).map((o) => `${o.number} (${o.status === 'draft' ? 'awaiting confirmation' : 'confirmed'}, ${money(o.total)})`).join('; ')}.` : 'You have no pending orders.' };
-  }
-  if (hasAny(q, ['how many order', 'total order', 'number of order', 'completed', 'cancelled'])) {
-    const n = (s) => orders.filter((o) => o.status === s).length;
-    return { answer: `You have ${orders.length} order(s): ${n('draft')} awaiting confirmation, ${n('confirmed')} confirmed, ${n('invoiced')} invoiced, ${n('cancelled')} cancelled.` };
-  }
-  if (hasAny(q, ['spent', 'spend', 'total purchase', 'how much', 'bought', 'purchase history', 'last purchase', 'recent purchase'])) {
-    const inv = await all("SELECT voucher_no, date, voucher_type, total_amount FROM vouchers WHERE party_ledger_id = ? AND voucher_type IN ('Sales','Credit Note') ORDER BY date DESC, id DESC", [p.partyId]);
-    if (!inv.length) return { answer: 'You have no invoices yet, so there are no purchases to total.' };
-    const sum = inv.reduce((t, x) => t + (x.voucher_type === 'Credit Note' ? -x.total_amount : x.total_amount), 0);
-    return { answer: `Across ${inv.length} invoice(s) you have been billed ${money(sum)} in total. Your latest is ${inv[0].voucher_no} on ${inv[0].date} for ${money(inv[0].total_amount)}.`, data: { go: 'history' } };
-  }
-  if (hasAny(q, ['invoice', 'bill', 'gst', 'tax', 'explain', 'receipt'])) {
-    const v = await get("SELECT id FROM vouchers WHERE party_ledger_id = ? AND voucher_type IN ('Sales','Credit Note') ORDER BY date DESC, id DESC LIMIT 1", [p.partyId]);
-    return { answer: v ? await explainInvoice(p, v.id) : 'You have no invoices yet.' };
-  }
-  if (hasAny(q, ['recommend', 'suggest', 'buy again', 'reorder', 'similar'])) {
-    const rec = await recommendations(p);
-    return { answer: rec.length ? `Based on what you bought before and what is in stock: ${rec.map((r) => `${r.name} (${money(r.price)}, ${r.availability_label})`).join('; ')}.` : 'There is nothing to recommend yet: place an order and I will learn what you like.', data: { go: 'catalogue' } };
-  }
-  if (hasAny(q, ['stock', 'available', 'availability', 'price', 'product', 'item', 'sell', 'have you got', 'do you have'])) {
-    const words = q.replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((w) => w.length > 2 && !['stock', 'available', 'availability', 'price', 'product', 'products', 'item', 'items', 'have', 'you', 'got', 'the', 'what', 'which', 'for', 'and', 'with', 'sell', 'show', 'any', 'are', 'there', 'much', 'does', 'cost'].includes(w));
-    const cat = await portal.catalogue({ q: words.join(' '), page_size: 6 });
-    return { answer: cat.items.length ? `${words.length ? 'Matching' : 'Available'} products: ${cat.items.map((i) => `${i.name} — ${money(i.price)}, ${i.availability_label}`).join('; ')}.` : 'I could not find a matching product. Try a different word, or browse the catalogue.', data: { go: 'catalogue' } };
-  }
-  if (hasAny(q, ['profile', 'my account', 'my details', 'email', 'phone'])) {
-    return { answer: `Your account is linked to customer "${p.party.name}". You can update your name and phone, and change your password, under My profile.`, data: { go: 'profile' } };
-  }
-  return { answer: HELP, suggestions: ['Where is my latest order?', 'How much have I spent?', 'Recommend something for me'] };
-}
-
-async function explainInvoice(p, id) {
-  const inv = await portal.getInvoice(p, id);
-  return `${inv.type === 'Credit Note' ? 'Credit note' : 'Invoice'} ${inv.number} dated ${inv.date}: items ${inv.items.map((i) => `${i.item} × ${i.qty} at ${money(i.rate)}${i.discount_pct ? ' (' + i.discount_pct + '% discount)' : ''}`).join(', ') || 'none'}. The items come to ${money(inv.taxable)} before tax; GST and rounding add ${money(inv.tax_and_rounding)}, so the total is ${money(inv.total)}.`;
-}
-
-async function recommendations(p) {
-  const bought = await all("SELECT DISTINCT e.stock_item_id id FROM inventory_entries e JOIN vouchers v ON v.id = e.voucher_id WHERE v.party_ledger_id = ? AND v.voucher_type = 'Sales' LIMIT 40", [p.partyId]).catch(() => []);
-  const cat = await portal.catalogue({ page_size: 60 });
-  const boughtIds = new Set(bought.map((b) => b.id));
-  const inStock = cat.items.filter((i) => i.availability !== 'out');
-  const again = inStock.filter((i) => boughtIds.has(i.id)).slice(0, 3);
-  const fresh = inStock.filter((i) => !boughtIds.has(i.id)).slice(0, 3 - again.length + 2);
-  return [...again, ...fresh].slice(0, 5);
-}
-
-module.exports = { packages, history, dashboard, assistant, recommendations, trackingLink };
+module.exports = { packages, history, dashboard, trackingLink };

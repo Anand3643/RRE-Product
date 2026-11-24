@@ -289,7 +289,7 @@ async function main() {
   assert(samLogin.status === 200 && samLogin.json.data.home === 'app' && samLogin.json.data.user.role === 'Customer', 'a confirmed customer signs in and lands in the customer portal');
   const SC = samLogin.json.data.token;
   assert((await login('pend@shop.example', good.password, 'employee')).status === 401 && (await login('pend@shop.example', good.password, 'admin')).status === 401, 'a customer cannot enter through the Employee or Admin option');
-  assert((await g(SC, '/api/auth/users')).status === 403 && (await g(SC, '/api/companies')).status === 403 && (await g(SC, '/api/auth/login-activity')).status === 403 && (await g(SC, '/api/inventory-app/status')).status === 403 && (await g(SC, '/api/portal/me')).status === 403, 'a customer cannot reach user management, the company list, login activity or the owner\'s portal');
+  assert((await g(SC, '/api/auth/users')).status === 403 && (await g(SC, '/api/companies')).status === 403 && (await g(SC, '/api/auth/login-activity')).status === 403 && (await g(SC, '/api/portal/me')).status === 403, 'a customer cannot reach user management, the company list, login activity or the owner\'s portal');
   assert((await g(SC, '/api/vouchers')).status === 200 && (await g(SC, '/api/inv/items')).status === 200 && (await g(SC, '/api/reports/trial-balance')).status === 200, 'but has the whole accounting, inventory and reports application, in their own company');
   require('./core/identity')._resetLimits(); const forgotC = await forgotFor('pend@shop.example'); assert(!!forgotC.mail, 'a self-registered customer can use Forgot password');
 
