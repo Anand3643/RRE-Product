@@ -73,6 +73,24 @@ async function refreshUser(id) {
   if (u) state.users.set(id, { status: u.status, role: u.role, modules: parseModules(u.module_access), extras: parseModules(u.extra_access, true) || [], party_id: u.party_id, company_id: u.company_id || null, username: u.username }); else state.users.delete(id);
   return u;
 }
+/**
+ * Customers who signed up BEFORE every customer got books of their own (their account was linked to a customer ledger the sign-up created)
+ * are given a company of their own now. Their old ledger and records stay where they are. Customers an administrator linked to a real
+ * customer account are not touched.
+ */
+async function upgradeSelfRegistered() {
+  try {
+    const rows = await all("SELECT id, username, full_name, email FROM users WHERE role = 'Customer' AND company_id IS NULL AND party_id IN (SELECT CAST(entity_id AS INTEGER) FROM activity_log WHERE username = 'self-registration' AND entity = 'ledger')");
+    for (const u of rows) {
+      const no = await require('./companies').createForUser(u);
+      await run('UPDATE users SET company_id = ? WHERE id = ?', [no, u.id]);
+      await refreshUser(u.id);
+      console.log('[Identity] ' + u.username + ' now has a company of their own (' + no + ').');
+    }
+    return rows.length;
+  } catch (e) { console.warn('[Identity] upgrade of earlier sign-ups skipped:', e.message); return 0; }
+}
+
 let sweeper = null;
 function sweep() {
   const now = Date.now(), gone = new Set();
@@ -90,6 +108,7 @@ async function preload() {
     for (const r of rows) { state.sessions.set(r.sid, { userId: r.user_id, exp: Date.parse(r.expires_at) }); ids.add(r.user_id); }
     for (const id of ids) await refreshUser(id);
   } catch (e) { /* tables are created by the migration; before it runs there is nothing to load */ }
+  await upgradeSelfRegistered();
 }
 /** Re-reads every cached account (called after any write to the users table made outside this module). */
 let refreshing = null;
@@ -469,7 +488,7 @@ async function updateOwnProfile(userId, b = {}) {
 
 module.exports = {
   TYPE_OF, EMPLOYEE_ROLES, LOGIN_TYPES, MODULES, EXTRAS, MODULE_PATHS, moduleOf, parseModules, GENERIC_FAIL,
-  preload, refreshAll, liveSession, refreshUser, onRevoke, onChange, createSession, revokeSession, revokeUserSessions,
+  preload, upgradeSelfRegistered, refreshAll, liveSession, refreshUser, onRevoke, onChange, createSession, revokeSession, revokeUserSessions,
   authenticate, issueLogin, logout, me, findAccount,
   requestReset, validateResetToken, resetPassword, signup, verifyEmail, resendVerification,
   listUsers, createUser, updateUser, sendResetFor, loginActivity, updateOwnProfile, ownerCount, audit,

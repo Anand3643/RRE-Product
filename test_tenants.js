@@ -117,6 +117,19 @@ async function main() {
   const act = (await req('GET', '/api/auth/login-activity?limit=200', { token: OWN })).json.data;
   assert(act.events.some((e) => e.action === 'AUTH_SIGNUP') && act.logins.length > 3, 'sign-ups and logins are tracked for the administrator');
 
+  console.log('\n--- 6. Customers who signed up before this change get their own company too ---');
+  const lg = await run("INSERT INTO ledgers (name, group_id, opening_balance, opening_balance_type) VALUES ('Old Signup Person', ?, 0, 'Dr')", [grp]);
+  const lg2 = await run("INSERT INTO ledgers (name, group_id, opening_balance, opening_balance_type) VALUES ('Admin Linked Buyer', ?, 0, 'Dr')", [grp]);
+  const hash = (await get("SELECT password FROM users WHERE role = 'Owner'")).password;
+  const u1 = await run("INSERT INTO users (username, password, full_name, role, email, status, party_id, email_verified) VALUES ('oldsignup', ?, 'Old Signup Person', 'Customer', 'old@t.example', 'Active', ?, 1)", [hash, lg.lastID]);
+  const u2 = await run("INSERT INTO users (username, password, full_name, role, email, status, party_id, email_verified) VALUES ('linkedbuyer', ?, 'Admin Linked Buyer', 'Customer', 'linked@t.example', 'Active', ?, 1)", [hash, lg2.lastID]);
+  await run("INSERT INTO activity_log (username, role, action, entity, entity_id) VALUES ('self-registration', 'System', 'INV_CUSTOMER_CREATE', 'ledger', ?)", [String(lg.lastID)]);
+  const upg = await require('./core/identity').upgradeSelfRegistered();
+  assert(upg === 1 && (await get('SELECT company_id FROM users WHERE id = ?', [u1.lastID])).company_id === 'U' + u1.lastID, 'an earlier self-registered customer is given a company of their own');
+  assert((await get('SELECT company_id FROM users WHERE id = ?', [u2.lastID])).company_id === null, 'a customer an administrator linked to a customer account is left as a portal customer');
+  assert((await get("SELECT COUNT(*) c FROM ledgers WHERE name = 'Old Signup Person'")).c === 1, 'their earlier ledger is kept');
+  assert((await require('./core/identity').upgradeSelfRegistered()) === 0, 'running it again changes nothing');
+
   console.log(`\nTenants: ${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 }
