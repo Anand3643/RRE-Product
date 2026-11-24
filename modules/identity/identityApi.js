@@ -42,7 +42,7 @@ router.post('/login', rateLimitLoginMiddleware, async (req, res) => {
 router.post('/signup', async (req, res) => {
   try { res.status(201).json(await identity.signup(req.body || {}, meta(req))); } catch (e) { fail(res, e); }
 });
-router.post('/verify-email', async (req, res) => { try { res.json(await identity.verifyEmail(String((req.body || {}).token || ''), meta(req))); } catch (e) { fail(res, e); } });
+router.post('/verify-email', async (req, res) => { try { res.json(await identity.verifyEmail(String((req.body || {}).token || ''), meta(req), (req.body || {}).claim ? String(req.body.claim) : null)); } catch (e) { fail(res, e); } });
 router.post('/resend-verification', async (req, res) => {
   const { done } = identity.resendVerification(String((req.body || {}).email || ''), meta(req));
   if (process.env.RRE_TEST_AWAIT_MAIL === '1') await done;

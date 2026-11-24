@@ -593,6 +593,13 @@ const MIGRATIONS = [
       'ALTER TABLE users ADD COLUMN email_verified_at TEXT',
       "UPDATE users SET email_verified = 1, email_verified_at = COALESCE(created_at, datetime('now')) WHERE email_verified = 0"
     ]
+  },
+  {
+    id: '020_signup_claim',
+    description: 'Lets the browser that created a customer account be signed in when it confirms the e-mail link (additive only)',
+    statements: [
+      'ALTER TABLE password_resets ADD COLUMN claim_hash TEXT'
+    ]
   }
 ];
 

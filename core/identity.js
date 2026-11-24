@@ -209,10 +209,10 @@ function limited(key, max, windowMs) {
   if (arr.length >= max) { buckets.set(key, arr); return true; }
   arr.push(now); buckets.set(key, arr); return false;
 }
-async function makeToken(userId, purpose, minutes, createdBy = null, ip = null) {
+async function makeToken(userId, purpose, minutes, createdBy = null, ip = null, claimHash = null) {
   const token = crypto.randomBytes(32).toString('base64url');
   await run('UPDATE password_resets SET used_at = ? WHERE user_id = ? AND used_at IS NULL', [iso(), userId]); // only the newest link works
-  await run('INSERT INTO password_resets (user_id, token_hash, purpose, created_at, expires_at, requested_ip, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)', [userId, sha256(token), purpose, iso(), iso(Date.now() + minutes * 60e3), ip, createdBy]);
+  await run('INSERT INTO password_resets (user_id, token_hash, purpose, created_at, expires_at, requested_ip, created_by, claim_hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?)', [userId, sha256(token), purpose, iso(), iso(Date.now() + minutes * 60e3), ip, createdBy, claimHash]);
   return token;
 }
 const linkFor = (token, kind = 'reset') => `${mailer.publicUrl()}/login.html?${kind === 'verify' ? 'verify' : 'reset'}=${encodeURIComponent(token)}`;
@@ -314,11 +314,13 @@ async function signup(b = {}, meta = {}) {
     const session = await issueLogin(created, meta);
     return { success: true, activated: true, message: 'Your account is ready.', data: session.data };
   }
-  const token = await makeToken(created.id, 'verify', VERIFY_HOURS * 60, null, meta.ip), sent = await mailLink(created, token, 'verify');
+  // the browser that created the account keeps a secret "claim": when THAT browser opens the confirmation link it is signed straight in
+  const claim = crypto.randomBytes(24).toString('base64url');
+  const token = await makeToken(created.id, 'verify', VERIFY_HOURS * 60, null, meta.ip, sha256(claim)), sent = await mailLink(created, token, 'verify');
   if (!sent.sent) throw bad('We could not send the confirmation e-mail. Please try again in a few minutes.', 502);
-  return generic;
+  return { ...generic, claim };
 }
-async function verifyEmail(token, meta = {}) {
+async function verifyEmail(token, meta = {}, claim = null) {
   const t = await tokenRow(token);
   if (!t || t.purpose !== 'verify') throw bad('This confirmation link is no longer valid. Request a new one.', 400, 'VERIFY_INVALID');
   const user = await get('SELECT * FROM users WHERE id = ?', [t.user_id]);
@@ -328,6 +330,10 @@ async function verifyEmail(token, meta = {}) {
   await run("UPDATE users SET status = 'Active', email_verified = 1, email_verified_at = ? WHERE id = ?", [iso(), user.id]);
   await refreshUser(user.id);
   await audit('AUTH_EMAIL_VERIFIED', { user, ip: meta.ip });
+  if (claim && t.claim_hash && typeof claim === 'string' && sha256(claim) === t.claim_hash) {
+    const fresh = await get('SELECT * FROM users WHERE id = ?', [user.id]);
+    return { success: true, data: (await issueLogin(fresh, meta)).data };
+  }
   return { success: true };
 }
 function resendVerification(email, meta = {}) {

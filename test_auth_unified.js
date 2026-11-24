@@ -293,6 +293,21 @@ async function main() {
   require('./core/identity')._resetLimits(); const forgotC = await forgotFor('pend@shop.example'); assert(!!forgotC.mail, 'a self-registered customer can use Forgot password');
 
   calm();
+  console.log('--- 9b. Confirming in the same browser signs the customer in ---');
+  require('./core/identity')._resetLimits(); calm();
+  const cl1 = await signup({ ...good, email: 'claim1@shop.example', full_name: 'Claim One' }); const tk_1 = vTok(outbox[outbox.length - 1]);
+  assert(cl1.json.claim && cl1.json.claim.length > 20, 'registration hands the creating browser a private claim');
+  const noClaim = await req('POST', '/api/auth/verify-email', { body: { token: tk_1 } });
+  assert(noClaim.json.success && !noClaim.json.data, 'opening the link elsewhere (no claim) only confirms the e-mail: no session is given');
+  const cl2 = await signup({ ...good, email: 'claim2@shop.example', full_name: 'Claim Two' }); const tk_2 = vTok(outbox[outbox.length - 1]);
+  const wrong = await req('POST', '/api/auth/verify-email', { body: { token: tk_2, claim: 'x'.repeat(32) } });
+  assert(wrong.json.success && !wrong.json.data, 'a wrong claim does not sign anyone in');
+  const cl3 = await signup({ ...good, email: 'claim3@shop.example', full_name: 'Claim Three' }); const tk_3 = vTok(outbox[outbox.length - 1]);
+  const right = await req('POST', '/api/auth/verify-email', { body: { token: tk_3, claim: cl3.json.claim } });
+  assert(right.json.success && right.json.data && right.json.data.token && right.json.data.user.role === 'Customer' && right.json.data.home === 'app', 'the browser that created the account is signed in when it confirms: straight into the application');
+  assert((await req('GET', '/api/portal/me', { token: right.json.data.token })).status === 200, 'and that session is a normal customer session');
+  assert((await req('POST', '/api/auth/verify-email', { body: { token: tk_3, claim: cl3.json.claim } })).status === 400, 'the link and claim work only once');
+
   console.log('\n--- 10. Employees: invitation only ---');
   assert((await signup({ ...good, email: 'sneaky@shop.example', role: 'Accountant', login_type: 'employee' })).status === 201 && (await get("SELECT role FROM users WHERE email = 'sneaky@shop.example'")).role === 'Customer', 'asking for an Employee role at registration still produces a Customer');
   assert((await req('POST', '/api/auth/users', { body: { full_name: 'Ghost Emp', email: 'ghost@x.example', role: 'Accountant', password: EMP } })).status === 401 && (await req('POST', '/api/auth/users', { token: SC, body: { full_name: 'Ghost Emp', email: 'ghost@x.example', role: 'Accountant', password: EMP } })).status === 403, 'nobody but an administrator can create an employee (anonymous and customer are refused)');
