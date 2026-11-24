@@ -126,10 +126,10 @@
       const mods = u.login_type === 'employee' && u.modules ? ` <span class="tag warn" title="Limited to: ${esc(u.modules.join(', '))}">${u.modules.length} module${u.modules.length === 1 ? '' : 's'}</span>` : '';
       return `<tr data-id="${u.id}"><td class="nm"><b>${esc(u.full_name)}${self ? ' (you)' : ''}</b><span>${esc(u.email || u.username)}${u.customer ? ' · ' + esc(u.customer) : ''}</span></td>
         <td><span class="tag ${u.login_type}">${u.login_type === 'admin' ? 'Admin' : u.login_type === 'customer' ? 'Customer' : 'Employee'}</span> <span style="color:var(--u-ink2);font-size:12px">${esc(u.role)}</span>${mods}${u.needs_review ? ' <span class="tag warn" title="Imported: check the role">review</span>' : ''}</td>
-        <td><span class="tag ${u.status === 'Active' ? 'on' : 'off'}">${esc(u.status)}</span>${u.locked ? ' <span class="tag off">locked</span>' : ''}${u.must_change_password || u.reset_pending ? ' <span class="tag warn">password pending</span>' : ''}</td>
+        <td><span class="tag ${u.status === 'Active' ? 'on' : (u.status === 'Pending' || u.status === 'Invited') ? 'warn' : 'off'}">${esc(u.status === 'Pending' ? 'Awaiting e-mail confirmation' : u.status === 'Invited' ? 'Invited' : u.status)}</span>${u.locked ? ' <span class="tag off">locked</span>' : ''}${u.must_change_password || u.reset_pending ? ' <span class="tag warn">password pending</span>' : ''}</td>
         <td>${esc(when(u.last_login))}<br><span style="color:var(--u-ink2);font-size:12px">${u.login_count} sign-in${u.login_count === 1 ? '' : 's'}${u.open_sessions ? ' · ' + u.open_sessions + ' open' : ''}</span></td>
         <td>${esc(day(u.created_at))}</td>
-        <td><div class="acts"><button class="btn sm" data-a="edit">Edit</button>${u.email && u.status === 'Active' ? '<button class="btn sm" data-a="reset" title="E-mail a link to choose a new password">Send reset link</button>' : ''}${u.locked ? '<button class="btn sm" data-a="unlock">Unlock</button>' : ''}${u.open_sessions ? '<button class="btn sm" data-a="signout">Sign out</button>' : ''}${self ? '' : `<button class="btn sm ${u.status === 'Active' ? 'dng' : ''}" data-a="toggle">${u.status === 'Active' ? 'Deactivate' : 'Activate'}</button>`}</div></td></tr>`;
+        <td><div class="acts"><button class="btn sm" data-a="edit">Edit</button>${u.email && u.status === 'Active' ? '<button class="btn sm" data-a="reset" title="E-mail a link to choose a new password">Send reset link</button>' : ''}${u.email && u.status === 'Invited' ? '<button class="btn sm" data-a="reset" title="E-mail the invitation again">Resend invitation</button>' : ''}${u.locked ? '<button class="btn sm" data-a="unlock">Unlock</button>' : ''}${u.open_sessions ? '<button class="btn sm" data-a="signout">Sign out</button>' : ''}${self || u.status === 'Pending' || u.status === 'Invited' ? (self ? '' : '<button class="btn sm dng" data-a="toggle">Deactivate</button>') : `<button class="btn sm ${u.status === 'Active' ? 'dng' : ''}" data-a="toggle">${u.status === 'Active' ? 'Deactivate' : 'Activate'}</button>`}</div></td></tr>`;
     }).join('');
     tb.querySelectorAll('button[data-a]').forEach((b) => { b.onclick = () => act(+b.closest('tr').dataset.id, b.dataset.a); });
   }
@@ -142,7 +142,7 @@
       if (a === 'unlock') { await api('POST', `/auth/users/${id}/unlock`); return refresh('Account unlocked.'); }
       if (a === 'signout') { await api('POST', `/auth/users/${id}/sign-out`); return refresh('All sessions of this person were ended.'); }
       if (a === 'toggle') {
-        const off = u.status === 'Active';
+        const off = u.status !== 'Inactive';
         if (off && !confirm(`Deactivate ${u.full_name}? They are signed out immediately and cannot sign in. Their records are kept and you can activate the account again.`)) return;
         await api('PUT', `/auth/users/${id}`, { status: off ? 'Inactive' : 'Active' }); return refresh(`${u.full_name} ${off ? 'deactivated' : 'activated'}.`);
       }

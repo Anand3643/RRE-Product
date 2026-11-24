@@ -8,8 +8,8 @@
   <meta name="theme-color" content="#0b1424">
   <meta name="referrer" content="no-referrer">
   <link rel="icon" type="image/x-icon" href="favicon.ico">
-  <link rel="preload" href="fonts/manrope-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
-  <link rel="preload" href="fonts/inter-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/sora-latin-700-normal.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="fonts/manrope-latin-500-normal.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="login.css">
   <script>/* theme before first paint */try{var t=localStorage.getItem('rre_login_theme');if(t!=='light'&&t!=='dark'){t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark';}document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 </head>
@@ -49,11 +49,12 @@
           <header><h2>Welcome back</h2><p>Choose how you sign in, then enter your details.</p></header>
           <div class="seg" role="tablist" aria-label="Login type" id="seg">
             <i class="thumb" aria-hidden="true"></i>
-            <button type="button" role="tab" data-type="admin" aria-selected="true"><svg viewBox="0 0 24 24"><path d="M12 2 4 6v6c0 5 3.4 8.4 8 10 4.6-1.6 8-5 8-10V6l-8-4Z"/></svg><span>Admin</span></button>
+            <button type="button" role="tab" data-type="customer" aria-selected="true"><svg viewBox="0 0 24 24"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.4 0-8 2.2-8 5v1h16v-1c0-2.8-3.6-5-8-5Z"/></svg><span>Customer</span></button>
             <button type="button" role="tab" data-type="employee" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M10 4h4a2 2 0 0 1 2 2v1h4a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h4V6a2 2 0 0 1 2-2Zm0 2v1h4V6h-4Z"/></svg><span>Employee</span></button>
-            <button type="button" role="tab" data-type="customer" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.4 0-8 2.2-8 5v1h16v-1c0-2.8-3.6-5-8-5Z"/></svg><span>Customer</span></button>
+            <button type="button" role="tab" data-type="admin" aria-selected="false"><svg viewBox="0 0 24 24"><path d="M12 2 4 6v6c0 5 3.4 8.4 8 10 4.6-1.6 8-5 8-10V6l-8-4Z"/></svg><span>Admin</span></button>
           </div>
           <div class="msg err" id="m-signin" role="alert"></div>
+          <button type="button" class="linkbtn hidden" id="si-resend">Send the confirmation e-mail again</button>
           <label class="fld"><span>Email or username</span>
             <div class="inp"><svg viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm8 7L4 6.5V8l8 5 8-5V6.5L12 11Z"/></svg><input id="si-id" name="username" type="text" inputmode="email" autocomplete="username" autocapitalize="none" spellcheck="false" required placeholder="you@company.com"></div>
           </label>
@@ -66,8 +67,47 @@
           </div>
           <button class="btn primary" type="submit" id="si-go"><span>Sign in</span><i class="spin" aria-hidden="true"></i></button>
           <button class="btn ghost hidden" type="button" id="si-guest">Continue as guest (read-only)</button>
+          <p class="create" id="si-create">New here? <a href="#signup" data-go="signup">Create account</a></p>
+          <p class="note" id="si-emp-note" hidden>Employee accounts are provided by your administrator.</p>
+          <p class="note" id="si-adm-note" hidden>Administrator access is restricted to authorised administrators.</p>
           <p class="fine">Your login type is checked against your account. Choosing a different type will not give you more access.</p>
         </form>
+
+        <!-- CREATE ACCOUNT (customers only) -->
+        <form class="view" id="v-signup" novalidate hidden autocomplete="on">
+          <header><h2>Create your account</h2><p>For customers. We will e-mail you a link to confirm your address before the account is activated.</p></header>
+          <div class="msg err" id="m-signup" role="alert"></div>
+          <label class="fld"><span>Full name</span><div class="inp"><svg viewBox="0 0 24 24"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm0 2c-4.4 0-8 2.2-8 5v1h16v-1c0-2.8-3.6-5-8-5Z"/></svg><input id="sg-name" type="text" autocomplete="name" maxlength="80" required placeholder="Your full name"></div></label>
+          <div class="grid2">
+            <label class="fld"><span>E-mail address</span><div class="inp"><svg viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm8 7L4 6.5V8l8 5 8-5V6.5L12 11Z"/></svg><input id="sg-email" type="email" autocomplete="email" autocapitalize="none" spellcheck="false" required placeholder="you@company.com"></div></label>
+            <label class="fld"><span>Mobile number</span><div class="inp"><svg viewBox="0 0 24 24"><path d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm5 18a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/></svg><input id="sg-phone" type="tel" autocomplete="tel" inputmode="tel" required placeholder="+91 98765 43210"></div></label>
+          </div>
+          <label class="fld"><span>Password</span><div class="inp"><svg viewBox="0 0 24 24"><path d="M17 9V7a5 5 0 0 0-10 0v2H5v12h14V9h-2Zm-8-2a3 3 0 0 1 6 0v2H9V7Z"/></svg><input id="sg-pw" type="password" autocomplete="new-password" required placeholder="At least 10 characters"><button type="button" class="eye" data-eye="sg-pw" aria-label="Show password" aria-pressed="false"><svg class="e-on" viewBox="0 0 24 24"><path d="M12 5c5 0 9 4.5 10 7-1 2.5-5 7-10 7S3 14.500 2 12c1-2.500 5-7 10-7Zm0 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/></svg><svg class="e-off" viewBox="0 0 24 24"><path d="m3 4.300 1.300-1.300 17 17-1.300 1.300-3-3A10.500 10.500 0 0 1 12 19C7 19 3 14.500 2 12a15 15 0 0 1 4-5L3 4.300Zm9 .7c5 0 9 4.500 10 7a14 14 0 0 1-3 4.300L16.800 14A4 4 0 0 0 10 7.200L8.300 5.500A9.500 9.500 0 0 1 12 5Z"/></svg></button></div></label>
+          <div class="meter" id="sg-meter"><div class="bar"><i></i><i></i><i></i><i></i></div><span>Enter a password</span></div>
+          <label class="fld"><span>Confirm password</span><div class="inp"><svg viewBox="0 0 24 24"><path d="M17 9V7a5 5 0 0 0-10 0v2H5v12h14V9h-2Zm-8-2a3 3 0 0 1 6 0v2H9V7Z"/></svg><input id="sg-pw2" type="password" autocomplete="new-password" required placeholder="Repeat the password"></div></label>
+          <button class="btn primary" type="submit" id="sg-go"><span>Create account</span><i class="spin" aria-hidden="true"></i></button>
+          <a href="#signin" class="lnk center" data-go="signin">← Back to login</a>
+        </form>
+
+        <!-- SIGNUP SENT -->
+        <div class="view center" id="v-signup-sent" hidden>
+          <div class="ok-ring"><svg viewBox="0 0 24 24"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Zm8 7L4 6.5V8l8 5 8-5V6.5L12 11Z"/></svg></div>
+          <header><h2>Confirm your e-mail</h2><p id="signup-sent-text">We sent you a link. Open it to activate your account. It works once and expires in 24 hours.</p></header>
+          <p class="fine">Nothing arrived? Check your spam folder.</p>
+          <a href="#signin" class="btn ghost" data-go="signin">Back to login</a>
+        </div>
+
+        <!-- E-MAIL CONFIRMED / LINK PROBLEM -->
+        <div class="view center" id="v-verified" hidden>
+          <div class="ok-ring good"><svg viewBox="0 0 24 24"><path d="m9.500 16.200-3.700-3.700L4.400 13.900l5.100 5.100L20 8.500l-1.400-1.400-9.100 9.100Z"/></svg></div>
+          <header><h2>E-mail confirmed</h2><p>Your account is active. Sign in to open your customer dashboard.</p></header>
+          <a href="#signin" class="btn primary" data-go="signin">Continue to sign in</a>
+        </div>
+        <div class="view center" id="v-verifybad" hidden>
+          <div class="ok-ring bad"><svg viewBox="0 0 24 24"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 15h-2v-2h2v2Zm0-4h-2V7h2v6Z"/></svg></div>
+          <header><h2>This link is no longer valid</h2><p>Confirmation links work once and expire after 24 hours. Sign in to request a new one.</p></header>
+          <a href="#signin" class="btn primary" data-go="signin">Back to login</a>
+        </div>
 
         <!-- FORGOT -->
         <form class="view" id="v-forgot" novalidate hidden>

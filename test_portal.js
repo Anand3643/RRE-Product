@@ -217,7 +217,7 @@ async function main() {
   assert(dis.status === 200 && dis.json.data.status === 'Inactive', 'Staff disable a portal login');
   assert((await req('GET', '/api/portal/me', { token: tk1 })).status === 401, 'The disabled customer\'s existing session stops working at once');
   assert((await login('cust1.buyer', PW2)).status === 401, 'They cannot sign in again');
-  assert((await req('POST', `/api/inv/portal-users/${u1.id}/enable`)).status === 200 && (await req('GET', '/api/portal/me', { token: tk1 })).status === 200, 'Re-enabling restores access');
+  assert((await req('POST', `/api/inv/portal-users/${u1.id}/enable`)).status === 200 && (await login('cust1.buyer', PW2)).status === 200 && (await req('GET', '/api/portal/me', { token: tk1 })).status === 401, 'Re-enabling lets them sign in again (the session ended by the disabling stays ended)');
   const rs = await req('POST', `/api/inv/portal-users/${u1.id}/reset-password`, { body: { password: 'Reset#Temp2026ab' } });
   assert(rs.status === 200 && rs.json.data.must_change === 1 && (await login('cust1.buyer', PW2)).status === 401, 'Resetting the password locks out the old one');
   assert((await req('POST', `/api/inv/portal-users/${u1.id}/reset-password`, { body: { password: '123' } })).status === 400, 'A weak reset password is refused');

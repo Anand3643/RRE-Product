@@ -17,7 +17,7 @@ const ENFORCE = process.env.RRE_ENFORCE_AUTH !== '0';
 
 // Public: needed before login or harmless read-only status.
 const PUBLIC = [
-  ['POST', /^\/api\/auth\/(login|register|google|forgot|reset)\/?$/],
+  ['POST', /^\/api\/auth\/(login|register|google|forgot|reset|signup|verify-email|resend-verification)\/?$/],
   ['GET', /^\/api\/auth\/(config|reset\/validate)\/?$/],
   ['GET', /^\/api\/auth\/permissions\/?$/],
   ['GET', /^\/api\/auth\/setup-status\/?$/],

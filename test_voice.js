@@ -53,7 +53,7 @@ async function main() {
   assert(prov.cloud.available === false && prov.local.available === false, 'No online or on-device speech provider is claimed to be active until one is configured');
   assert(prov.browser.auto_language === false && /does not detect the language/.test(prov.browser.note), 'Browser recognition is described as NOT auto-detecting language');
   assert(cap.notes.some((n) => /depends on the speech provider/.test(n)) && cap.notes.some((n) => /never saves accounting entries/.test(n)), 'Capabilities state the limits and that voice never saves entries');
-  assert(cap.reply_languages.length === 18, 'Replies are available in all 18 languages');
+  assert(cap.reply_languages.length === 19, 'Replies are available in all 18 languages');
   for (const p of ['capabilities', 'prefs']) assert((await req('GET', '/api/voice/' + p, { token: null })).status === 401, `${p}: needs a login`);
   assert((await req('POST', '/api/voice/execute', { token: null, body: { text: 'open inventory' } })).status === 401 && (await req('POST', '/api/voice/transcribe', { token: null, raw: Buffer.from('x'), type: 'audio/webm' })).status === 401, 'execute and transcribe need a login');
 
@@ -249,7 +249,7 @@ async function main() {
   assert(await vcount() === v0, 'No voucher was created by any voice command');
   const bal = (await get('SELECT ROUND(SUM(debit_amount),2) d, ROUND(SUM(credit_amount),2) c FROM ledger_entries'));
   assert(bal.d === bal.c, 'Debits still equal credits');
-  assert(((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 18), 'Migrations applied: 18');
+  assert(((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 19), 'Migrations applied: 19');
 
   console.log(`\n=== ${passed} passed, ${failed} failed ===`);
   process.exit(failed ? 1 : 0);

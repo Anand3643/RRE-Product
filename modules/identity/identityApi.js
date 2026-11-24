@@ -22,7 +22,7 @@ const needAdmin = (req, res) => {
 // ---- public
 router.get('/config', async (req, res) => {
   try {
-    res.json({ success: true, data: { login_types: identity.LOGIN_TYPES, mail_configured: mailer.isConfigured(), setup_required: await db.isSetupRequired(), guest_access: await db.guestAccessEnabled() } });
+    res.json({ success: true, data: { login_types: identity.LOGIN_TYPES, mail_configured: mailer.isConfigured(), signup_enabled: mailer.isConfigured(), setup_required: await db.isSetupRequired(), guest_access: await db.guestAccessEnabled() } });
   } catch (e) { fail(res, e, 500); }
 });
 
@@ -36,6 +36,17 @@ router.post('/login', rateLimitLoginMiddleware, async (req, res) => {
     loginRateLimiter.recordSuccess(m.ip);
     res.json(r);
   } catch (e) { loginRateLimiter.recordFailure(m.ip); fail(res, e, 500); }
+});
+
+// Customers create their own account (always the Customer role, confirmed by e-mail before it works).
+router.post('/signup', async (req, res) => {
+  try { res.status(201).json(await identity.signup(req.body || {}, meta(req))); } catch (e) { fail(res, e); }
+});
+router.post('/verify-email', async (req, res) => { try { res.json(await identity.verifyEmail(String((req.body || {}).token || ''), meta(req))); } catch (e) { fail(res, e); } });
+router.post('/resend-verification', async (req, res) => {
+  const { done } = identity.resendVerification(String((req.body || {}).email || ''), meta(req));
+  if (process.env.RRE_TEST_AWAIT_MAIL === '1') await done;
+  res.json({ success: true, message: 'If that address is waiting for confirmation, a new link has been sent.' });
 });
 
 // Forgot password: the answer is always the same, whether or not the address belongs to an account.

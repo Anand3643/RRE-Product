@@ -27,9 +27,9 @@ function getTransport() {
   const key = `${c.host}|${c.port}|${c.user}`;
   if (cached && cached.key === key) return cached.t;
   const nodemailer = require('nodemailer');
-  const secure = c.port === 465;
+  const secure = c.port === 465, plain = process.env.RRE_SMTP_TLS === '0'; // RRE_SMTP_TLS=0 is for a local mail relay / test catcher only
   const t = nodemailer.createTransport({
-    host: c.host, port: c.port, secure, requireTLS: !secure, auth: { user: c.user, pass: c.pass },
+    host: c.host, port: c.port, secure: plain ? false : secure, requireTLS: plain ? false : !secure, ignoreTLS: plain, auth: { user: c.user, pass: c.pass },
     connectionTimeout: 15000, greetingTimeout: 15000, socketTimeout: 20000
   });
   cached = { key, t };
@@ -85,6 +85,23 @@ function inviteEmail({ name, url, hours, role }) {
       'Nobody, including your administrator, can see the password you choose.')
   };
 }
+function verifyEmail({ name, url, hours }) {
+  const hello = name ? `Hello ${name},` : 'Hello,';
+  return {
+    subject: 'Confirm your e-mail address for RRE Entries',
+    text: `${hello}\n\nThank you for creating an RRE Entries customer account. Open this link to confirm your e-mail address and activate the account (it works once and expires in ${hours} hours):\n\n${url}\n\nIf you did not create this account, ignore this message: nothing is activated without the link.\n`,
+    html: shell('Confirm your e-mail address', `<p style="line-height:1.6">${esc(hello)}</p><p style="line-height:1.6">Thank you for creating an RRE Entries customer account. Confirm your e-mail address to activate it. The link works <b>once</b> and expires in <b>${hours} hours</b>.</p>${button(url, 'Confirm my e-mail')}`,
+      'If you did not create this account, ignore this message: nothing is activated without the link.')
+  };
+}
+function existsEmail({ name }) {
+  const hello = name ? `Hello ${name},` : 'Hello,';
+  return {
+    subject: 'You already have an RRE Entries account',
+    text: `${hello}\n\nSomeone (hopefully you) tried to create an RRE Entries account with this e-mail address, but it already has one. Sign in, or use "Forgot password" on the sign-in page if you do not remember the password. No new account was created.\n`,
+    html: shell('You already have an account', `<p style="line-height:1.6">${esc(hello)}</p><p style="line-height:1.6">Someone (hopefully you) tried to create an RRE Entries account with this e-mail address, but it already has one. Sign in, or use <b>Forgot password</b> on the sign-in page. No new account was created.</p>`, 'If this was not you, you can ignore this message.')
+  };
+}
 function changedEmail({ name }) {
   const hello = name ? `Hello ${name},` : 'Hello,';
   return {
@@ -95,4 +112,4 @@ function changedEmail({ name }) {
   };
 }
 
-module.exports = { send, isConfigured, publicUrl, resetEmail, inviteEmail, changedEmail, setTransport: (t) => { transport = t; cached = null; }, _cfg: () => { const c = cfg(); return { host: c.host, port: c.port, user: c.user ? c.user.replace(/^(.).*(@.*)$/, '$1***$2') : '' }; } };
+module.exports = { send, isConfigured, publicUrl, resetEmail, inviteEmail, verifyEmail, existsEmail, changedEmail, setTransport: (t) => { transport = t; cached = null; }, _cfg: () => { const c = cfg(); return { host: c.host, port: c.port, user: c.user ? c.user.replace(/^(.).*(@.*)$/, '$1***$2') : '' }; } };

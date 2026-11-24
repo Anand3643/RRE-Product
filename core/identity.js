@@ -37,6 +37,7 @@ const MODULE_PATHS = [
 const moduleOf = (url) => { const m = MODULE_PATHS.find(([, re]) => re.test(url)); return m ? m[0] : null; };
 const parseModules = (v) => { if (v == null || v === '') return null; try { const a = JSON.parse(v); return Array.isArray(a) ? a.filter((k) => MODULES.some((m) => m.key === k)) : null; } catch (e) { return null; } };
 
+const VERIFY_HOURS = 24;
 const SESSION_HOURS = 12, REMEMBER_HOURS = 14 * 24, MAX_FAILS = 5, LOCK_MINUTES = 15, RESET_MINUTES = 30, INVITE_HOURS = 72;
 const GENERIC_FAIL = 'We could not sign you in. Check your email or username, your password and the login type you chose. After several failed attempts an account is locked for 15 minutes.';
 const iso = (d = new Date()) => new Date(d).toISOString();
@@ -182,6 +183,7 @@ async function authenticate(identifier, password, meta = {}, { loginType = null,
     await audit('AUTH_LOGIN_FAILED', { user, ip: meta.ip, details: { reason: 'wrong_password', locked: lock } });
     return generic;
   }
+  if (user.status === 'Pending') { await audit('AUTH_LOGIN_BLOCKED', { user, ip: meta.ip, details: { reason: 'unverified' } }); return { success: false, code: 'EMAIL_NOT_VERIFIED', error: 'Please confirm your e-mail address first. Open the link we sent you, or request a new one below.' }; }
   if (user.status !== 'Active') { await audit('AUTH_LOGIN_BLOCKED', { user, ip: meta.ip, details: { reason: 'inactive' } }); return { success: false, error: 'This account is deactivated. Contact your administrator.' }; }
   if (loginType != null && TYPE_OF[user.role] !== lc(loginType)) { await audit('AUTH_LOGIN_TYPE_MISMATCH', { user, ip: meta.ip, details: { chosen: String(loginType).slice(0, 20) } }); return generic; }
   if (v.needsMigration || needsRehash(user.password)) { try { await run('UPDATE users SET password = ? WHERE id = ?', [hashPassword(p), user.id]); } catch (e) { /* the old hash keeps working */ } }
@@ -213,10 +215,10 @@ async function makeToken(userId, purpose, minutes, createdBy = null, ip = null) 
   await run('INSERT INTO password_resets (user_id, token_hash, purpose, created_at, expires_at, requested_ip, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)', [userId, sha256(token), purpose, iso(), iso(Date.now() + minutes * 60e3), ip, createdBy]);
   return token;
 }
-const linkFor = (token) => `${mailer.publicUrl()}/login.html?reset=${encodeURIComponent(token)}`;
+const linkFor = (token, kind = 'reset') => `${mailer.publicUrl()}/login.html?${kind === 'verify' ? 'verify' : 'reset'}=${encodeURIComponent(token)}`;
 async function mailLink(user, token, purpose) {
-  const url = linkFor(token);
-  const msg = purpose === 'invite' ? mailer.inviteEmail({ name: user.full_name, url, hours: INVITE_HOURS, role: user.role }) : mailer.resetEmail({ name: user.full_name, url, minutes: RESET_MINUTES });
+  const url = linkFor(token, purpose === 'verify' ? 'verify' : 'reset');
+  const msg = purpose === 'verify' ? mailer.verifyEmail({ name: user.full_name, url, hours: VERIFY_HOURS }) : purpose === 'invite' ? mailer.inviteEmail({ name: user.full_name, url, hours: INVITE_HOURS, role: user.role }) : mailer.resetEmail({ name: user.full_name, url, minutes: RESET_MINUTES });
   const r = await mailer.send({ to: user.email, ...msg });
   if (!r.sent) {
     console.warn(`[Identity] ${purpose} e-mail was not sent (${r.reason}).`);
@@ -245,21 +247,90 @@ async function tokenRow(token) {
   if (!r || r.used_at || Date.parse(r.expires_at) < Date.now()) return null;
   return r;
 }
-async function validateResetToken(token) { return { valid: !!(await tokenRow(token)) }; }
+async function validateResetToken(token) { const t = await tokenRow(token); return { valid: !!t && t.purpose !== 'verify', purpose: t ? t.purpose : null }; }
 async function resetPassword(token, newPassword, meta = {}) {
   const t = await tokenRow(token);
-  if (!t) throw bad('This link is no longer valid. Request a new one.', 400, 'RESET_INVALID');
+  if (!t || t.purpose === 'verify') throw bad('This link is no longer valid. Request a new one.', 400, 'RESET_INVALID');
   const user = await get('SELECT * FROM users WHERE id = ?', [t.user_id]);
-  if (!user || user.status !== 'Active') throw bad('This link is no longer valid. Request a new one.', 400, 'RESET_INVALID');
+  const invited = t.purpose === 'invite' && user && user.status === 'Invited';
+  if (!user || (user.status !== 'Active' && !invited)) throw bad('This link is no longer valid. Request a new one.', 400, 'RESET_INVALID');
   const pw = String(newPassword || '').trim(), weak = checkPassword(pw, { username: user.username }); if (weak) throw bad(weak, 422, 'WEAK_PASSWORD');
   const claimed = await run('UPDATE password_resets SET used_at = ? WHERE id = ? AND used_at IS NULL', [iso(), t.id]); // atomic: a link can be used once, even under a race
   if (!claimed.changes) throw bad('This link is no longer valid. Request a new one.', 400, 'RESET_INVALID');
-  await run('UPDATE users SET password = ?, must_change_password = 0, password_changed_at = ?, failed_logins = 0, locked_until = NULL WHERE id = ?', [hashPassword(pw), iso(), user.id]);
+  await run("UPDATE users SET password = ?, must_change_password = 0, password_changed_at = ?, failed_logins = 0, locked_until = NULL, email_verified = 1, email_verified_at = COALESCE(email_verified_at, ?), status = CASE WHEN status = 'Invited' THEN 'Active' ELSE status END WHERE id = ?", [hashPassword(pw), iso(), iso(), user.id]);
+  await refreshUser(user.id);
   await run('UPDATE password_resets SET used_at = ? WHERE user_id = ? AND used_at IS NULL', [iso(), user.id]);
   await revokeUserSessions(user.id, 'password_reset');
   await audit('AUTH_PASSWORD_RESET', { user, ip: meta.ip, details: { via: t.purpose } });
   if (user.email) mailer.send({ to: user.email, ...mailer.changedEmail({ name: user.full_name }) }).catch(() => {});
   return { success: true };
+}
+
+// ---------------------------------------------------------------------------------------------------- customer self-registration
+const PHONE = /^\+?[0-9][0-9 ()-]{6,18}[0-9]$/;
+async function customerLedger(name, email, phone) {
+  const ord = require('./invOrders');
+  for (const n of [name, `${name} (${email})`]) {
+    try { return await ord.saveParty('customer', null, { name: n, email, phone }, { userId: null, username: 'self-registration', role: 'System' }); }
+    catch (e) { if (e.status !== 409) throw e; }
+  }
+  throw bad('We could not create the account. Please contact the business.', 409);
+}
+/**
+ * Anyone may create a CUSTOMER account and nothing else: the role is fixed here, the request cannot choose one. The account stays
+ * "Pending" (cannot sign in) until the e-mail address is confirmed with a single-use link. The answer never reveals whether the
+ * address already had an account (that person is told by e-mail).
+ */
+async function signup(b = {}, meta = {}) {
+  if (!mailer.isConfigured()) throw bad('Account creation is not available right now because e-mail is not set up. Please contact the business.', 503, 'MAIL_NOT_CONFIGURED');
+  if (limited(`signup:${meta.ip || "?"}`, 40, 60 * 60e3)) throw bad('Too many attempts. Please try again later.', 429);
+  const name = String(b.full_name || '').trim().replace(/\s+/g, ' ');
+  const email = lc(b.email), phone = String(b.phone || '').trim();
+  if (name.length < 2 || name.length > 80) throw bad('Enter your full name.', 422);
+  if (!EMAIL.test(email) || email.length > 120) throw bad('Enter a valid e-mail address.', 422);
+  if (!PHONE.test(phone)) throw bad('Enter a valid mobile number (digits, optionally with + and a country code).', 422);
+  if (b.confirm !== undefined && b.confirm !== b.password) throw bad('The two passwords do not match.', 422);
+  const pw = String(b.password || '').trim(), weak = checkPassword(pw, { username: email.split('@')[0] }); if (weak) throw bad(weak, 422, 'WEAK_PASSWORD');
+  const generic = { success: true, message: 'Almost done: we sent a message to that e-mail address. Open the link in it to activate your account.' };
+  const existing = await all('SELECT * FROM users WHERE email = ? COLLATE NOCASE', [email]);
+  if (existing.length) {
+    const u = existing[0];
+    if (existing.length === 1 && u.role === 'Customer' && u.status === 'Pending') { // never verified: send a fresh link, change nothing else
+      const token = await makeToken(u.id, 'verify', VERIFY_HOURS * 60, null, meta.ip); await mailLink(u, token, 'verify');
+    } else mailer.send({ to: email, ...mailer.existsEmail({ name: u.full_name }) }).catch(() => {});
+    await audit('AUTH_SIGNUP_DUPLICATE', { username: email.slice(0, 80), ip: meta.ip });
+    return generic;
+  }
+  const party = (await customerLedger(name, email, phone)).id;
+  const username = await uniqueUsername(email.split('@')[0]);
+  const r = await run(`INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries, must_change_password, party_id, email_verified) VALUES (?, ?, ?, 'Customer', ?, ?, 'Pending', 0, 0, ?, 0)`, [username, hashPassword(pw), name, email, phone, party]);
+  const created = await get('SELECT * FROM users WHERE id = ?', [r.lastID]);
+  await audit('AUTH_SIGNUP', { user: created, ip: meta.ip });
+  const token = await makeToken(created.id, 'verify', VERIFY_HOURS * 60, null, meta.ip), sent = await mailLink(created, token, 'verify');
+  if (!sent.sent) throw bad('We could not send the confirmation e-mail. Please try again in a few minutes.', 502);
+  return generic;
+}
+async function verifyEmail(token, meta = {}) {
+  const t = await tokenRow(token);
+  if (!t || t.purpose !== 'verify') throw bad('This confirmation link is no longer valid. Request a new one.', 400, 'VERIFY_INVALID');
+  const user = await get('SELECT * FROM users WHERE id = ?', [t.user_id]);
+  if (!user || user.role !== 'Customer' || !['Pending', 'Active'].includes(user.status)) throw bad('This confirmation link is no longer valid. Request a new one.', 400, 'VERIFY_INVALID');
+  const claimed = await run('UPDATE password_resets SET used_at = ? WHERE id = ? AND used_at IS NULL', [iso(), t.id]);
+  if (!claimed.changes) throw bad('This confirmation link is no longer valid. Request a new one.', 400, 'VERIFY_INVALID');
+  await run("UPDATE users SET status = 'Active', email_verified = 1, email_verified_at = ? WHERE id = ?", [iso(), user.id]);
+  await refreshUser(user.id);
+  await audit('AUTH_EMAIL_VERIFIED', { user, ip: meta.ip });
+  return { success: true };
+}
+function resendVerification(email, meta = {}) {
+  const addr = lc(email);
+  const done = (async () => {
+    if (!EMAIL.test(addr) || limited(`vip:${meta.ip || '?'}`, 8, 15 * 60e3) || limited(`verify:${addr}`, 3, 60 * 60e3)) return;
+    const u = await get("SELECT * FROM users WHERE email = ? COLLATE NOCASE AND role = 'Customer' AND status = 'Pending'", [addr]);
+    if (!u) return;
+    const token = await makeToken(u.id, 'verify', VERIFY_HOURS * 60, null, meta.ip); await mailLink(u, token, 'verify');
+  })().catch((e) => console.warn('[Identity] resend failed:', e.message));
+  return { ok: true, done };
 }
 
 // ---------------------------------------------------------------------------------------------------- administrators: users
@@ -280,12 +351,12 @@ async function listUsers(q = {}) {
   if (q.type && LOGIN_TYPES.includes(q.type)) { const roles = Object.keys(TYPE_OF).filter((r) => TYPE_OF[r] === q.type); where.push(`u.role IN (${roles.map(() => '?').join(',')})`); p.push(...roles); }
   if (q.status === 'Active' || q.status === 'Inactive') { where.push('u.status = ?'); p.push(q.status); }
   if (q.q) { where.push("(u.username LIKE ? OR u.full_name LIKE ? OR u.email LIKE ?)"); const n = `%${String(q.q).replace(/[%_]/g, '')}%`; p.push(n, n, n); }
-  const rows = await all(`SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.created_at, u.last_login, u.must_change_password, u.auth_provider, u.module_access, u.party_id, u.needs_review, u.locked_until, u.failed_logins, u.password_changed_at,
+  const rows = await all(`SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.created_at, u.last_login, u.must_change_password, u.email_verified, u.auth_provider, u.module_access, u.party_id, u.needs_review, u.locked_until, u.failed_logins, u.password_changed_at,
       l.name AS customer, (SELECT COUNT(*) FROM user_logins x WHERE x.user_id = u.id) AS logins, (SELECT COUNT(*) FROM auth_sessions s WHERE s.user_id = u.id AND s.revoked_at IS NULL AND s.expires_at > ?) AS open_sessions,
       (SELECT COUNT(*) FROM password_resets r WHERE r.user_id = u.id AND r.used_at IS NULL AND r.expires_at > ?) AS reset_pending
     FROM users u LEFT JOIN ledgers l ON l.id = u.party_id WHERE ${where.join(' AND ')} ORDER BY CASE u.role WHEN 'Owner' THEN 0 WHEN 'Customer' THEN 2 ELSE 1 END, u.full_name COLLATE NOCASE LIMIT 500`, [iso(), iso(), ...p]);
   return rows.map((r) => ({ id: r.id, username: r.username, full_name: r.full_name, email: r.email, phone: r.phone, role: r.role, login_type: TYPE_OF[r.role] || 'employee', status: r.status, created_at: r.created_at, last_login: r.last_login,
-    must_change_password: !!r.must_change_password, auth_provider: r.auth_provider || 'local', modules: parseModules(r.module_access), customer: r.customer || null, party_id: r.party_id, needs_review: !!r.needs_review, locked: !!(r.locked_until && Date.parse(r.locked_until) > Date.now()), login_count: r.logins, open_sessions: r.open_sessions, reset_pending: !!r.reset_pending, password_set: r.password !== db.SETUP_MARKER }));
+    must_change_password: !!r.must_change_password, auth_provider: r.auth_provider || 'local', email_verified: !!r.email_verified, modules: parseModules(r.module_access), customer: r.customer || null, party_id: r.party_id, needs_review: !!r.needs_review, locked: !!(r.locked_until && Date.parse(r.locked_until) > Date.now()), login_count: r.logins, open_sessions: r.open_sessions, reset_pending: !!r.reset_pending, password_set: r.password !== db.SETUP_MARKER }));
 }
 
 async function createUser(b = {}, actor) {
@@ -308,8 +379,8 @@ async function createUser(b = {}, actor) {
   if (temp) { const weak = checkPassword(temp, { username }); if (weak) throw bad(weak, 400); }
   else if (!mailer.isConfigured()) throw bad('E-mail is not set up on this computer, so the invitation link cannot be sent. Enter a temporary password instead (the person must change it at first sign-in), or set up e-mail (see .env.example).', 409, 'MAIL_NOT_CONFIGURED');
   const modules = role === 'Customer' || role === 'Owner' ? null : cleanModules(b.modules);
-  const r = await run(`INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries, must_change_password, party_id, module_access, created_by) VALUES (?, ?, ?, ?, ?, ?, 'Active', ?, 1, ?, ?, ?)`,
-    [username, hashPassword(temp || crypto.randomBytes(24).toString('hex')), name, role, email, String(b.phone || '').trim().slice(0, 30), b.allow_backdated_entries ? 1 : 0, party ? party.id : null, modules === undefined ? null : modules, actor ? actor.userId : null]);
+  const r = await run(`INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries, must_change_password, party_id, module_access, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+    [username, hashPassword(temp || crypto.randomBytes(24).toString('hex')), name, role, email, String(b.phone || '').trim().slice(0, 30), temp ? 'Active' : 'Invited', b.allow_backdated_entries ? 1 : 0, party ? party.id : null, modules === undefined ? null : modules, actor ? actor.userId : null]);
   await refreshUser(r.lastID);
   const created = await get('SELECT * FROM users WHERE id = ?', [r.lastID]);
   await audit('AUTH_USER_CREATE', { userId: actor && actor.userId, username: actor && actor.username, role: actor && actor.role, details: { created: created.username, role, how: temp ? 'temporary_password' : 'invitation' } });
@@ -351,10 +422,11 @@ async function updateUser(id, b = {}, actor) {
 
 async function sendResetFor(id, actor) {
   const u = await get('SELECT * FROM users WHERE id = ?', [id]); if (!u || u.role === 'Guest') throw bad('User not found.', 404);
-  if (u.status !== 'Active') throw bad('Activate the account before sending a password link.', 409);
+  if (u.status !== 'Active' && u.status !== 'Invited') throw bad('Activate the account before sending a password link.', 409);
   if (!EMAIL.test(lc(u.email))) throw bad('This account has no e-mail address. Add one first.', 409);
   if (!mailer.isConfigured()) throw bad('E-mail is not set up on this computer (see .env.example).', 409, 'MAIL_NOT_CONFIGURED');
-  const token = await makeToken(u.id, 'reset', RESET_MINUTES, actor && actor.userId), r = await mailLink(u, token, 'reset');
+  const kind = u.status === 'Invited' ? 'invite' : 'reset';
+  const token = await makeToken(u.id, kind, kind === 'invite' ? INVITE_HOURS * 60 : RESET_MINUTES, actor && actor.userId), r = await mailLink(u, token, kind);
   await audit('AUTH_RESET_SENT_BY_ADMIN', { userId: actor && actor.userId, username: actor && actor.username, role: actor && actor.role, details: { user: u.username, sent: r.sent } });
   if (!r.sent) throw bad(`The e-mail could not be sent (${r.reason === 'authentication_failed' ? 'Gmail rejected the sign-in: check the app password' : r.reason === 'unreachable' ? 'the mail server could not be reached' : 'it failed'}).`, 502);
   return { sent: true };
@@ -379,7 +451,8 @@ module.exports = {
   TYPE_OF, EMPLOYEE_ROLES, LOGIN_TYPES, MODULES, MODULE_PATHS, moduleOf, parseModules, GENERIC_FAIL,
   preload, refreshAll, liveSession, refreshUser, onRevoke, onChange, createSession, revokeSession, revokeUserSessions,
   authenticate, issueLogin, logout, me, findAccount,
-  requestReset, validateResetToken, resetPassword,
+  requestReset, validateResetToken, resetPassword, signup, verifyEmail, resendVerification,
   listUsers, createUser, updateUser, sendResetFor, loginActivity, updateOwnProfile, ownerCount, audit,
+  _resetLimits: () => buckets.clear(),
   _state: state
 };

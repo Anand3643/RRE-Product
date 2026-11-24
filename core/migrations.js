@@ -584,6 +584,15 @@ const MIGRATIONS = [
         report TEXT
       )`
     ]
+  },
+  {
+    id: '019_email_verification',
+    description: 'Customer self-registration and employee invitations: e-mail verification state (existing accounts count as verified; additive only)',
+    statements: [
+      'ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 0',
+      'ALTER TABLE users ADD COLUMN email_verified_at TEXT',
+      "UPDATE users SET email_verified = 1, email_verified_at = COALESCE(created_at, datetime('now')) WHERE email_verified = 0"
+    ]
   }
 ];
 

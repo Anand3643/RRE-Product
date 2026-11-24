@@ -9,9 +9,9 @@
     set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } },
     del: (k) => { try { localStorage.removeItem(k); } catch (e) { /* ignore */ } }
   };
-  const TYPES = ['admin', 'employee', 'customer'];
+  const TYPES = ['customer', 'employee', 'admin'];
   const COMMON = /^(password|passw0rd|qwerty|letmein|welcome|admin|administrator|changeme|iloveyou|123456|abcdef)/i;
-  let loginType = TYPES.includes(store.get('rre_login_type')) ? store.get('rre_login_type') : 'admin';
+  let loginType = 'customer'; // Customer login is the default every time
   let resetToken = null, pending = null, cfg = { mail_configured: true, setup_required: false, guest_access: false };
 
   async function api(method, path, body, token) {
@@ -25,7 +25,7 @@
   }
 
   // ---------------------------------------------------------------- views
-  const VIEWS = ['signin', 'forgot', 'sent', 'reset', 'badlink', 'done', 'setup', 'change'];
+  const VIEWS = ['signin', 'signup', 'signup-sent', 'verified', 'verifybad', 'forgot', 'sent', 'reset', 'badlink', 'done', 'setup', 'change'];
   function show(name, focusId) {
     for (const v of VIEWS) { const el = $('v-' + v); if (el) el.hidden = v !== name; }
     document.querySelectorAll('.msg').forEach((m) => m.classList.remove('show'));
@@ -41,8 +41,12 @@
     loginType = TYPES.includes(t) ? t : 'admin';
     const seg = $('seg'); seg.style.setProperty('--i', String(TYPES.indexOf(loginType)));
     seg.querySelectorAll('button').forEach((b) => { const on = b.dataset.type === loginType; b.setAttribute('aria-selected', on ? 'true' : 'false'); b.tabIndex = on ? 0 : -1; });
-    store.set('rre_login_type', loginType);
     $('si-id').placeholder = loginType === 'admin' ? 'admin or you@company.com' : 'you@company.com';
+    // Create account exists for customers only; employees are invited and administrators are set up securely
+    $('si-create').hidden = loginType !== 'customer' || cfg.signup_enabled === false;
+    $('si-emp-note').hidden = loginType !== 'employee';
+    $('si-adm-note').hidden = loginType !== 'admin';
+    $('si-resend').classList.add('hidden');
     if (!silent) err('m-signin', '');
   }
   $('seg').addEventListener('click', (e) => { const b = e.target.closest('button[data-type]'); if (b) setType(b.dataset.type); });
@@ -75,7 +79,7 @@
       const rules = rulesId && $(rulesId); if (rules) { rules.querySelector('[data-r=len]').classList.toggle('ok', r.len); rules.querySelector('[data-r=mix]').classList.toggle('ok', r.mix); rules.querySelector('[data-r=common]').classList.toggle('ok', r.common); }
     });
   }
-  wireMeter('rs-pw', 'rs-meter', 'rs-rules'); wireMeter('su-pw', 'su-meter'); wireMeter('ch-pw', 'ch-meter');
+  wireMeter('sg-pw', 'sg-meter'); wireMeter('rs-pw', 'rs-meter', 'rs-rules'); wireMeter('su-pw', 'su-meter'); wireMeter('ch-pw', 'ch-meter');
 
   // ---------------------------------------------------------------- session + redirect
   function saveSession(d, remember) {
@@ -95,8 +99,21 @@
       const d = j.data, remember = $('si-rem').checked;
       if (d.must_change_password) { pending = { d, remember, temp: pw }; $('ch-cur').value = pw; $('ch-pw').value = ''; $('ch-pw2').value = ''; show('change', 'ch-pw'); return; }
       saveSession(d, remember); $('si-pw').value = ''; enter(d);
-    } catch (x) { err('m-signin', x.message); $('si-pw').select(); }
+    } catch (x) { err('m-signin', x.message); $('si-resend').classList.toggle('hidden', x.code !== 'EMAIL_NOT_VERIFIED'); if (x.code !== 'EMAIL_NOT_VERIFIED') $('si-pw').select(); }
     finally { busy('si-go', false); }
+  });
+  $('si-resend').addEventListener('click', async () => {
+    try { await api('POST', '/auth/resend-verification', { email: $('si-id').value.trim() }); $('si-resend').classList.add('hidden'); err('m-signin', ''); show('signup-sent'); $('signup-sent-text').textContent = 'If that address is waiting for confirmation, we sent a new link. It works once and expires in 24 hours.'; } catch (x) { err('m-signin', x.message); }
+  });
+  $('v-signup').addEventListener('submit', async (e) => {
+    e.preventDefault(); err('m-signup', '');
+    const body = { full_name: $('sg-name').value.trim(), email: $('sg-email').value.trim(), phone: $('sg-phone').value.trim(), password: $('sg-pw').value, confirm: $('sg-pw2').value };
+    if (!body.full_name || !body.email || !body.phone) return err('m-signup', 'Please fill in your name, e-mail address and mobile number.');
+    if (body.password !== body.confirm) return err('m-signup', 'The two passwords are not the same.');
+    busy('sg-go', true);
+    try { const r = await api('POST', '/auth/signup', body); $('signup-sent-text').textContent = r.message; $('sg-pw').value = ''; $('sg-pw2').value = ''; show('signup-sent'); }
+    catch (x) { err('m-signup', x.message); }
+    finally { busy('sg-go', false); }
   });
   $('si-guest').addEventListener('click', async () => {
     err('m-signin', '');
@@ -154,13 +171,19 @@
   async function start() {
     setType(loginType, true);
     const params = new URLSearchParams(location.search);
+    const vtoken = params.get('verify');
+    if (vtoken) {
+      try { history.replaceState(null, '', location.pathname + '#verify'); } catch (e) { /* ignore */ }
+      try { await api('POST', '/auth/verify-email', { token: vtoken }); show('verified'); } catch (e) { show('verifybad'); }
+      return;
+    }
     const token = params.get('reset');
     if (token) {
       try { history.replaceState(null, '', location.pathname + '#reset'); } catch (e) { /* ignore */ } // the secret leaves the address bar at once
       resetToken = token;
       try {
         const j = await api('GET', '/auth/reset/validate?token=' + encodeURIComponent(token));
-        if (j.data.valid) { show('reset', 'rs-pw'); return; }
+        if (j.data.valid) { if (j.data.purpose === 'invite') { $('rs-title').textContent = 'Create your password'; $('rs-sub').textContent = 'Welcome! Choose the password you will use to sign in. This also confirms your e-mail address.'; $('rs-go').querySelector('span').textContent = 'Activate my account'; } show('reset', 'rs-pw'); return; }
       } catch (e) { /* fall through to the message */ }
       show('badlink'); return;
     }
@@ -176,11 +199,12 @@
       } catch (e) { store.del(SESSION); }
     } else if (raw) { try { const s = JSON.parse(raw); api('POST', '/auth/logout', {}, s.token).catch(() => {}); } catch (e) { /* ignore */ } store.del(SESSION); }
     try { const c = await api('GET', '/auth/config'); cfg = c.data; } catch (e) { err('m-signin', e.message); }
+    setType(loginType, true);
     if (params.get('expired')) err('m-signin', 'Your session ended. Please sign in again.');
     if (cfg.setup_required && ['localhost', '127.0.0.1', '[::1]', '::1'].includes(location.hostname)) { show('setup', 'su-pw'); return; }
     $('si-guest').classList.toggle('hidden', !cfg.guest_access);
     const h = location.hash.replace('#', '');
-    if (h === 'forgot') show('forgot', 'fg-email'); else show('signin', 'si-id');
+    if (h === 'forgot') show('forgot', 'fg-email'); else if (h === 'signup' && cfg.signup_enabled !== false) show('signup', 'sg-name'); else show('signin', 'si-id');
   }
   start();
 })();
