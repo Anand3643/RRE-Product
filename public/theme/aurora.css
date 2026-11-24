@@ -3073,3 +3073,6 @@ body.au-rail-open #au-rail button.item { padding: 0 14px; }
 [data-au="dark"] .bg-slate-800, [data-au="dark"] .bg-slate-900, [data-au="dark"] .bg-slate-700 { background-color: #111 !important; }
 [data-au="dark"] header, [data-au="dark"] aside, [data-au="dark"] #header-ribbon, [data-au="dark"] #header-ribbon > div { background: #000 !important; }
 [data-au="dark"] aside button, [data-au="dark"] aside .tally-v-btn, [data-au="dark"] aside > div > div { background: #101010 !important; }
+
+/* the palette button duplicated the side bar Theme item (kept in the DOM: the Light/Dark switch is placed next to it) */
+[data-theme="aurora"] #btn-top-theme { display: none !important; }

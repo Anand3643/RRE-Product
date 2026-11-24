@@ -25,7 +25,7 @@
     const canUsers = !!(perms && perms.canManageUsers);
     document.querySelectorAll('#au-rail [data-act="users"]').forEach((b) => { b.style.display = canUsers ? '' : 'none'; });
     const inv = document.querySelector('#au-rail button.item.inv'), sub = document.getElementById('au-inv-sub');
-    const invOk = allowedModule('inventory') && me.role !== 'Guest';
+    const invOk = allowedModule('inventory');
     if (inv) inv.style.display = invOk ? '' : 'none'; if (sub && !invOk) sub.style.display = 'none';
     document.querySelectorAll('#au-tabbar button.inv').forEach((b) => { b.style.display = invOk ? '' : 'none'; });
     // inventory sub-list: the inventory application's own user screen is not used (users are managed in RRE)

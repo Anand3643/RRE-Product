@@ -136,7 +136,7 @@ async function stop() {
 // ---------------------------------------------------------------------------------------------------- one-minute single-use sign-in link
 const b64 = (b) => Buffer.from(b).toString('base64url');
 // RRE role -> the inventory application's role. Only an RRE administrator becomes an inventory owner: nobody is ever promoted by a mapping.
-const INV_ROLE = { Owner: 'owner', Administrator: 'owner', Accountant: 'accountant', 'Data Entry': 'warehouse', Auditor: 'viewer', Viewer: 'viewer' };
+const INV_ROLE = { Owner: 'owner', Administrator: 'owner', Accountant: 'accountant', 'Data Entry': 'warehouse', Auditor: 'viewer', Viewer: 'viewer', Guest: 'viewer' };
 /** claims: { as: 'admin' | 'user' | 'sync', email, name, role (RRE role), active } — signed with the secret only RRE and its inventory process share. */
 function ssoToken(claims = {}) {
   const c = typeof claims === 'string' ? { as: claims } : claims;
