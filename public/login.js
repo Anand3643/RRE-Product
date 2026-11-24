@@ -30,6 +30,7 @@
     for (const v of VIEWS) { const el = $('v-' + v); if (el) el.hidden = v !== name; }
     document.querySelectorAll('.msg').forEach((m) => m.classList.remove('show'));
     const f = focusId && $(focusId); if (f) setTimeout(() => f.focus({ preventScroll: true }), 60);
+    if (name === 'signup' && cfg.mail_configured === false) err('m-signup', 'Account creation needs e-mail to confirm your address, and the business has not set up e-mail yet. You can fill in the form, but it will not be accepted until e-mail is set up.');
     if (name === 'forgot') $('mail-note').textContent = cfg.mail_configured ? '' : ' · E-mail is not set up on this computer yet';
     else $('mail-note').textContent = '';
   }
@@ -43,7 +44,7 @@
     seg.querySelectorAll('button').forEach((b) => { const on = b.dataset.type === loginType; b.setAttribute('aria-selected', on ? 'true' : 'false'); b.tabIndex = on ? 0 : -1; });
     $('si-id').placeholder = loginType === 'admin' ? 'admin or you@company.com' : 'you@company.com';
     // Create account exists for customers only; employees are invited and administrators are set up securely
-    $('si-create').hidden = loginType !== 'customer' || cfg.signup_enabled === false;
+    $('si-create').hidden = loginType !== 'customer';
     $('si-emp-note').hidden = loginType !== 'employee';
     $('si-adm-note').hidden = loginType !== 'admin';
     $('si-resend').classList.add('hidden');
@@ -204,7 +205,7 @@
     if (cfg.setup_required && ['localhost', '127.0.0.1', '[::1]', '::1'].includes(location.hostname)) { show('setup', 'su-pw'); return; }
     $('si-guest').classList.toggle('hidden', !cfg.guest_access);
     const h = location.hash.replace('#', '');
-    if (h === 'forgot') show('forgot', 'fg-email'); else if (h === 'signup' && cfg.signup_enabled !== false) show('signup', 'sg-name'); else show('signin', 'si-id');
+    if (h === 'forgot') show('forgot', 'fg-email'); else if (h === 'signup') show('signup', 'sg-name'); else show('signin', 'si-id');
   }
   start();
 })();
