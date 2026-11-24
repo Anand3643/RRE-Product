@@ -326,6 +326,16 @@ async function main() {
   const resend = await adm2('POST', '/api/auth/users/' + expired.json.data.id + '/send-reset');
   assert(resend.json.success && /reset=/.test(outbox[outbox.length - 1].text), 'the administrator can send the invitation again');
 
+  console.log('--- 10b. Sign-up when e-mail is not set up yet ---');
+  mailer.setTransport(null); require('./core/identity')._resetLimits(); calm();
+  const nm = await signup({ ...good, email: 'nomail@shop.example', full_name: 'No Mail Customer' });
+  const nmUser = await get("SELECT role, status FROM users WHERE email = 'nomail@shop.example'");
+  assert(nm.status === 201 && nm.json.activated === true && nmUser.role === 'Customer' && nmUser.status === 'Active', 'without e-mail set up a customer can still create an account: it is active at once and is always a Customer');
+  calm(); assert((await login('nomail@shop.example', good.password, 'customer')).status === 200, 'and can sign in straight away');
+  assert((await signup({ ...good, email: 'nomail@shop.example' })).status === 409, 'a duplicate is refused');
+  assert((await signup({ ...good, email: 'nomail2@shop.example', role: 'Owner' })).status === 201 && (await get("SELECT role FROM users WHERE email = 'nomail2@shop.example'")).role === 'Customer', 'the role still cannot be chosen');
+  mailer.setTransport({ sendMail: async (m) => { outbox.push(m); } });
+
   console.log('\n--- 11. Real SMTP delivery path (local relay) ---');
   const fakeSmtp = await require('./scripts/fake-smtp').start(0);
   mailer.setTransport(null);

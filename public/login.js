@@ -30,7 +30,6 @@
     for (const v of VIEWS) { const el = $('v-' + v); if (el) el.hidden = v !== name; }
     document.querySelectorAll('.msg').forEach((m) => m.classList.remove('show'));
     const f = focusId && $(focusId); if (f) setTimeout(() => f.focus({ preventScroll: true }), 60);
-    if (name === 'signup' && cfg.mail_configured === false) err('m-signup', 'Account creation needs e-mail to confirm your address, and the business has not set up e-mail yet. You can fill in the form, but it will not be accepted until e-mail is set up.');
     if (name === 'forgot') $('mail-note').textContent = cfg.mail_configured ? '' : ' · E-mail is not set up on this computer yet';
     else $('mail-note').textContent = '';
   }
@@ -112,7 +111,7 @@
     if (!body.full_name || !body.email || !body.phone) return err('m-signup', 'Please fill in your name, e-mail address and mobile number.');
     if (body.password !== body.confirm) return err('m-signup', 'The two passwords are not the same.');
     busy('sg-go', true);
-    try { const r = await api('POST', '/auth/signup', body); $('signup-sent-text').textContent = r.message; $('sg-pw').value = ''; $('sg-pw2').value = ''; show('signup-sent'); }
+    try { const r = await api('POST', '/auth/signup', body); $('sg-pw').value = ''; $('sg-pw2').value = ''; if (r.activated) { $('si-id').value = body.email; show('verified'); $('v-verified').querySelector('h2').textContent = 'Account created'; $('v-verified').querySelector('p').textContent = 'Your account is ready. Sign in to open your customer dashboard.'; } else { $('signup-sent-text').textContent = r.message; show('signup-sent'); } }
     catch (x) { err('m-signup', x.message); }
     finally { busy('sg-go', false); }
   });

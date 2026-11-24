@@ -282,7 +282,9 @@ async function customerLedger(name, email, phone) {
  * address already had an account (that person is told by e-mail).
  */
 async function signup(b = {}, meta = {}) {
-  if (!mailer.isConfigured()) throw bad('Account creation is not available right now because e-mail is not set up. Please contact the business.', 503, 'MAIL_NOT_CONFIGURED');
+  // Without e-mail set up there is nobody to send the confirmation link to: the account is activated at once (still always a Customer).
+  // As soon as the Gmail settings are added, every new account goes back to e-mail confirmation.
+  const noMail = !mailer.isConfigured();
   if (limited(`signup:${meta.ip || "?"}`, 40, 60 * 60e3)) throw bad('Too many attempts. Please try again later.', 429);
   const name = String(b.full_name || '').trim().replace(/\s+/g, ' ');
   const email = lc(b.email), phone = String(b.phone || '').trim();
@@ -293,6 +295,7 @@ async function signup(b = {}, meta = {}) {
   const pw = String(b.password || '').trim(), weak = checkPassword(pw, { username: email.split('@')[0] }); if (weak) throw bad(weak, 422, 'WEAK_PASSWORD');
   const generic = { success: true, message: 'Almost done: we sent a message to that e-mail address. Open the link in it to activate your account.' };
   const existing = await all('SELECT * FROM users WHERE email = ? COLLATE NOCASE', [email]);
+  if (existing.length && noMail) throw bad('An account with this e-mail address already exists. Sign in, or ask the business to help you.', 409);
   if (existing.length) {
     const u = existing[0];
     if (existing.length === 1 && u.role === 'Customer' && u.status === 'Pending') { // never verified: send a fresh link, change nothing else
@@ -303,9 +306,10 @@ async function signup(b = {}, meta = {}) {
   }
   const party = (await customerLedger(name, email, phone)).id;
   const username = await uniqueUsername(email.split('@')[0]);
-  const r = await run(`INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries, must_change_password, party_id, email_verified) VALUES (?, ?, ?, 'Customer', ?, ?, 'Pending', 0, 0, ?, 0)`, [username, hashPassword(pw), name, email, phone, party]);
+  const r = await run(`INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries, must_change_password, party_id, email_verified) VALUES (?, ?, ?, 'Customer', ?, ?, ?, 0, 0, ?, 0)`, [username, hashPassword(pw), name, email, phone, noMail ? 'Active' : 'Pending', party]);
   const created = await get('SELECT * FROM users WHERE id = ?', [r.lastID]);
-  await audit('AUTH_SIGNUP', { user: created, ip: meta.ip });
+  await audit('AUTH_SIGNUP', { user: created, ip: meta.ip, details: { activated_without_email: noMail } });
+  if (noMail) { await refreshUser(created.id); return { success: true, activated: true, message: 'Your account is ready. You can sign in now.' }; }
   const token = await makeToken(created.id, 'verify', VERIFY_HOURS * 60, null, meta.ip), sent = await mailLink(created, token, 'verify');
   if (!sent.sent) throw bad('We could not send the confirmation e-mail. Please try again in a few minutes.', 502);
   return generic;
