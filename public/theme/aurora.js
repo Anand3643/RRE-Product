@@ -188,7 +188,7 @@
         <h1>Welcome back to <span id="au-co">your business</span></h1>
         <p class="au-lead">Your sales, spending, profit and stock in one place, straight from your books and updated as you work.</p>
         <div class="au-cta"><button type="button" class="au-btn primary" data-act="voucher"><i data-lucide="plus"></i>New voucher</button><button type="button" class="au-btn" data-act="reports"><i data-lucide="bar-chart-3"></i>Reports</button></div>
-      </div><div class="au-stage" data-speed="0.07" aria-hidden="true"><div class="au-orb"><div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div><div class="core"></div></div>
+      </div><div class="au-stage" data-speed="0.07" aria-hidden="true">
         <div class="au-float f2" data-go="outstandings" role="button" tabindex="0"><small>Cash &amp; bank</small><b id="au-f-cash">—</b></div><div class="au-float f3" data-go="stock-summary" role="button" tabindex="0"><small>Inventory value</small><b id="au-f-stock">—</b></div></div></section>
       <div class="au-sec-title">Business overview</div>
       <div class="au-stats" id="au-stats"></div>
