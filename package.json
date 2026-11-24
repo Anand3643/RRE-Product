@@ -43,7 +43,8 @@
     "setup:inventory": "python -m venv inventory-app/backend/.venv && inventory-app/backend/.venv/Scripts/python -m pip install -r inventory-app/backend/requirements.txt",
     "test:theme": "node test_theme.js",
     "test:auth": "node test_auth_unified.js",
-    "admin:reset": "node scripts/set-admin-password.js"
+    "admin:reset": "node scripts/set-admin-password.js",
+    "mail:setup": "node scripts/setup-mail.js"
   },
   "repository": {
     "type": "git",
