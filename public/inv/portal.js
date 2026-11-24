@@ -63,7 +63,9 @@
   function build() {
     if (root()) return;
     const el = document.createElement('div'); el.id = 'pt-app';
-    if (store.get('sp-theme') === 'dark') el.classList.add('dark');
+    const rreDark = () => document.documentElement.getAttribute('data-au') === 'dark'; // RRE's own Light / Dark choice
+    if (rreDark()) el.classList.add('dark');
+    new MutationObserver(() => el.classList.toggle('dark', rreDark())).observe(document.documentElement, { attributes: true, attributeFilter: ['data-au'] });
     el.innerHTML = `<div class="pt-main"><header class="pt-top"><div class="pt-brand"><span class="sp-logo">${ic('store')}</span><span>RRE Entries</span></div>
       <nav class="pt-tabs">${TABS.map(([k, t]) => `<button class="pt-tab" data-go="${k}">${t}</button>`).join('')}</nav>
       <button class="btn pt-cart-btn" id="pt-cart" aria-label="Your order request">${ic('shopping-cart')} Order request<span class="pt-count" hidden>0</span></button>
@@ -73,7 +75,7 @@
     document.body.appendChild(el);
     el.addEventListener('click', onClick);
     el.querySelector('#pt-cart').onclick = openCart;
-    el.querySelector('#pt-theme').onclick = () => { el.classList.toggle('dark'); store.set('sp-theme', el.classList.contains('dark') ? 'dark' : 'light'); };
+    el.querySelector('#pt-theme').onclick = () => { const t = document.querySelector('#au-mode [data-m]:not(.on)'); if (t) t.click(); else el.classList.toggle('dark'); };
     el.querySelector('#pt-out').onclick = signOut;
     // keystrokes here must not reach RRE's global shortcuts (Esc at RRE's gateway signs out)
     el.addEventListener('keydown', (e) => e.stopPropagation()); el.addEventListener('keyup', (e) => e.stopPropagation()); el.addEventListener('keypress', (e) => e.stopPropagation());
