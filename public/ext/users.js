@@ -25,7 +25,7 @@
     if (document.getElementById('um-css')) return;
     const s = document.createElement('style'); s.id = 'um-css';
     s.textContent = `
-#um-root{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:14px;background:rgba(5,9,22,.72);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);font-family:Inter,"Segoe UI",system-ui,sans-serif;--u-bg:#ffffff;--u-ink:#0f1a30;--u-ink2:#51607f;--u-line:rgba(26,42,68,.12);--u-soft:#f2f5fc;--u-accent:#1a2a44}
+#um-root{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;padding:14px;background:rgba(5,9,22,.72);font-family:Inter,"Segoe UI",system-ui,sans-serif;--u-bg:#ffffff;--u-ink:#0f1a30;--u-ink2:#51607f;--u-line:rgba(26,42,68,.12);--u-soft:#f2f5fc;--u-accent:#1a2a44}
 [data-au="dark"] #um-root,[data-theme="aurora"][data-au="dark"] #um-root{--u-bg:#0f1830;--u-ink:#eef3ff;--u-ink2:#a9b6d3;--u-line:rgba(150,175,255,.18);--u-soft:rgba(150,175,255,.08);--u-accent:#f59e0b}
 #um-root *{box-sizing:border-box}
 #um{width:min(1120px,100%);max-height:calc(100vh - 28px);display:flex;flex-direction:column;background:var(--u-bg);color:var(--u-ink);border:1px solid var(--u-line);border-radius:20px;box-shadow:0 40px 90px -30px rgba(0,0,0,.7);overflow:hidden}
