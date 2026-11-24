@@ -41,7 +41,9 @@
     "test:invbridge": "node test_invbridge.js",
     "test:ledgers": "node test_tally_groups_ledgers.js",
     "setup:inventory": "python -m venv inventory-app/backend/.venv && inventory-app/backend/.venv/Scripts/python -m pip install -r inventory-app/backend/requirements.txt",
-    "test:theme": "node test_theme.js"
+    "test:theme": "node test_theme.js",
+    "test:auth": "node test_auth_unified.js",
+    "admin:reset": "node scripts/set-admin-password.js"
   },
   "repository": {
     "type": "git",
@@ -61,6 +63,7 @@
     "@huggingface/transformers": "^3.8.1",
     "cors": "^2.8.6",
     "express": "^5.3.0",
+    "nodemailer": "^7.0.13",
     "sqlite3": "^6.0.1",
     "tesseract.js": "^7.0.0",
     "xml2js": "^0.6.2"

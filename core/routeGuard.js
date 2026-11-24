@@ -10,12 +10,15 @@
  */
 const { identify } = require('./auth');
 const { getRolePermissions } = require('./db');
+const { moduleOf } = require('./identity');
 
-const ENFORCE = process.env.RRE_ENFORCE_AUTH === '1';
+// On by default: nobody reaches an API without a valid, server-side session. RRE_ENFORCE_AUTH=0 is an emergency switch only.
+const ENFORCE = process.env.RRE_ENFORCE_AUTH !== '0';
 
 // Public: needed before login or harmless read-only status.
 const PUBLIC = [
-  ['POST', /^\/api\/auth\/(login|register|google)\/?$/],
+  ['POST', /^\/api\/auth\/(login|register|google|forgot|reset)\/?$/],
+  ['GET', /^\/api\/auth\/(config|reset\/validate)\/?$/],
   ['GET', /^\/api\/auth\/permissions\/?$/],
   ['GET', /^\/api\/auth\/setup-status\/?$/],
   ['POST', /^\/api\/auth\/setup\/?$/],
@@ -66,12 +69,19 @@ function routeGuard(req, res, next) {
     return res.status(401).json({ success: false, error: 'Authentication required. Please log in again.', code: 'AUTH_REQUIRED' });
   }
 
-  if (user.pwc && !(req.method === 'POST' && /^\/api\/auth\/change-password\/?$/.test(url))) {
+  const OWN = (req.method === 'POST' && /^\/api\/auth\/(change-password|logout)\/?$/.test(url)) || (req.method === 'GET' && /^\/api\/auth\/me\/?$/.test(url));
+  if (user.pwc && !OWN) {
     return res.status(403).json({ success: false, error: 'You must choose a new password before continuing.', code: 'PASSWORD_CHANGE_REQUIRED', must_change_password: true });
   }
 
-  if (user.role === 'Customer' && !/^\/api\/portal(\/|$)/.test(url) && !(req.method === 'POST' && /^\/api\/auth\/change-password\/?$/.test(url))) {
+  if (user.role === 'Customer' && !/^\/api\/portal(\/|$)/.test(url) && !OWN && !(req.method === 'PUT' && /^\/api\/auth\/me\/?$/.test(url))) {
     return res.status(403).json({ success: false, error: 'Customer portal accounts can only use the customer portal.', code: 'PORTAL_ONLY' });
+  }
+
+  // An employee whose administrator limited them to certain modules cannot use the others (administrators are never limited).
+  if (Array.isArray(user.modules) && user.role !== 'Owner' && user.role !== 'Administrator') {
+    const mod = moduleOf(url);
+    if (mod && !user.modules.includes(mod)) return res.status(403).json({ success: false, error: 'Your account does not have access to this module. Ask your administrator.', code: 'MODULE_FORBIDDEN' });
   }
 
   const rule = RULES.find((r) => (!r.m || r.m === req.method) && r.re.test(url));

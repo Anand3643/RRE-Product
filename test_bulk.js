@@ -1,3 +1,4 @@
+process.env.RRE_LEGACY_TOKENS = '1'; // these suites mint tokens directly; the unified-auth suite (test_auth_unified.js) runs without this
 process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these suites verify the server-side login and role checks, which are off by default in the login-free build
 /**
  * Recurring vouchers (human-confirmed drafts) and CSV voucher import (preview → atomic commit).
@@ -261,7 +262,7 @@ async function main() {
   assert((await req('GET', '/api/import/batches')).json.data.length >= 10 && (await req('GET', `/api/import/batches/${pb.batch_id}`)).json.data.status === 'committed', 'Batch history is available');
   const log2 = (await req('GET', '/api/platform/activity-log?limit=500')).json.data;
   assert(log2.some((l) => l.action === 'IMPORT_COMMIT') && log2.some((l) => l.action === 'IMPORT_PREVIEW'), 'Previews and commits are in the activity log');
-  assert((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 16, 'Migration 006 recorded');
+  assert((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 18, 'Migration 006 recorded');
   assert((await balanced()) === true, 'Books balanced at the end');
 
   console.log('\n====================================================');

@@ -126,5 +126,8 @@
   const wrap = (name) => { const f = window[name]; if (typeof f !== 'function' || f.__invWrapped) return; const w = function () { reset(); return f.apply(this, arguments); }; w.__invWrapped = true; window[name] = w; };
   window.addEventListener('load', () => wrap('startWithFreshLogin'));
 
-  window.RREInventory = { open, close, reset };
+  // the inventory screen says its session ended (RRE signed the person out elsewhere): close it, RRE asks for sign-in again if needed
+  window.addEventListener('message', (e) => { if (e.data && e.data.rre === 'inventory-signed-out' && loadedUrl) { try { if (new URL(loadedUrl).origin !== e.origin) return; } catch (x) { return; } reset(); } });
+
+  window.RREInventory = { open, close, reset, signOut: reset };
 })();

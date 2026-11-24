@@ -1,3 +1,4 @@
+process.env.RRE_LEGACY_TOKENS = '1'; // these suites mint tokens directly; the unified-auth suite (test_auth_unified.js) runs without this
 process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these suites verify the server-side login and role checks, which are off by default in the login-free build
 /**
  * Multilingual voice assistant: language identification, command understanding, replies, permissions, consent and privacy.
@@ -248,7 +249,7 @@ async function main() {
   assert(await vcount() === v0, 'No voucher was created by any voice command');
   const bal = (await get('SELECT ROUND(SUM(debit_amount),2) d, ROUND(SUM(credit_amount),2) c FROM ledger_entries'));
   assert(bal.d === bal.c, 'Debits still equal credits');
-  assert(((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 16), 'Migrations applied: 16');
+  assert(((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 18), 'Migrations applied: 18');
 
   console.log(`\n=== ${passed} passed, ${failed} failed ===`);
   process.exit(failed ? 1 : 0);

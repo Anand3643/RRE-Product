@@ -77,7 +77,7 @@ function nextNumber(reg) {
   return String(max + 1);
 }
 
-async function reopen(number) { await db.switchDatabase(number); await db.initDb(); await runMigrations(); }
+async function reopen(number) { await db.switchDatabase(number); await db.initDb(); await runMigrations(); await require('./identity').preload(); }
 
 async function create(body, user) {
   if (db.singleFolderMode) throw bad('Creating companies is unavailable in single-folder mode.', 409);

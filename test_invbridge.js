@@ -1,3 +1,4 @@
+process.env.RRE_LEGACY_TOKENS = '1'; // these suites mint tokens directly; the unified-auth suite (test_auth_unified.js) runs without this
 process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these suites verify the server-side login and role checks, which are off by default in the login-free build
 /**
  * Original inventory application (StockPilot) <-> RRE books.
@@ -49,8 +50,27 @@ async function main() {
   assert(l.status === 200 && /^http:\/\/127\.0\.0\.1:\d+\//.test(l.json.data.url), 'RRE starts the original inventory application on a private local port', JSON.stringify(l.json));
   const sp = `http://127.0.0.1:${host._state.port}`;
   const spReq = async (m, p, token, body, form) => { const r = await fetch(sp + p, { method: m, headers: { ...(token ? { Authorization: 'Bearer ' + token } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : form }); let j = null; try { j = await r.json(); } catch (e) {} return { status: r.status, json: j }; };
-  const su = await spReq('POST', '/api/auth/signup', null, { org_name: 'Bridge Org', name: 'Bridge Owner', email: 'bridge-owner@example.com', password: 'password123' });
-  assert(su.status === 201, 'The first sign-up in the empty inventory becomes its owner', JSON.stringify(su.json).slice(0, 150));
+  const sso = new URL(l.json.data.url).searchParams.get('sso');
+  const su = await spReq('POST', '/api/rre/sso', null, { token: sso });
+  assert(su.status === 200 && su.json.access_token, 'RRE signs its administrator in to the empty inventory as its owner (no second login, no sign-up)', JSON.stringify(su.json).slice(0, 150));
+  assert((await spReq('POST', '/api/rre/sso', null, { token: sso })).status === 401, 'the sign-in link works once');
+  assert((await spReq('POST', '/api/auth/signup', null, { org_name: 'X', name: 'X Y', email: 'x@example.com', password: 'password123' })).status === 410 && (await spReq('POST', '/api/auth/login', null, { email: 'x@example.com', password: 'password123' })).status === 410 && (await spReq('POST', '/api/auth/forgot', null, { email: 'x@example.com' })).status === 410, 'the inventory application has no sign-up, login or password reset of its own');
+  // one identity: an RRE employee reaches Inventory through their RRE session, with the role RRE gives them (never an administrator)
+  const ins = await run("INSERT INTO users (username, password, full_name, role, email, status) VALUES ('invemp', '" + require('./core/security').hashPassword('Employee#Pass2026x') + "', 'Inv Employee', 'Data Entry', 'inv.employee@example.com', 'Active')");
+  const empLogin = await rreReq('POST', '/api/auth/login', null, { identifier: 'inv.employee@example.com', password: 'Employee#Pass2026x', login_type: 'employee' });
+  const empTok = empLogin.json && empLogin.json.data && empLogin.json.data.token;
+  const el = await rreReq('POST', '/api/inventory-app/launch', empTok, {});
+  const esso = el.status === 200 && new URL(el.json.data.url).searchParams.get('sso');
+  const es = esso ? await spReq('POST', '/api/rre/sso', null, { token: esso }) : { status: 0, json: {} };
+  assert(es.status === 200 && es.json.user && es.json.user.role === 'warehouse' && es.json.user.email === 'inv.employee@example.com', 'An RRE employee is signed in to Inventory with no second login, as a warehouse user (never an administrator)', JSON.stringify(es.json).slice(0, 200));
+  const adminAttempt = await spReq('GET', '/api/users', es.json.access_token);
+  assert(adminAttempt.status === 410, 'The inventory user list is closed: accounts are managed in RRE');
+  await run("UPDATE users SET status = 'Inactive' WHERE id = ?", [ins.lastID]); // as a legacy screen or the portal would
+  await new Promise((r) => setTimeout(r, 1200));
+  const afterOff = await spReq('GET', '/api/auth/me', es.json.access_token); assert([401, 403].includes(afterOff.status), 'Deactivating the person in RRE ends their inventory session', afterOff.status + ' ' + JSON.stringify(afterOff.json).slice(0, 120));
+  const el2 = await rreReq('POST', '/api/inventory-app/launch', empTok, {});
+  assert(el2.status === 401, 'A deactivated account cannot open Inventory');
+  assert((await rreReq('POST', '/api/inventory-app/launch', T(ins.lastID + 999, 'ghost', 'Data Entry'), {})).status === 401, 'An unknown account cannot open Inventory');
   const H = su.json.access_token;
   const sp_ = (m, p, b) => spReq(m, p, H, b);
   await sp_('PATCH', '/api/organization', { gstin: '33ABCDE1234F1Z5', state: 'Tamil Nadu' });

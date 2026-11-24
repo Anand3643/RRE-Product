@@ -41,7 +41,7 @@
   }
 
   function storeSession(d) {
-    try { localStorage.setItem('tally_user_session', JSON.stringify({ user: d.user, permissions: d.permissions, token: d.token })); } catch (e) { /* ignore */ }
+    try { let prev = {}; try { prev = JSON.parse(localStorage.getItem('tally_user_session') || '{}') || {}; } catch (x) { /* ignore */ } localStorage.setItem('tally_user_session', JSON.stringify({ ...prev, user: d.user, permissions: d.permissions, token: d.token, home: d.home || prev.home })); } catch (e) { /* ignore */ }
     if (typeof appState !== 'undefined') { appState.currentUser = d.user; appState.permissions = d.permissions; }
   }
 

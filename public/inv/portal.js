@@ -58,7 +58,7 @@
   function saveCart() { store.set(cartKey(), JSON.stringify([...S.cart.values()])); updateCartBadge(); }
   function loadCart() { S.cart = new Map(); try { for (const l of JSON.parse(store.get(cartKey()) || '[]')) if (l && l.id && l.qty > 0) S.cart.set(l.id, l); } catch (e) { /* start empty */ } }
   function updateCartBadge() { const n = S.cart.size, b = root() && root().querySelector('.pt-count'); if (b) { b.textContent = n; b.hidden = !n; } }
-  const TABS = [['home', 'Home'], ['catalogue', 'Catalogue'], ['orders', 'My orders'], ['invoices', 'My invoices']];
+  const TABS = [['home', 'Home'], ['catalogue', 'Catalogue'], ['orders', 'My orders'], ['invoices', 'My invoices'], ['profile', 'My profile']];
 
   function build() {
     if (root()) return;
@@ -190,6 +190,35 @@
     v.innerHTML = `<div class="sp-wrap"><div class="row wrap mb"><input class="input" type="search" data-f="q" placeholder="Invoice or reference no…" value="${esc(q.q || '')}" style="max-width:260px"><input class="input" type="date" data-f="from" value="${esc(q.from || '')}" style="width:140px" aria-label="From"><input class="input" type="date" data-f="to" value="${esc(q.to || '')}" style="width:140px" aria-label="To"></div>
       <div class="card scroll-x">${invoicesTable(d.items, 'No invoices found.')}${d.items.length ? pager(d, 'invoices') : ''}</div></div>`;
     bindFilters('invoices'); bindRows(v);
+  };
+
+  // the customer's own profile (the same account they signed in with: one login for everything) and their own password
+  async function authApi(method, path, body) {
+    const res = await fetch('/api/auth' + path, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || j.success === false) { const e = new Error(j.error || 'Request failed (' + res.status + ')'); e.status = res.status; throw e; }
+    return j;
+  }
+  PAGES.profile = async (v) => {
+    const me = (await authApi('GET', '/me')).data.user;
+    v.innerHTML = `<div class="sp-wrap"><h2 style="margin:0 0 12px;font-size:18px">My profile</h2><div class="grid g2">
+      <form class="card" id="pf-form" style="padding:16px;display:grid;gap:10px"><b>Your details</b>
+        <label class="lbl">Name<input class="input" id="pf-name" value="${esc(me.full_name || '')}" maxlength="80" required></label>
+        <label class="lbl">Phone<input class="input" id="pf-phone" value="${esc(me.phone || '')}" maxlength="30"></label>
+        <label class="lbl">E-mail (your sign-in)<input class="input" value="${esc(me.email || me.username)}" disabled></label>
+        <label class="lbl">Customer account<input class="input" value="${esc(me.customer ? me.customer.name : '')}" disabled></label>
+        <div class="sub small">Signed up ${esc(String(me.created_at || '').slice(0, 10))}. To change your e-mail address, ask the business.</div>
+        <div><button class="btn primary" type="submit">Save</button></div></form>
+      <form class="card" id="pw-form" style="padding:16px;display:grid;gap:10px"><b>Change your password</b>
+        <label class="lbl">Current password<input class="input" id="pw-cur" type="password" autocomplete="current-password" required></label>
+        <label class="lbl">New password<input class="input" id="pw-new" type="password" autocomplete="new-password" required></label>
+        <div class="sub small">At least 10 characters, with letters and numbers.</div>
+        <div><button class="btn primary" type="submit">Change password</button></div></form></div></div>`;
+    v.querySelector('#pf-form').onsubmit = async (e) => { e.preventDefault(); try { await authApi('PUT', '/me', { full_name: v.querySelector('#pf-name').value, phone: v.querySelector('#pf-phone').value }); S.me.full_name = v.querySelector('#pf-name').value; root().querySelector('#pt-name').textContent = S.me.full_name; toast('Profile saved.'); } catch (x) { toast(x.message, 'err'); } };
+    v.querySelector('#pw-form').onsubmit = async (e) => { e.preventDefault(); try {
+      const j = await authApi('POST', '/change-password', { current_password: v.querySelector('#pw-cur').value, new_password: v.querySelector('#pw-new').value });
+      try { const old = JSON.parse(localStorage.getItem('tally_user_session') || '{}'); localStorage.setItem('tally_user_session', JSON.stringify({ ...old, user: j.data.user, permissions: j.data.permissions, token: j.data.token })); } catch (x) { /* ignore */ }
+      v.querySelector('#pw-cur').value = ''; v.querySelector('#pw-new').value = ''; toast('Password changed.'); } catch (x) { toast(x.message, 'err'); } };
   };
 
   async function orderDrawer(id) {

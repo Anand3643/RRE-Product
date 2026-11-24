@@ -1,3 +1,4 @@
+process.env.RRE_LEGACY_TOKENS = '1'; // these suites mint tokens directly; the unified-auth suite (test_auth_unified.js) runs without this
 process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these suites verify the server-side login and role checks, which are off by default in the login-free build
 /**
  * Accounts and access: first-time setup, no default credentials, one-click read-only guest entry (Owner can switch it off),
@@ -55,7 +56,7 @@ async function main() {
   assert((await req('GET', '/api/auth/setup-status')).json.data.setup_required === true, 'Setup is required on a fresh installation (public status check)');
   const seeded = await all('SELECT username, role, status, password FROM users');
   assert(seeded.length === 1 && seeded[0].username === 'admin' && seeded[0].role === 'Owner', 'Exactly one account exists: the initial administrator (no demo staff, no guest)');
-  assert(!seeded[0].password.startsWith('pbkdf2$') && !/admin|guest|123/i.test(seeded[0].password.replace('!setup-required!', '')), 'It has no password at all (no default is stored)');
+  assert(!/^(pbkdf2|argon2id|scrypt)[$]/.test(seeded[0].password) && !/admin|guest|123/i.test(seeded[0].password.replace('!setup-required!', '')), 'It has no password at all (no default is stored)');
   for (const p of ['', 'admin', '!setup-required!', 'admin123', 'anything']) assert((await login('admin', p)).status === 401, `Nobody can sign in as admin with "${p}" before setup`);
   assert((await login('admin', '!setup-required!')).json.error.includes('First-time setup'), 'The refusal tells them to finish setup');
   assert((await req('POST', '/api/auth/setup', { body: { password: 'short1' } })).status === 400 && (await req('POST', '/api/auth/setup', { body: { password: 'admin12345' } })).status === 400 && (await req('POST', '/api/auth/setup', { body: {} })).status === 400, 'Setup refuses weak, default-like or missing passwords');
@@ -246,7 +247,8 @@ async function main() {
   const html = fs.readFileSync(path.join(__dirname, 'public/index.html'), 'utf8');
   assert(!/id="login-password"[^>]*value="[^"]+"/.test(html) && !html.includes('qu-guest'), 'The main page has no pre-filled password or quick-user buttons');
   const portalHtml = fs.readFileSync(path.join(__dirname, 'public/portal.html'), 'utf8');
-  assert(/type="password"/.test(portalHtml) && !/<input[^>]*type="password"[^>]*value="[^"]+"/.test(portalHtml) && portalHtml.includes('This page is for customers'), 'The customer sign-in page has no pre-filled password and turns staff away');
+  const loginHtml = fs.readFileSync(path.join(__dirname, 'public/login.html'), 'utf8');
+  assert(/type="password"/.test(loginHtml) && !/<input[^>]*type="password"[^>]*value="[^"]+"/.test(loginHtml) && !/type="password"/.test(portalHtml) && portalHtml.includes('session-guard.js') && portalHtml.includes("role !== 'Customer'"), 'The one sign-in page has no pre-filled password; the customer portal has no login of its own and turns staff away');
   const appJs = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   assert(/function loginAsGuest\(\) \{\n  if \(window\.RREAccounts\) window\.RREAccounts\.continueAsGuest\(\);/.test(appJs.replace(/\r\n/g, '\n')), 'The page asks the server for a guest session; it holds no guest password');
   assert(fs.readFileSync(path.join(__dirname, '.gitignore'), 'utf8').split(/\r?\n/).includes('.tally-profile/'), '.tally-profile/ is in .gitignore');

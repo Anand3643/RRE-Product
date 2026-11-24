@@ -1,3 +1,4 @@
+process.env.RRE_LEGACY_TOKENS = '1'; // these suites mint tokens directly; the unified-auth suite (test_auth_unified.js) runs without this
 process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these suites verify the server-side login and role checks, which are off by default in the login-free build
 /**
  * Approval workflows: rules, holding, approving, rejecting, forged passes, import/recurring.
@@ -158,7 +159,7 @@ async function main() {
   console.log('\n--- 9. Integrity ---');
   assert(await balanced(), 'Debits equal credits across the books');
   const mg = (await get(`SELECT COUNT(*) c FROM schema_migrations`)).c;
-  assert(mg === 16, 'Migrations applied: 16', 'got ' + mg);
+  assert(mg === 18, 'Migrations applied: 18', 'got ' + mg);
 
   console.log(`\n=== ${passed} passed, ${failed} failed ===`);
   process.exit(failed ? 1 : 0);

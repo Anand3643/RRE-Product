@@ -106,7 +106,7 @@ async function doStart() {
   const port = await freePort();
   fs.mkdirSync(path.join(dir(), 'uploads'), { recursive: true });
   const log = fs.openSync(path.join(dir(), 'sidecar.log'), 'a');
-  const env = { ...process.env, PYTHONUNBUFFERED: '1', PYTHONUTF8: '1', DATABASE_URL: `sqlite:///${fwd(dbFile())}`, UPLOAD_DIR: path.join(dir(), 'uploads'), SECRET_KEY: secretKey(), RRE_BRIDGE_SECRET: bridgeSecret(),
+  const env = { ...process.env, PYTHONUNBUFFERED: '1', PYTHONUTF8: '1', DATABASE_URL: `sqlite:///${fwd(dbFile())}`, UPLOAD_DIR: path.join(dir(), 'uploads'), SECRET_KEY: secretKey(), RRE_BRIDGE_SECRET: bridgeSecret(), RRE_HOME_URL: `http://127.0.0.1:${process.env.PORT || 4000}`,
     CORS_ORIGINS: `http://127.0.0.1:${process.env.PORT || 4000},http://localhost:${process.env.PORT || 4000}` };
   const proc = spawn(python, ['-m', 'uvicorn', 'rre_host:app', '--host', '127.0.0.1', '--port', String(port), '--log-level', 'warning'], { cwd: BACKEND, env, stdio: ['ignore', log, log], windowsHide: true, detached: !isWin });
   Object.assign(state, { proc, port, python, company: String(getCompanyNumber()), adopted: false, error: null, seeded });
@@ -135,17 +135,26 @@ async function stop() {
 
 // ---------------------------------------------------------------------------------------------------- one-minute single-use sign-in link
 const b64 = (b) => Buffer.from(b).toString('base64url');
-function ssoToken(as = 'admin') {
-  const body = b64(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 60, jti: crypto.randomBytes(12).toString('hex'), as }));
+// RRE role -> the inventory application's role. Only an RRE administrator becomes an inventory owner: nobody is ever promoted by a mapping.
+const INV_ROLE = { Owner: 'owner', Administrator: 'owner', Accountant: 'accountant', 'Data Entry': 'warehouse', Auditor: 'viewer', Viewer: 'viewer' };
+/** claims: { as: 'admin' | 'user' | 'sync', email, name, role (RRE role), active } — signed with the secret only RRE and its inventory process share. */
+function ssoToken(claims = {}) {
+  const c = typeof claims === 'string' ? { as: claims } : claims;
+  const as = c.as || 'user';
+  const payload = { exp: Math.floor(Date.now() / 1000) + 60, jti: crypto.randomBytes(12).toString('hex'), as };
+  if (as !== 'admin') Object.assign(payload, { email: String(c.email || '').toLowerCase(), name: String(c.name || '').slice(0, 120), role: INV_ROLE[c.role] || 'viewer', active: c.active !== false });
+  else Object.assign(payload, { email: String(c.email || '').toLowerCase(), name: String(c.name || '').slice(0, 120) });
+  const body = b64(JSON.stringify(payload));
   return `${body}.${crypto.createHmac('sha256', bridgeSecret()).update(body).digest('base64url')}`;
 }
 
 /** Starts the inventory application if needed and returns the address to open. `admin` signs the administrator in; otherwise the original login is shown. */
-async function launch({ admin = false, path: sub = '/', wait = true } = {}) {
+async function launch({ user = null, admin = false, path: sub = '/', wait = true } = {}) {
   if (!wait && !(state.port && (await ping(state.port, 800)))) { ensureStarted().catch(() => { /* the reason is kept in state.error and shown by status() */ }); return { starting: true }; } // answer at once; the screen waits for the start-up
   await ensureStarted();
   const p = /^\/[A-Za-z0-9\-_/]*$/.test(sub) ? sub : '/';
-  return { url: `http://127.0.0.1:${state.port}${p}${admin ? `?sso=${ssoToken('admin')}` : '?fresh=1'}`, port: state.port };
+  const claims = user ? { as: INV_ROLE[user.role] === 'owner' ? 'admin' : 'user', email: user.email, name: user.full_name || user.username, role: user.role } : { as: admin ? 'admin' : 'user', role: admin ? 'Owner' : 'Viewer' };
+  return { url: `http://127.0.0.1:${state.port}${p}?sso=${ssoToken(claims)}`, port: state.port };
 }
 
 function status() {
@@ -160,4 +169,14 @@ process.on('exit', () => {
   } catch (e) { /* ignore */ }
 });
 
-module.exports = { launch, status, ensureStarted, stop, findPython, _state: state, ssoToken };
+/** Tells the running inventory application that an RRE account changed (role, name, deactivated, signed out): it updates its projection and ends that person's inventory sessions. */
+function syncUser(user, { active = true } = {}) {
+  return new Promise((resolve) => {
+    if (!state.port || !user || !user.email) return resolve(false);
+    const body = JSON.stringify({ token: ssoToken({ as: 'sync', email: user.email, name: user.full_name || user.username, role: user.role, active }) });
+    const r = require('http').request({ host: '127.0.0.1', port: state.port, path: '/api/rre/sync', method: 'POST', headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }, timeout: 4000 }, (res) => { res.resume(); res.on('end', () => resolve(res.statusCode === 200)); });
+    r.on('error', () => resolve(false)); r.on('timeout', () => { r.destroy(); resolve(false); }); r.write(body); r.end();
+  });
+}
+
+module.exports = { launch, status, ensureStarted, stop, findPython, _state: state, ssoToken, syncUser, INV_ROLE };

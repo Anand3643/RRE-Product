@@ -1,3 +1,4 @@
+process.env.RRE_LEGACY_TOKENS = '1'; // these suites mint tokens directly; the unified-auth suite (test_auth_unified.js) runs without this
 process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these suites verify the server-side login and role checks, which are off by default in the login-free build
 /**
  * Voucher attachments: validation by file contents, safe downloads, access control, backup & cascade.
@@ -126,7 +127,7 @@ async function main() {
   assert((await get('SELECT COUNT(*) c FROM voucher_attachment_data WHERE attachment_id NOT IN (SELECT id FROM voucher_attachments)')).c === 0, 'No orphaned file data remains');
   const dr = (await get('SELECT ROUND(SUM(debit_amount),2) s FROM ledger_entries')).s, cr = (await get('SELECT ROUND(SUM(credit_amount),2) s FROM ledger_entries')).s;
   assert(dr === cr, 'Total Dr == total Cr', `${dr}/${cr}`);
-  assert((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 16, 'Migration 007 recorded');
+  assert((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 18, 'Migration 007 recorded');
   void all;
 
   console.log('\n====================================================');

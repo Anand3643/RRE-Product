@@ -115,12 +115,17 @@ const run = (sql, params = []) => {
     if (!db) connectDb();
     db.run(sql, params, function (err) {
       if (err) reject(err);
-      else resolve({ lastID: this.lastID, changes: this.changes });
+      else {
+        const out = { lastID: this.lastID, changes: this.changes };
+        // any change to accounts made outside the identity service (portal, legacy routes) must reach the live session cache
+        if (/^\s*(UPDATE|DELETE)\s+(FROM\s+)?users\b/i.test(sql) && !/^\s*UPDATE users SET (last_login|failed_logins)/i.test(sql)) setImmediate(() => { try { require('./identity').refreshAll(); } catch (e) { /* identity not loaded yet */ } });
+        resolve(out);
+      }
     });
   });
 };
 
-const get = (sql, params = []) => {
+const get =(sql, params = []) => {
   return new Promise((resolve, reject) => {
     if (!db) connectDb();
     db.get(sql, params, (err, row) => {
@@ -1154,59 +1159,14 @@ async function changePassword(userId, currentPassword, newPassword, clientMeta =
   return handleLoginSuccess(await get('SELECT * FROM users WHERE id = ?', [user.id]), clientMeta);
 }
 
-async function authenticateUser(username, password, clientMeta = {}) {
+async function authenticateUser(username, password, clientMeta = {}, opts = {}) {
   await seedDefaultUsers();
-  const u = (username || '').trim();
-  const generic = { success: false, error: 'Incorrect username or password.' };
-  const user = u ? await get('SELECT * FROM users WHERE username = ? COLLATE NOCASE', [u]) : null;
-  if (!user) return generic;
-  if (user.role === 'Guest') return { success: false, error: 'The Guest account has no password. Use the Guest button on the login screen.' };
-  if (user.status !== 'Active') return { success: false, error: 'User account is deactivated. Contact Company Administrator.' };
-  if (user.password === SETUP_MARKER) return { success: false, error: 'First-time setup is not finished. Open RRE Tally on this computer and choose the administrator password.' };
-
-  const p = (password || '').trim();
-  if (!p) return generic;
-  const verifyResult = verifyPassword(p, user.password);
-  if (!verifyResult.valid) return generic;
-
-  // Transparent cryptographic migration: upgrade a legacy plaintext password to a salted PBKDF2 hash on the fly
-  if (verifyResult.needsMigration || !user.password.startsWith('pbkdf2$')) {
-    try { await run('UPDATE users SET password = ? WHERE id = ?', [hashPassword(p), user.id]); } catch (migErr) { console.warn('[Security] Password migration notice:', migErr.message); }
-  }
-  return handleLoginSuccess(user, clientMeta);
+  return require('./identity').authenticate(username, password, clientMeta, opts);
 }
 
+/** Every successful sign-in (password, setup, guest, password change) goes through the one identity service. */
 async function handleLoginSuccess(user, clientMeta = {}) {
-  const now = new Date().toISOString();
-  await run('UPDATE users SET last_login = ? WHERE id = ?', [now, user.id]);
-  
-  await run(
-    `INSERT INTO user_logins (user_id, username, role, ip_address, user_agent, login_time)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [user.id, user.username, user.role, clientMeta.ip || '127.0.0.1', clientMeta.agent || 'TallyClient', now]
-  );
-
-  const permissions = getRolePermissions(user.role);
-  const token = createSessionToken(user);
-
-  return {
-    success: true,
-    data: {
-      user: {
-        id: user.id,
-        username: user.username,
-        full_name: user.full_name,
-        role: user.role,
-        email: user.email,
-        phone: user.phone,
-        status: user.status,
-        allow_backdated_entries: user.allow_backdated_entries
-      },
-      permissions,
-      token,
-      must_change_password: !!user.must_change_password
-    }
-  };
+  return require('./identity').issueLogin(user, clientMeta);
 }
 
 function getRolePermissions(role) {
@@ -1584,6 +1544,7 @@ module.exports = {
   registerUser,
   loginWithGoogle,
   hardenAccounts,
+  SETUP_MARKER,
   isGuestAccessOn,
   guestAccessEnabled,
   setGuestAccess,

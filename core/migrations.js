@@ -542,6 +542,48 @@ const MIGRATIONS = [
     statements: [
       'ALTER TABLE ledgers ADD COLUMN description TEXT'
     ]
+  },
+  {
+    id: '018_unified_identity',
+    description: 'One login for everything: server-side sessions, password-reset tokens, account lock-out and per-employee module access (additive only)',
+    statements: [
+      'ALTER TABLE users ADD COLUMN module_access TEXT',
+      'ALTER TABLE users ADD COLUMN failed_logins INTEGER DEFAULT 0',
+      'ALTER TABLE users ADD COLUMN locked_until TEXT',
+      'ALTER TABLE users ADD COLUMN created_by INTEGER',
+      'ALTER TABLE users ADD COLUMN needs_review INTEGER DEFAULT 0',
+      'ALTER TABLE users ADD COLUMN deactivated_at TEXT',
+      'CREATE INDEX IF NOT EXISTS idx_users_email ON users(email COLLATE NOCASE)',
+      `CREATE TABLE IF NOT EXISTS auth_sessions (
+        sid TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        revoked_at TEXT,
+        revoked_reason TEXT,
+        remember INTEGER DEFAULT 0,
+        ip TEXT,
+        agent TEXT
+      )`,
+      'CREATE INDEX IF NOT EXISTS idx_auth_sessions_user ON auth_sessions(user_id, revoked_at)',
+      `CREATE TABLE IF NOT EXISTS password_resets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        purpose TEXT NOT NULL DEFAULT 'reset',
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        used_at TEXT,
+        requested_ip TEXT,
+        created_by INTEGER
+      )`,
+      'CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id, used_at)',
+      `CREATE TABLE IF NOT EXISTS identity_migrations (
+        key TEXT PRIMARY KEY,
+        ran_at TEXT NOT NULL,
+        report TEXT
+      )`
+    ]
   }
 ];
 

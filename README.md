@@ -118,6 +118,24 @@ RRE Entries implements the 13 enterprise system pillars designed for high-reliab
 
 ---
 
+## 🔐 One sign-in for everything (Admin · Employee · Customer)
+RRE Entries has **one login page, one authentication system and one user list**. Inventory, accounting, reports and the customer portal are modules of the same application and use the same session.
+
+* **Login types** — the sign-in page offers *Admin*, *Employee* and *Customer*. The choice is only checked against the role stored in the database; it never grants access. A mismatch looks exactly like a wrong password.
+* **Roles** — Admin (everything, including user management), Employee (Accountant / Data Entry / Auditor / Viewer; an administrator can limit an employee to chosen modules) and Customer (own orders, invoices and profile in the customer portal only). Every API route is checked on the server.
+* **Passwords** — stored only as salted Argon2id hashes; nobody, administrators included, can read one. Reset links are random, single-use, expire after 30 minutes and only their hash is stored. Five wrong passwords lock the account for 15 minutes. Sessions can be ended (sign-out, deactivation, password reset) and expire.
+* **User management** (administrators): create employees and customers, roles, module access, activate / deactivate, unlock, e-mail a password link, see last sign-in and sign-in activity.
+* **First start** — the person installing chooses the administrator password on the sign-in page (only on that computer). There are no default credentials. Forgot it? Run `npm run admin:reset` on the computer.
+
+### Gmail for "Forgot password" and invitations
+Credentials come only from environment variables (a local `.env` file, which is never committed). Copy `.env.example` to `.env` and:
+1. Turn on 2-Step Verification for the Gmail account that will send the mail (https://myaccount.google.com/security).
+2. Create an **App password** (https://myaccount.google.com/apppasswords, name it "RRE Entries"). Your normal Gmail password will not work.
+3. Put it in `.env`: `RRE_SMTP_USER=you@gmail.com` and `RRE_SMTP_PASS=<the 16 characters, no spaces>`. If people open RRE from other computers also set `RRE_PUBLIC_URL=http://<this-computer>:4000` so the links work for them.
+4. Restart RRE Entries. User management → Access settings shows *E-mail: set up*.
+
+Tests: `npm run test:auth`.
+
 ## 💻 Install and Run on PC
 
 ### 1. Ready-to-Use Windows Desktop App

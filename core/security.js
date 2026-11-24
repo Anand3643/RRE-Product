@@ -49,10 +49,27 @@ const PBKDF2_DIGEST = 'sha512';
  * @param {string} password 
  * @returns {string} Format: pbkdf2$iterations$salt$hash
  */
+// New passwords are stored with Argon2id (memory-hard; built into Node 24). If a runtime lacks it (older Electron/Node), scrypt is used instead.
+// Older PBKDF2 hashes keep working and are upgraded to Argon2id the next time their owner signs in.
+const ARGON = { memory: 19456, passes: 2, parallelism: 1, tagLength: 32 }; // OWASP-recommended minimum for Argon2id
+const HAS_ARGON2 = typeof crypto.argon2Sync === 'function';
+const b64u = (b) => Buffer.from(b).toString('base64url');
+const SCRYPT = { N: 32768, r: 8, p: 1, keylen: 32, maxmem: 96 * 1024 * 1024 };
+
 function hashPassword(password) {
   if (!password || typeof password !== 'string') {
     throw new Error('Password must be a non-empty string');
   }
+  const nonce = crypto.randomBytes(16);
+  if (HAS_ARGON2) {
+    const tag = crypto.argon2Sync('argon2id', { message: Buffer.from(password), nonce, ...ARGON });
+    return `argon2id$v=19$m=${ARGON.memory},t=${ARGON.passes},p=${ARGON.parallelism}$${b64u(nonce)}$${b64u(tag)}`;
+  }
+  const tag = crypto.scryptSync(password, nonce, SCRYPT.keylen, { N: SCRYPT.N, r: SCRYPT.r, p: SCRYPT.p, maxmem: SCRYPT.maxmem });
+  return `scrypt$N=${SCRYPT.N},r=${SCRYPT.r},p=${SCRYPT.p}$${b64u(nonce)}$${b64u(tag)}`;
+}
+
+function hashPasswordPbkdf2(password) {
   const salt = crypto.randomBytes(16).toString('hex');
   const derivedKey = crypto.pbkdf2Sync(
     password,
@@ -72,9 +89,29 @@ function hashPassword(password) {
  * @param {string} storedHash 
  * @returns {{ valid: boolean, needsMigration: boolean }}
  */
+const same = (a, b) => { try { return a.length === b.length && crypto.timingSafeEqual(a, b); } catch (e) { return false; } };
 function verifyPassword(inputPassword, storedHash) {
   const p = (inputPassword || '').trim();
   const stored = (storedHash || '').trim();
+
+  // Argon2id (current)
+  if (stored.startsWith('argon2id$')) {
+    try {
+      const [, , params, salt, tag] = stored.split('$');
+      const m = /m=(\d+),t=(\d+),p=(\d+)/.exec(params), want = Buffer.from(tag, 'base64url');
+      if (!m || !HAS_ARGON2) return { valid: false, needsMigration: false };
+      const got = crypto.argon2Sync('argon2id', { message: Buffer.from(p), nonce: Buffer.from(salt, 'base64url'), memory: +m[1], passes: +m[2], parallelism: +m[3], tagLength: want.length });
+      return { valid: same(got, want), needsMigration: false };
+    } catch (e) { return { valid: false, needsMigration: false }; }
+  }
+  // scrypt (used where Argon2id is unavailable)
+  if (stored.startsWith('scrypt$')) {
+    try {
+      const [, params, salt, tag] = stored.split('$'), m = /N=(\d+),r=(\d+),p=(\d+)/.exec(params), want = Buffer.from(tag, 'base64url');
+      const got = crypto.scryptSync(p, Buffer.from(salt, 'base64url'), want.length, { N: +m[1], r: +m[2], p: +m[3], maxmem: SCRYPT.maxmem });
+      return { valid: same(got, want), needsMigration: false };
+    } catch (e) { return { valid: false, needsMigration: false }; }
+  }
 
   // Modern PBKDF2 Hash
   if (stored.startsWith('pbkdf2$')) {
@@ -118,12 +155,13 @@ function verifyPassword(inputPassword, storedHash) {
  * @param {number} expiresInHours 
  * @returns {string} Signed token
  */
-function createSessionToken(user, expiresInHours = 24) {
+function createSessionToken(user, expiresInHours = 24, sid = null) {
   const expiresAt = Date.now() + (expiresInHours * 60 * 60 * 1000);
   const payload = JSON.stringify({
     userId: user.id,
     username: user.username,
     role: user.role,
+    ...(sid ? { sid } : {}),
     ...(user.must_change_password ? { pwc: 1 } : {}),
     ...(companyProvider ? { company: companyProvider() } : {}),
     expiresAt
@@ -312,6 +350,8 @@ function deriveSecret(purpose) {
 }
 
 module.exports = {
+  needsRehash: (stored) => !String(stored || '').startsWith(HAS_ARGON2 ? 'argon2id$' : 'scrypt$'),
+  hashPasswordPbkdf2,
   deriveSecret,
   signApprovalPass,
   verifyApprovalPass,

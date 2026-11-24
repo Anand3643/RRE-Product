@@ -1,3 +1,4 @@
+process.env.RRE_LEGACY_TOKENS = '1'; // these suites mint tokens directly; the unified-auth suite (test_auth_unified.js) runs without this
 process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these suites verify the server-side login and role checks, which are off by default in the login-free build
 /**
  * Batch / expiry / serial tracking and barcode lookup.
@@ -199,7 +200,7 @@ async function main() {
   assert(dr === cr, 'Total Dr == total Cr', `${dr}/${cr}`);
   const plainQty = (await getStockPositions()).find((s) => s.id === PLAIN).current_qty;
   assert(plainQty === 10, 'Untracked item stock unchanged');
-  assert((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 16, 'Migration 008 recorded');
+  assert((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 18, 'Migration 008 recorded');
   void all;
 
   console.log('\n====================================================');

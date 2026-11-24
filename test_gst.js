@@ -1,3 +1,4 @@
+process.env.RRE_LEGACY_TOKENS = '1'; // these suites mint tokens directly; the unified-auth suite (test_auth_unified.js) runs without this
 process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these suites verify the server-side login and role checks, which are off by default in the login-free build
 /**
  * Verification for GST tools (validation, tax checks, GSTR-2B reconciliation).
@@ -195,7 +196,7 @@ async function main() {
   assert(bl.json.data.length === 2 && bl.json.data[0].valid && !bl.json.data[1].valid, 'Batch GSTIN validation');
   const dr = (await get('SELECT ROUND(SUM(debit_amount),2) s FROM ledger_entries')).s, cr = (await get('SELECT ROUND(SUM(credit_amount),2) s FROM ledger_entries')).s;
   assert(dr === cr, 'Total Dr == total Cr after all GST operations', `${dr}/${cr}`);
-  assert((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 16, 'Migration 004 recorded');
+  assert((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 18, 'Migration 004 recorded');
 
   console.log('\n====================================================');
   console.log(`📊 GST RESULTS: ${passed} PASSED | ${failed} FAILED`);

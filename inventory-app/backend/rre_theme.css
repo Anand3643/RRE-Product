@@ -36,3 +36,4 @@ body { background-image: radial-gradient(1000px 520px at 12% -8%, rgb(221 229 25
 /* the navigation of the inventory application keeps its structure; only its colours change with the tokens above */
 * { scrollbar-width: thin; scrollbar-color: rgb(var(--brand) / .45) transparent; }
 ::selection { background: rgb(34 211 238 / .35); }
+

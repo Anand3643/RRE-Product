@@ -1,3 +1,4 @@
+process.env.RRE_LEGACY_TOKENS = '1'; // these suites mint tokens directly; the unified-auth suite (test_auth_unified.js) runs without this
 process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these suites verify the server-side login and role checks, which are off by default in the login-free build
 const http = require('http');
 const fs = require('fs');
@@ -73,7 +74,8 @@ async function runTests() {
   try {
     const testPlain = 'SecurePass_2026!';
     const hashed = hashPassword(testPlain);
-    assert(hashed.startsWith('pbkdf2$10000$'), 'Password hashed with Salted PBKDF2-SHA512');
+    assert(hashed.startsWith('argon2id$') && hashed.split('$').length === 5 && !hashed.includes(testPlain), 'Password hashed with salted Argon2id');
+    assert(verifyPassword(testPlain, require('./core/security').hashPasswordPbkdf2(testPlain)).valid === true, 'Older PBKDF2 hashes still verify (and are upgraded at the next sign-in)');
 
     const checkMatch = verifyPassword(testPlain, hashed);
     assert(checkMatch.valid === true, 'Valid password successfully verified against PBKDF2 hash');
@@ -317,7 +319,7 @@ async function runTests() {
     assert((await httpPost('/api/auth/users', { username: newName + 'b', full_name: 'Weak', password: 'short1', role: 'Accountant' })).statusCode === 400, 'A weak password is refused');
     assert((await httpPost('/api/auth/users', { username: newName + 'c', full_name: 'Guest Try', password: 'Another_Pass_2026x', role: 'Guest' })).statusCode === 400, 'A Guest account cannot be created');
     const storedUser = await get('SELECT * FROM users WHERE username = ?', [newName]);
-    assert(storedUser && storedUser.password.startsWith('pbkdf2$10000$') && storedUser.must_change_password === 1, 'New account is stored with a PBKDF2 hash and must change its password');
+    assert(storedUser && storedUser.password.startsWith('argon2id$') && storedUser.must_change_password === 1, 'New account is stored with an Argon2id hash and must change its password');
     const regLoginRes = await httpPost('/api/auth/login', { username: newName, password: 'Temp_Pass_2026x' });
     assert(regLoginRes.statusCode === 200 && regLoginRes.data.data.must_change_password === true, 'The new person can sign in with the temporary password, and is told to change it');
 

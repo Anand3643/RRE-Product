@@ -1,3 +1,4 @@
+require('./core/env').load(); // .env (Gmail settings etc.) before anything reads process.env
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -283,6 +284,7 @@ app.post('/api/backup/restore', async (req, res) => {
         await reopenDb();
         await initDb();
         await runMigrations();
+        await require('./core/identity').preload();
       }
     });
 
@@ -363,6 +365,8 @@ app.post('/api/company/update', async (req, res) => {
 // ========================================================
 // TALLY SECURITY CONTROL & MULTI-USER API
 // ========================================================
+
+app.use('/api/auth', require('./modules/identity/identityApi')); // the one authentication API (login types, sessions, forgot/reset, user management)
 
 app.post('/api/auth/login', rateLimitLoginMiddleware, async (req, res) => {
   const clientMeta = {
@@ -839,6 +843,7 @@ function startServer(preferredPort = WEB_PORT, preferredHost = '127.0.0.1') {
     try {
       await initDb();
       await runMigrations();
+      await require('./core/identity').preload();
       startScheduler();
     } catch (err) {
       console.error('[Tally Core DB] Database warning during startup:', err.message);

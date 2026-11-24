@@ -293,15 +293,31 @@ function cycleNextTheme() {
 // ========================================================
 // 2. INITIALIZATION & SESSION LOADING
 // ========================================================
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  if (window.__RRE_REDIRECTING) return; // no valid session: session-guard.js is already sending the person to the sign-in page
   try {
     initTheme();
     setupKeyboardShortcuts();
     if (window.lucide) window.lucide.createIcons();
 
-    // Direct Standalone Access (Logins removed - Default Full Administrator Access)
-    appState.currentUser = { id: 1, username: 'Administrator', role: 'Owner' };
-    appState.permissions = getOfflineRolePermissions('Owner');
+    // The person signed in on the one RRE sign-in page. The server tells us who they are and what their role allows
+    // (the browser's copy is only used to draw the screen; every API call is checked again on the server).
+    const saved = window.__RRE_SESSION || {};
+    let who = saved.user || null, perms = saved.permissions || null;
+    try {
+      const res = await fetch('/api/auth/me', { cache: 'no-store' });
+      if (res.status === 401 || res.status === 403) { window.startWithFreshLogin(); return; }
+      const j = await res.json();
+      if (j && j.success && j.data) {
+        if (j.data.must_change_password) { location.replace('login.html?switch=1'); return; }
+        who = j.data.user; perms = j.data.permissions;
+        try { localStorage.setItem('tally_user_session', JSON.stringify({ ...saved, user: who, permissions: perms, modules: who.modules })); } catch (e) { /* ignore */ }
+      }
+    } catch (netErr) { /* server not reachable: keep the saved copy so the screen can still draw */ }
+    if (!who) { window.startWithFreshLogin(); return; }
+    appState.currentUser = who;
+    appState.permissions = perms || getOfflineRolePermissions(who.role === 'Administrator' ? 'Owner' : who.role);
+    window.dispatchEvent(new CustomEvent('rre:session', { detail: { user: who, permissions: appState.permissions } }));
     updateUserDisplay();
     applyRolePermissions();
     showGateway();
@@ -309,6 +325,7 @@ document.addEventListener('DOMContentLoaded', () => {
     console.error('Initial mount error:', initErr);
     showGateway();
   } finally {
+    const hide = document.getElementById('rre-sg'); if (hide) hide.remove();
     // Asynchronously load backend data in background without blocking UI rendering
     Promise.allSettled([loadGatewayInfo(), loadMasters()]).then(() => {
       if (window.lucide) window.lucide.createIcons();
@@ -417,8 +434,11 @@ function showLoginView() {
   showGateway();
 }
 
+/** The session ended (expired, signed out elsewhere, account deactivated): back to the one sign-in page. */
 function startWithFreshLogin() {
-  showGateway();
+  try { localStorage.removeItem('tally_user_session'); sessionStorage.removeItem('rre_alive'); } catch (e) { /* ignore */ }
+  window.__RRE_REDIRECTING = true;
+  location.replace('login.html?expired=1');
 }
 
 function toggleFreshLoginStartup(checked) {
@@ -479,8 +499,13 @@ async function handleLogin(e) {
   }
 }
 
-function handleLogout() {
-  startWithFreshLogin();
+/** Sign out: the server ends the session (so the token stops working everywhere), then the browser leaves. */
+async function handleLogout() {
+  try { await fetch('/api/auth/logout', { method: 'POST', keepalive: true }); } catch (e) { /* the server may be gone: leave anyway */ }
+  try { if (window.RREInventory && window.RREInventory.signOut) window.RREInventory.signOut(); } catch (e) { /* ignore */ }
+  try { localStorage.removeItem('tally_user_session'); sessionStorage.removeItem('rre_alive'); } catch (e) { /* ignore */ }
+  window.__RRE_REDIRECTING = true;
+  location.replace('login.html');
 }
 
 function openRegisterModal() {
