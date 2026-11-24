@@ -103,7 +103,7 @@ async function main() {
   assert(c1.json.success && outbox.length === 0, 'an administrator can instead set a temporary password (no e-mail)');
   calm();
   const c2 = await login('carl@example.com', CUS, 'customer');
-  assert(c2.status === 200 && c2.json.data.must_change_password === true && c2.json.data.home === 'portal' && c2.json.data.user.customer.name === 'Acme Traders', 'customer signs in, must change the temporary password, lands in the portal');
+  assert(c2.status === 200 && c2.json.data.must_change_password === true && c2.json.data.home === 'app' && c2.json.data.user.customer.name === 'Acme Traders', 'customer signs in, must change the temporary password, stays inside the main application');
   const C = c2.json.data.token;
   assert((await req('GET', '/api/inv/items', { token: C })).status === 403, 'a customer with a temporary password cannot do anything but change it');
   const chg = await req('POST', '/api/auth/change-password', { token: C, body: { current_password: CUS, new_password: NEW } });
@@ -286,7 +286,7 @@ async function main() {
   assert((await req('POST', '/api/auth/verify-email', { body: { token: newPend } })).status === 400, 'a confirmation link works only once');
   calm();
   const samLogin = await login('pend@shop.example', good.password, 'customer');
-  assert(samLogin.status === 200 && samLogin.json.data.home === 'portal' && samLogin.json.data.user.role === 'Customer', 'a confirmed customer signs in and lands in the customer portal');
+  assert(samLogin.status === 200 && samLogin.json.data.home === 'app' && samLogin.json.data.user.role === 'Customer', 'a confirmed customer signs in and lands in the customer portal');
   const SC = samLogin.json.data.token;
   assert((await login('pend@shop.example', good.password, 'employee')).status === 401 && (await login('pend@shop.example', good.password, 'admin')).status === 401, 'a customer cannot enter through the Employee or Admin option');
   assert((await g(SC, '/api/portal/me')).status === 200 && (await g(SC, '/api/auth/users')).status === 403 && (await g(SC, '/api/vouchers')).status === 403 && (await g(SC, '/api/inv/items')).status === 403 && (await g(SC, '/api/inventory-app/status')).status === 403, 'a customer sees only the portal: no user management, accounting or inventory', [(await g(SC, '/api/portal/me')).status, (await g(SC, '/api/auth/users')).status, (await g(SC, '/api/vouchers')).status, (await g(SC, '/api/inv/items')).status, (await g(SC, '/api/inventory-app/status')).status].join());

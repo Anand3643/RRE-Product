@@ -27,7 +27,7 @@
     }
   } catch (e) { /* storage blocked: carry on, the server decides */ }
   var role = s.user && s.user.role;
-  if (!isPortal && role === 'Customer') { window.__RRE_REDIRECTING = true; location.replace('portal.html'); return; }
-  if (isPortal && role !== 'Customer') { window.__RRE_REDIRECTING = true; location.replace('index.html'); return; }
+  // there is no separate customer portal: every role works inside the one application (a customer sees only their own dashboard)
+  if (isPortal) { window.__RRE_REDIRECTING = true; location.replace('index.html'); return; }
   window.__RRE_SESSION = s;
 })();

@@ -159,7 +159,7 @@ async function issueLogin(user, meta = {}, { remember = false } = {}) {
   const token = createSessionToken(user, sess.hours, sess.sid);
   await audit('AUTH_LOGIN', { user, ip: meta.ip, details: { remember: !!remember, must_change_password: !!user.must_change_password } });
   const fresh = await get('SELECT * FROM users WHERE id = ?', [user.id]);
-  return { success: true, data: { user: await profileOf(fresh), permissions: permissionsOf(user.role), token, must_change_password: !!user.must_change_password, login_type: TYPE_OF[user.role] || 'employee', home: user.role === 'Customer' ? 'portal' : 'app', expires_at: sess.expires_at } };
+  return { success: true, data: { user: await profileOf(fresh), permissions: permissionsOf(user.role), token, must_change_password: !!user.must_change_password, login_type: TYPE_OF[user.role] || 'employee', home: 'app', expires_at: sess.expires_at } };
 }
 
 /**
@@ -199,7 +199,7 @@ async function logout(user, meta = {}) {
 async function me(userId) {
   const u = await get('SELECT * FROM users WHERE id = ?', [userId]);
   if (!u || u.status !== 'Active') throw bad('This account is not active.', 401);
-  return { user: await profileOf(u), permissions: permissionsOf(u.role), must_change_password: !!u.must_change_password, login_type: TYPE_OF[u.role] || 'employee', home: u.role === 'Customer' ? 'portal' : 'app' };
+  return { user: await profileOf(u), permissions: permissionsOf(u.role), must_change_password: !!u.must_change_password, login_type: TYPE_OF[u.role] || 'employee', home: 'app' };
 }
 
 // ---------------------------------------------------------------------------------------------------- forgot / reset / invitation

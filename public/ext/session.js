@@ -35,7 +35,7 @@
   function css() {
     if (document.getElementById('rre-who-css')) return;
     const s = document.createElement('style'); s.id = 'rre-who-css';
-    s.textContent = '.rre-chip{display:inline-flex;align-items:center;gap:8px;padding:2px 12px 2px 3px;border-radius:999px;background:rgba(148,163,255,.14);border:1px solid rgba(148,163,255,.35);color:inherit}'
+    s.textContent = 'html.rre-customer #au-rail,html.rre-customer #au-tabbar,html.rre-customer #header-ribbon,html.rre-customer aside{display:none!important}.rre-chip{display:inline-flex;align-items:center;gap:8px;padding:2px 12px 2px 3px;border-radius:999px;background:rgba(148,163,255,.14);border:1px solid rgba(148,163,255,.35);color:inherit}'
       + '.rre-av{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:800;color:#1a1305;background:linear-gradient(135deg,#f59e0b,#fcd34d)}'
       + '.rre-nm{display:flex;flex-direction:column;line-height:1.1;text-align:left;max-width:150px}.rre-nm b{font-size:11px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rre-nm i{font-style:normal;font-size:9px;opacity:.75;text-transform:uppercase;letter-spacing:.06em}'
       + '.rre-out{padding:4px 12px;border-radius:999px;font-size:11px;font-weight:800;border:1px solid rgba(244,63,94,.5);background:rgba(244,63,94,.14);color:#fda4af;cursor:pointer}.rre-out:hover{background:rgba(244,63,94,.3);color:#fff}'
@@ -44,7 +44,13 @@
     document.head.appendChild(s);
   }
 
-  function apply(detail) { me = detail.user; perms = detail.permissions; css(); chip(); limitNavigation(); }
+  function apply(detail) {
+    me = detail.user; perms = detail.permissions; css(); chip(); limitNavigation();
+    if (me.role === 'Customer') { // the customer dashboard replaces the staff screens (the server refuses a customer every staff route anyway)
+      document.documentElement.classList.add('rre-customer');
+      const open = () => { if (window.RREPortal) window.RREPortal.open(); else setTimeout(open, 150); }; open();
+    }
+  }
   window.addEventListener('rre:session', (e) => apply(e.detail));
   // the navigation rail is built a moment after the page: keep trimming it until it settles
   let n = 0; const t = setInterval(() => { limitNavigation(); if (++n > 40) clearInterval(t); }, 250);

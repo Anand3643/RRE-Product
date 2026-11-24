@@ -248,7 +248,7 @@ async function main() {
   assert(!/id="login-password"[^>]*value="[^"]+"/.test(html) && !html.includes('qu-guest'), 'The main page has no pre-filled password or quick-user buttons');
   const portalHtml = fs.readFileSync(path.join(__dirname, 'public/portal.html'), 'utf8');
   const loginHtml = fs.readFileSync(path.join(__dirname, 'public/login.html'), 'utf8');
-  assert(/type="password"/.test(loginHtml) && !/<input[^>]*type="password"[^>]*value="[^"]+"/.test(loginHtml) && !/type="password"/.test(portalHtml) && portalHtml.includes('session-guard.js') && portalHtml.includes("role !== 'Customer'"), 'The one sign-in page has no pre-filled password; the customer portal has no login of its own and turns staff away');
+  assert(/type="password"/.test(loginHtml) && !/<input[^>]*type="password"[^>]*value="[^"]+"/.test(loginHtml) && !/type="password"/.test(portalHtml) && /index.html/.test(portalHtml), 'The one sign-in page has no pre-filled password; the customer portal has no login of its own and turns staff away');
   const appJs = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
   assert(/function loginAsGuest\(\) \{\n  if \(window\.RREAccounts\) window\.RREAccounts\.continueAsGuest\(\);/.test(appJs.replace(/\r\n/g, '\n')), 'The page asks the server for a guest session; it holds no guest password');
   assert(fs.readFileSync(path.join(__dirname, '.gitignore'), 'utf8').split(/\r?\n/).includes('.tally-profile/'), '.tally-profile/ is in .gitignore');

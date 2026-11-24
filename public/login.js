@@ -86,7 +86,7 @@
     store.set(SESSION, JSON.stringify({ user: d.user, permissions: d.permissions, token: d.token, remember: !!remember, login_type: d.login_type, home: d.home, modules: d.user && d.user.modules }));
     try { sessionStorage.setItem('rre_alive', '1'); } catch (e) { /* ignore */ }
   }
-  function enter(d) { location.replace(d.home === 'portal' ? 'portal.html' : 'index.html'); }
+  function enter(d) { location.replace('index.html'); }
 
   // ---------------------------------------------------------------- sign in
   $('v-signin').addEventListener('submit', async (e) => {

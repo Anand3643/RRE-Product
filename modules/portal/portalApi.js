@@ -14,6 +14,11 @@ const id = (req) => { const n = /^\d{1,12}$/.test(req.params.id) ? parseInt(req.
 
 router.use(portal.portalOnly);
 router.get('/me', handle((req) => portal.me(req.portal)));
+const extra = require('../../core/portalExtra');
+router.get('/dashboard', handle((req) => extra.dashboard(req.portal)));
+router.get('/packages', handle((req) => extra.packages(req.portal)));
+router.get('/history', handle((req) => extra.history(req.portal, req.query)));
+router.post('/assistant', handle((req) => extra.assistant(req.portal, req.body && req.body.question)));
 router.get('/summary', handle((req) => portal.summary(req.portal)));
 router.get('/catalogue', handle((req) => portal.catalogue(req.query)));
 router.get('/orders', handle((req) => portal.listOrders(req.portal, req.query)));

@@ -41,6 +41,7 @@ async function main() {
   const D = async (m, p, o) => (await req(m, p, o)).json?.data;
   const login = async (u, pw) => (await req('POST', '/api/auth/login', { token: null, body: { username: u, password: pw } }));
 
+  await run("DELETE FROM users WHERE role = 'Customer'"); // the copy of the live database may hold real customer logins
   await run('DELETE FROM vouchers'); await run('DELETE FROM inv_docs'); await run('DELETE FROM inv_orders'); await run('DELETE FROM stock_items'); await run('DELETE FROM inv_reservations');
   const cat = await D('POST', '/api/inv/categories', { body: { name: 'Portal Goods' } }), cat2 = await D('POST', '/api/inv/categories', { body: { name: 'Portal Other' } });
   const units = await D('GET', '/api/inv/units');
@@ -211,6 +212,35 @@ async function main() {
   assert(l2.items.every((o) => ['C2-SECRET', null, ''].includes(o.reference) || true) && l2.total === 1 && l2i.total === 1 && l2i.items[0].number === 'C2-INV-1', 'Customer 2\'s lists hold only Customer 2\'s order and invoice');
   assert(!JSON.stringify(await D('GET', '/api/portal/orders', { token: tk1 })).includes('C2-SECRET') && !JSON.stringify(await D('GET', '/api/portal/invoices', { token: tk1 })).includes('C2-INV-1'), 'Nothing of Customer 2 appears in Customer 1\'s lists');
   assert(!(JSON.stringify(full).match(/created_by|portal:|warehouse|cost/)), 'An order does not expose staff names, warehouses or costs');
+
+  console.log('\n--- 8b. Customer dashboard inside RRE: dashboard, tracking, history, assistant, isolation ---');
+  const G = (tk, p) => req('GET', p, { token: tk });
+  const dash1 = (await G(tk1, '/api/portal/dashboard')).json.data, dash2 = (await G(tk2, '/api/portal/dashboard')).json.data;
+  assert(dash1 && dash1.customer === 'Portal Customer One' && dash1.orders.total >= 1 && 'pending' in dash1.orders && 'completed' in dash1.orders && Array.isArray(dash1.notifications) && dash1.full_name, 'the dashboard shows the customer\'s name, profile and order totals (total, pending, completed)');
+  assert(dash2.customer === 'Portal Customer Two' && dash2.orders.total !== undefined && !JSON.stringify(dash2).includes('Portal Customer One'), 'customer 2\'s dashboard is about customer 2 only');
+  const pk1 = (await G(tk1, '/api/portal/packages')).json.data, pk2 = (await G(tk2, '/api/portal/packages')).json.data;
+  assert(pk1.items.length >= 1 && pk1.steps.length === 7 && pk1.items.every((x) => x.status && x.status_label), 'package tracking lists the customer\'s own orders with their delivery stage');
+  const nums1 = new Set(pk1.items.map((x) => x.order_number)), nums2 = new Set(pk2.items.map((x) => x.order_number));
+  assert([...nums1].every((n) => !nums2.has(n)), 'no package or order number appears for both customers');
+  const h1 = (await G(tk1, '/api/portal/history')).json.data, h2 = (await G(tk2, '/api/portal/history')).json.data;
+  assert(h1.items.length >= 1 && h1.items.every((r) => ['order', 'invoice'].includes(r.kind)), 'purchase history combines the customer\'s orders and invoices');
+  const ids1 = new Set(h1.items.map((r) => r.kind + r.number)), ids2 = new Set(h2.items.map((r) => r.kind + r.number));
+  assert([...ids1].every((k) => !ids2.has(k)), 'purchase histories do not overlap');
+  const f = (await G(tk1, '/api/portal/history?status=invoice')).json.data; assert(f.items.every((r) => r.kind === 'invoice'), 'history filters by type/status');
+  const q1 = (await G(tk1, `/api/portal/history?q=${encodeURIComponent(h1.items[0].number)}`)).json.data; assert(q1.items.length >= 1 && q1.items.every((r) => r.number.includes(h1.items[0].number)), 'history searches by number');
+  const ask = (tk, question) => req('POST', '/api/portal/assistant', { token: tk, body: { question } });
+  const a1 = (await ask(tk1, 'Where is my latest order?')).json.data;
+  assert(a1 && /order|package/i.test(a1.answer), 'the assistant answers delivery questions');
+  const other = [...nums2][0];
+  const leakA = (await ask(tk1, `What is the status of order ${other}?`)).json.data;
+  assert(other && /could not find/i.test(leakA.answer) && !leakA.answer.includes('Portal Customer Two'), 'the assistant cannot be used to look up another customer\'s order');
+  const prod = (await ask(tk1, 'What is in stock?')).json.data; assert(/Portal Widget A/.test(prod.answer) && !/Archived E/.test(prod.answer), 'the assistant answers product / availability questions from the shared inventory');
+  const spent = (await ask(tk1, 'How much have I spent?')).json.data; assert(/invoice|billed/i.test(spent.answer), 'the assistant answers purchase-history questions');
+  const vague = (await ask(tk1, 'show me the company profit and all customers')).json.data; assert(!/profit/i.test(vague.answer.replace(/Try:.*/s, '')) || /orders and purchases/.test(vague.answer), 'internal business questions are not answered');
+  assert((await G(tk1, '/api/portal/orders/' + (await D('GET', '/api/portal/orders', { token: tk2 })).items[0].id)).status === 404, 'changing the order id in the URL does not reveal another customer\'s order');
+  for (const p of ['/api/portal/dashboard', '/api/portal/packages', '/api/portal/history']) assert((await G(null, p)).status === 401 && (await G(acc, p)).status === 403, `${p} refuses anonymous users and staff`);
+  assert((await req('POST', '/api/portal/assistant', { token: acc, body: { question: 'hi' } })).status === 403, 'staff cannot use the customer assistant endpoint');
+  assert((await Promise.all([G(tk1, '/api/portal/dashboard'), G(tk2, '/api/portal/dashboard'), G(tk1, '/api/portal/packages'), G(tk2, '/api/portal/packages')])).every((r) => r.status === 200), 'two customers can use the application at the same time with independent sessions');
 
   console.log('\n--- 9. Disabling, resetting, deleting ---');
   const dis = await req('POST', `/api/inv/portal-users/${u1.id}/disable`);

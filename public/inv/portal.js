@@ -58,13 +58,13 @@
   function saveCart() { store.set(cartKey(), JSON.stringify([...S.cart.values()])); updateCartBadge(); }
   function loadCart() { S.cart = new Map(); try { for (const l of JSON.parse(store.get(cartKey()) || '[]')) if (l && l.id && l.qty > 0) S.cart.set(l.id, l); } catch (e) { /* start empty */ } }
   function updateCartBadge() { const n = S.cart.size, b = root() && root().querySelector('.pt-count'); if (b) { b.textContent = n; b.hidden = !n; } }
-  const TABS = [['home', 'Home'], ['catalogue', 'Catalogue'], ['orders', 'My orders'], ['invoices', 'My invoices'], ['profile', 'My profile']];
+  const TABS = [['home', 'Dashboard'], ['catalogue', 'Browse Products'], ['orders', 'My Orders'], ['packages', 'Track Packages'], ['history', 'Purchase History'], ['invoices', 'My Invoices'], ['assistant', 'AI Assistant'], ['profile', 'My Profile']];
 
   function build() {
     if (root()) return;
     const el = document.createElement('div'); el.id = 'pt-app';
     if (store.get('sp-theme') === 'dark') el.classList.add('dark');
-    el.innerHTML = `<div class="pt-main"><header class="pt-top"><div class="pt-brand"><span class="sp-logo">${ic('store')}</span><span>Customer Portal</span></div>
+    el.innerHTML = `<div class="pt-main"><header class="pt-top"><div class="pt-brand"><span class="sp-logo">${ic('store')}</span><span>RRE Entries</span></div>
       <nav class="pt-tabs">${TABS.map(([k, t]) => `<button class="pt-tab" data-go="${k}">${t}</button>`).join('')}</nav>
       <button class="btn pt-cart-btn" id="pt-cart" aria-label="Your order request">${ic('shopping-cart')} Order request<span class="pt-count" hidden>0</span></button>
       <div class="pt-who"><b id="pt-name"></b><div id="pt-cust"></div></div>
@@ -97,7 +97,7 @@
   }
   function waitForPasswordChange() { const t = setInterval(() => { if (!document.getElementById('acct-overlay')) { clearInterval(t); open(); } }, 600); }
   function close() { const r = root(); if (r) r.remove(); S.me = null; S.q = {}; }
-  function signOut() { close(); if (typeof window.startWithFreshLogin === 'function') window.startWithFreshLogin(); }
+  function signOut() { close(); if (typeof window.handleLogout === 'function') window.handleLogout(); else if (typeof window.startWithFreshLogin === 'function') window.startWithFreshLogin(); }
 
   function go(route, param = null) {
     S.route = route; S.param = param;
@@ -127,13 +127,59 @@
   const invoicesTable = (rows, empt) => (rows.length ? `<table><thead><tr><th>Invoice</th><th>Date</th><th>Order</th><th>Your reference</th><th class="num">Total</th></tr></thead><tbody>${rows.map((i) => `<tr class="click" data-invoice="${i.id}"><td class="mono">${esc(i.number)}${i.type === 'Credit Note' ? ' <span class="badge b-n">Credit note</span>' : ''}</td><td class="small">${esc(i.date)}</td><td class="mono small">${esc(i.order_number || '—')}</td><td class="small sub">${esc(i.reference || '')}</td><td class="num">${inr(i.total)}</td></tr>`).join('')}</tbody></table>` : empty(empt, ''));
   const bindRows = (scope) => { scope.querySelectorAll('[data-order]').forEach((r) => r.addEventListener('click', () => orderDrawer(+r.dataset.order))); scope.querySelectorAll('[data-invoice]').forEach((r) => r.addEventListener('click', () => invoiceDrawer(+r.dataset.invoice))); };
 
+  const PKG_BADGE = { delivered: 'b-ok', shipped: 'b-warn', dispatched: 'b-warn', out_for_delivery: 'b-warn', packed: 'b-warn', processing: 'b-n', placed: 'b-n', cancelled: 'b-bad' };
   PAGES.home = async (v) => {
-    const d = await api('/summary');
-    v.innerHTML = `<div class="sp-wrap"><div class="row between mb"><div><h2 style="margin:0;font-size:18px">Welcome, ${esc(S.me.full_name || S.me.username)}</h2><div class="sub small">${esc(d.customer)}</div></div><button class="btn primary" data-go="catalogue">${ic('shopping-bag')} Browse the catalogue</button></div>
-      <div class="grid g3 mb"><div class="card kpi"><div class="l">Awaiting confirmation</div><div class="v">${d.awaiting}</div></div><div class="card kpi"><div class="l">Confirmed orders</div><div class="v">${d.confirmed}</div></div><div class="card kpi"><div class="l">Invoiced orders</div><div class="v">${d.invoiced}</div></div></div>
-      <div class="grid g2"><div class="card scroll-x"><div class="row between" style="padding:12px 14px"><b>Recent orders</b><button class="btn flat sm" data-go="orders">All orders</button></div>${ordersTable(d.recent_orders, 'No orders yet. Pick items from the catalogue to send your first order request.')}</div>
-      <div class="card scroll-x"><div class="row between" style="padding:12px 14px"><b>Recent invoices</b><button class="btn flat sm" data-go="invoices">All invoices</button></div>${invoicesTable(d.recent_invoices, 'No invoices yet.')}</div></div></div>`;
-    bindRows(v);
+    const d = await api('/dashboard');
+    v.innerHTML = `<div class="sp-wrap"><div class="row between mb wrap"><div><h2 style="margin:0;font-size:20px">Welcome, ${esc(d.full_name || S.me.full_name || S.me.username)}</h2><div class="sub small">${esc(d.customer)}</div></div><button class="btn primary" data-go="catalogue">${ic('shopping-bag')} Browse products</button></div>
+      <div class="grid g3 mb"><div class="card kpi"><div class="l">Total orders</div><div class="v">${d.orders.total}</div></div><div class="card kpi"><div class="l">Pending orders</div><div class="v">${d.orders.pending}</div></div><div class="card kpi"><div class="l">Completed orders</div><div class="v">${d.orders.completed}</div></div></div>
+      <div class="grid g3 mb"><div class="card kpi" data-go="packages" style="cursor:pointer"><div class="l">Packages in transit</div><div class="v">${d.packages.in_transit}</div></div><div class="card kpi" data-go="packages" style="cursor:pointer"><div class="l">Delivered</div><div class="v">${d.packages.delivered}</div></div><div class="card kpi"><div class="l">Total billed</div><div class="v">${inr(d.orders.spent)}</div></div></div>
+      <div class="grid g2 mb"><div class="card" style="padding:14px"><b>Your profile</b><div class="small" style="margin-top:8px;line-height:1.9"><div>Name: ${esc(d.full_name || '')}</div><div>E-mail: ${esc(d.email || '')}</div><div>Phone: ${esc(d.phone || '—')}</div><div>Customer account: ${esc(d.customer)}</div><div>Member since: ${esc(d.member_since || '')}</div></div><div style="margin-top:10px"><button class="btn flat sm" data-go="profile">Edit profile</button></div></div>
+        <div class="card" style="padding:14px"><b>Notifications and updates</b>${d.notifications.length ? `<div class="small" style="margin-top:8px;display:grid;gap:8px">${d.notifications.map((n) => `<div>${ic('bell')} ${esc(n.text)} <span class="sub">${esc(n.at || '')}</span></div>`).join('')}</div>` : '<div class="sub small" style="margin-top:8px">Nothing new. Updates about your orders, packages and invoices appear here.</div>'}</div></div>
+      <div class="card scroll-x"><div class="row between" style="padding:12px 14px"><b>Recent purchases</b><button class="btn flat sm" data-go="history">Full history</button></div>${historyTable(d.recent_purchases, 'No purchases yet. Pick items from the catalogue to send your first order request.')}</div></div>`;
+    bindHistory(v);
+  };
+
+  // purchase history rows (orders and invoices together); a row opens its own detail drawer
+  const historyTable = (rows, empt) => (rows.length ? `<table><thead><tr><th>Number</th><th>Date</th><th>Type</th><th>Status</th><th class="num">Items</th><th class="num">Total</th></tr></thead><tbody>${rows.map((r) => `<tr class="click" data-hk="${r.kind}" data-hid="${r.id}"><td><b>${esc(r.number)}</b></td><td>${esc(r.date)}</td><td>${r.kind === 'order' ? 'Order' : 'Invoice'}</td><td><span class="badge ${r.status === 'invoiced' || r.status === 'confirmed' ? 'b-ok' : r.status === 'cancelled' ? 'b-bad' : 'b-n'}">${esc(r.status_label)}</span></td><td class="num">${r.items || 0}</td><td class="num">${inr(r.total)}</td></tr>`).join('')}</tbody></table>` : empty('Nothing here', empt));
+  const bindHistory = (scope) => scope.querySelectorAll('[data-hk]').forEach((r) => r.addEventListener('click', () => (r.dataset.hk === 'order' ? orderDrawer(+r.dataset.hid) : invoiceDrawer(+r.dataset.hid))));
+
+  PAGES.history = async (v) => {
+    const q = S.q.history = { ...(S.q.history || {}) };
+    const d = await api(`/history?${qs({ q: q.q, from: q.from, to: q.to, status: q.status })}`);
+    v.innerHTML = `<div class="sp-wrap"><div class="row wrap mb"><input class="input" type="search" data-f="q" placeholder="Order or invoice number…" value="${esc(q.q || '')}" style="max-width:240px"><input class="input" type="date" data-f="from" value="${esc(q.from || '')}" style="width:140px" aria-label="From"><input class="input" type="date" data-f="to" value="${esc(q.to || '')}" style="width:140px" aria-label="To">
+      <select class="input" data-f="status" style="width:180px"><option value="">All</option>${[['draft', 'Awaiting confirmation'], ['confirmed', 'Confirmed'], ['invoiced', 'Invoiced orders'], ['cancelled', 'Cancelled'], ['invoice', 'Invoices only']].map(([k, t]) => `<option value="${k}" ${q.status === k ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
+      <div class="card scroll-x">${historyTable(d.items, 'No purchases match.')}</div><div class="sub small" style="margin-top:8px">${d.total} record${d.total === 1 ? '' : 's'}</div></div>`;
+    bindFilters('history'); bindHistory(v);
+  };
+
+  const STEP_ORDER = ['placed', 'processing', 'packed', 'dispatched', 'shipped', 'out_for_delivery', 'delivered'];
+  const STEP_LABEL = { placed: 'Order confirmed', processing: 'Processing', packed: 'Packed', dispatched: 'Dispatched', shipped: 'Shipped', out_for_delivery: 'Out for delivery', delivered: 'Delivered' };
+  PAGES.packages = async (v) => {
+    const d = await api('/packages');
+    const card = (p) => {
+      const at = Math.max(0, STEP_ORDER.indexOf(p.status === 'confirmed' ? 'processing' : p.status));
+      const bar = p.status === 'cancelled' ? '<span class="badge b-bad">Cancelled</span>' : `<div style="display:flex;gap:4px;margin:10px 0 4px">${STEP_ORDER.map((k, i) => `<div title="${STEP_LABEL[k]}" style="flex:1;height:6px;border-radius:6px;background:${i <= at ? 'rgb(var(--brand))' : 'rgb(var(--line))'}"></div>`).join('')}</div><div class="small sub">${STEP_LABEL[STEP_ORDER[at]] || ''}</div>`;
+      return `<div class="card" style="padding:14px"><div class="row between wrap"><div><b>${esc(p.number)}</b> <span class="badge ${PKG_BADGE[p.status] || 'b-n'}">${esc(p.status_label)}</span><div class="sub small">Order ${esc(p.order_number)}${p.order_date ? ' · placed ' + esc(p.order_date) : ''}</div></div>${p.total ? `<b>${inr(p.total)}</b>` : ''}</div>${bar}
+        <div class="small" style="display:grid;gap:3px;margin-top:8px">${p.carrier ? `<div>Courier: <b>${esc(p.carrier)}</b></div>` : ''}${p.tracking_number ? `<div>Tracking number: <b>${esc(p.tracking_number)}</b></div>` : ''}${p.shipped_on ? `<div>Shipped: ${esc(p.shipped_on)}</div>` : ''}${p.expected_delivery ? `<div>Estimated delivery: <b>${esc(p.expected_delivery)}</b></div>` : ''}${p.delivered_on ? `<div>Delivered: ${esc(p.delivered_on)}</div>` : ''}</div>
+        ${p.tracking_url ? `<div style="margin-top:8px"><a class="btn sm" href="${esc(p.tracking_url)}" target="_blank" rel="noopener noreferrer">${ic('external-link')} Open courier tracking</a></div>` : ''}
+        ${p.events.length ? `<details style="margin-top:8px"><summary class="small" style="cursor:pointer">Tracking history</summary><div class="small" style="margin-top:6px;display:grid;gap:4px">${p.events.map((e) => `<div>${esc(String(e.at || '').slice(0, 16).replace('T', ' '))} — ${esc(e.status)}${e.location ? ', ' + esc(e.location) : ''}${e.note ? ' (' + esc(e.note) + ')' : ''}</div>`).join('')}</div></details>` : ''}</div>`;
+    };
+    v.innerHTML = `<div class="sp-wrap"><div class="grid g3 mb"><div class="card kpi"><div class="l">Pending</div><div class="v">${d.counts.pending}</div></div><div class="card kpi"><div class="l">In transit</div><div class="v">${d.counts.in_transit}</div></div><div class="card kpi"><div class="l">Delivered</div><div class="v">${d.counts.delivered}</div></div></div>
+      ${d.items.length ? `<div class="grid g2">${d.items.map(card).join('')}</div>` : `<div class="card">${empty('No packages yet', 'Your orders and their delivery progress will appear here.')}</div>`}</div>`;
+  };
+
+  PAGES.assistant = async (v) => {
+    v.innerHTML = `<div class="sp-wrap"><div class="card" style="padding:14px;max-width:760px;margin:0 auto"><div class="row between"><b>${ic('sparkles')} Your assistant</b><span class="sub small">Answers only from your own orders and purchases</span></div>
+      <div id="as-log" style="margin:12px 0;display:grid;gap:10px;max-height:52vh;overflow:auto"></div>
+      <div class="row wrap" id="as-chips" style="gap:6px;margin-bottom:8px">${['Where is my latest order?', 'Show my pending orders', 'How much have I spent?', 'Explain my last invoice', 'What is in stock?', 'Recommend something for me'].map((t) => `<button class="btn flat sm" data-q="${esc(t)}">${esc(t)}</button>`).join('')}</div>
+      <form id="as-form" class="row" style="gap:8px"><input class="input" id="as-in" placeholder="Ask about your orders, packages, invoices or products…" maxlength="400" autocomplete="off" style="flex:1"><button class="btn primary" type="submit">Ask</button></form></div></div>`;
+    const log = v.querySelector('#as-log'), input = v.querySelector('#as-in');
+    const add = (who, text) => { const d = document.createElement('div'); d.style.cssText = 'padding:10px 12px;border-radius:12px;white-space:pre-wrap;max-width:92%;' + (who === 'me' ? 'justify-self:end;background:rgb(var(--brand)/.14)' : 'background:rgb(var(--muted))'); d.textContent = text; log.appendChild(d); log.scrollTop = log.scrollHeight; return d; };
+    add('bot', 'Hello! Ask me about your orders, delivery status, invoices or products. I only see your own records.');
+    const ask = async (text) => { if (!text.trim()) return; add('me', text); input.value = ''; const wait = add('bot', '…'); try { const r = await api('/assistant', { method: 'POST', body: { question: text } }); wait.textContent = r.answer; } catch (e) { wait.textContent = 'Sorry, I could not answer that: ' + e.message; } };
+    v.querySelector('#as-form').onsubmit = (e) => { e.preventDefault(); ask(input.value); };
+    v.querySelectorAll('[data-q]').forEach((b) => { b.onclick = () => ask(b.dataset.q); });
+    input.focus();
   };
 
   PAGES.catalogue = async (v) => {
