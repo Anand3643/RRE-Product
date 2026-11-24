@@ -4,11 +4,13 @@
  * can't be interleaved with another new-module operation.
  * (Legacy routers still issue their own BEGIN; that is outside this helper's reach.)
  */
-const { run } = require('./db');
+const { run, getCompanyNumber } = require('./db');
 
-let chain = Promise.resolve();
+const chains = new Map(); // one queue per company: each company has its own connection
 
 function withTransaction(fn) {
+  const key = String(getCompanyNumber());
+  const chain = chains.get(key) || Promise.resolve();
   const result = chain.then(async () => {
     await run('BEGIN IMMEDIATE');
     try {
@@ -20,7 +22,7 @@ function withTransaction(fn) {
       throw err;
     }
   });
-  chain = result.catch(() => {});
+  chains.set(key, result.catch(() => {}));
   return result;
 }
 

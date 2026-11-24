@@ -10,7 +10,7 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const EMP_ROLES = ['Accountant', 'Data Entry', 'Auditor', 'Viewer'];
   const ROLE_NOTE = { Accountant: 'Posts and edits vouchers, sees reports', 'Data Entry': 'Enters vouchers, limited reports', Auditor: 'Read-only, sees the audit trail', Viewer: 'Read-only' };
-  let list = [], filter = 'all', query = '', tab = 'people', meta = { mail: true, modules: [] };
+  let list = [], filter = 'all', query = '', tab = 'people', meta = { mail: true, modules: [], extras: [] };
 
   async function api(method, path, body) {
     const res = await fetch('/api' + path, { method, headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' });
@@ -77,7 +77,7 @@
     document.addEventListener('keydown', onKey, true);
     tab = 'people'; filter = 'all'; query = '';
     try { const c = await api('GET', '/auth/config'); meta.mail = !!c.data.mail_configured; meta.guest = !!c.data.guest_access; } catch (e) { /* shown below */ }
-    try { meta.modules = (await api('GET', '/auth/modules')).data; } catch (e) { meta.modules = []; }
+    try { const mj = await api('GET', '/auth/modules'); meta.modules = mj.data; meta.extras = mj.extras || []; } catch (e) { meta.modules = []; }
     await refresh();
   }
 
@@ -162,6 +162,7 @@
       <div class="hint" id="f-role-h"></div>
       <div id="f-cust-w" hidden><label>Customer account<input id="f-cust" placeholder="Type to search customers…" autocomplete="off" value="${esc(u && u.customer ? u.customer : '')}" ${editing ? 'disabled' : ''}></label><div class="sug" id="f-sug" hidden></div><input type="hidden" id="f-party" value="${u && u.party_id ? u.party_id : ''}"></div>
       <div id="f-mods-w" hidden><label>Modules this employee can use <span class="hint">(leave all ticked for no limit)</span></label><div class="mods">${meta.modules.map((m) => `<label><input type="checkbox" data-m="${m.key}" ${!u || !u.modules || u.modules.includes(m.key) ? 'checked' : ''}> ${esc(m.label)}</label>`).join('')}</div></div>
+      <div id="f-extra-w" hidden><label>Extra monitoring access for this employee <span class="hint">(off by default)</span></label><div class="mods">${meta.extras.map((m) => `<label><input type="checkbox" data-x="${m.key}" ${u && u.extras && u.extras.includes(m.key) ? 'checked' : ''}> ${esc(m.label)}</label>`).join('')}</div></div>
       ${editing ? '' : `<div id="f-pw-w"><label><span>How should they get their password?</span><select id="f-how"><option value="invite" ${meta.mail ? '' : 'disabled'}>E-mail them a link to choose it (recommended)</option><option value="temp" ${meta.mail ? '' : 'selected'}>I will give them a temporary password</option></select></label>
         <label id="f-temp-w" hidden>Temporary password<input id="f-temp" type="text" autocomplete="off" placeholder="At least 10 characters, letters and numbers"></label>
         <div class="hint">Nobody, including you, can read a password later. A temporary password must be changed at first sign-in.</div></div>`}
@@ -172,7 +173,7 @@
     const typeSel = $('f-type'); if (typeSel) typeSel.value = type0;
     const sync = () => {
       const t = typeSel ? typeSel.value : type0;
-      $('f-role-w').hidden = t !== 'employee'; $('f-cust-w').hidden = t !== 'customer'; $('f-mods-w').hidden = t !== 'employee';
+      $('f-role-w').hidden = t !== 'employee'; $('f-cust-w').hidden = t !== 'customer'; $('f-mods-w').hidden = t !== 'employee'; $('f-extra-w').hidden = t !== 'employee';
       $('f-role-h').textContent = t === 'employee' ? ROLE_NOTE[$('f-role').value] || '' : t === 'admin' ? 'Administrators can do everything, including managing users and every module.' : 'Customers only see their own orders, invoices and profile in the customer portal.';
     };
     if (typeSel) typeSel.onchange = sync; $('f-role').onchange = sync; sync();
@@ -190,7 +191,7 @@
       e.preventDefault(); const er = $('f-err'); er.hidden = true;
       const t = typeSel ? typeSel.value : type0;
       const body = { full_name: $('f-name').value.trim(), email: $('f-email').value.trim(), phone: $('f-phone').value.trim() };
-      if (t === 'employee') { body.role = $('f-role').value; const checks = [...d.querySelectorAll('[data-m]')]; const on = checks.filter((c) => c.checked).map((c) => c.dataset.m); body.modules = on.length === checks.length ? null : on; }
+      if (t === 'employee') { body.role = $('f-role').value; const checks = [...d.querySelectorAll('[data-m]')]; const on = checks.filter((c) => c.checked).map((c) => c.dataset.m); body.modules = on.length === checks.length ? null : on; body.extras = [...d.querySelectorAll('[data-x]')].filter((c) => c.checked).map((c) => c.dataset.x); }
       if (!editing) { body.role = t === 'admin' ? 'Owner' : t === 'customer' ? 'Customer' : body.role; if (t === 'customer') body.party_id = $('f-party').value; if (how && how.value === 'temp') body.password = $('f-temp').value; }
       try {
         const j = editing ? await api('PUT', '/auth/users/' + u.id, body) : await api('POST', '/auth/users', body);

@@ -54,6 +54,9 @@ const RULES = [
   // anything else under /api: authenticated user is enough (reads, AI drafts, dashboard)
 ];
 
+// Administration of the application as a whole (people, companies, updates, backups, the sidecar inventory): never for a customer
+const ADMIN_ONLY = [/^\/api\/auth\/(users|login-activity|migration|guest-access|modules|audit-log)/, /^\/api\/companies/, /^\/api\/system\//, /^\/api\/backup\//, /^\/api\/inventory-app/, /^\/api\/portal(\/|$)/];
+
 const KNOWN_VOUCHER_TYPES = ['Contra', 'Payment', 'Receipt', 'Journal', 'Sales', 'Purchase', 'Debit Note', 'Credit Note'];
 
 function routeGuard(req, res, next) {
@@ -74,7 +77,12 @@ function routeGuard(req, res, next) {
     return res.status(403).json({ success: false, error: 'You must choose a new password before continuing.', code: 'PASSWORD_CHANGE_REQUIRED', must_change_password: true });
   }
 
-  if (user.role === 'Customer' && !/^\/api\/portal(\/|$)/.test(url) && !OWN && !(req.method === 'PUT' && /^\/api\/auth\/me\/?$/.test(url))) {
+  // A customer with books of their own (everyone who signs up) uses the whole application, but only in THEIR company and never the administration of the
+  // application itself. A customer who is only linked to one of the owner's customer accounts stays confined to /api/portal.
+  if (user.role === 'Customer' && user.companyId && ADMIN_ONLY.some((re) => re.test(url)) && !OWN) {
+    return res.status(403).json({ success: false, error: 'This is part of the administration of the application.', code: 'FORBIDDEN' });
+  }
+  if (user.role === 'Customer' && !user.companyId && !/^\/api\/portal(\/|$)/.test(url) && !OWN && !(req.method === 'PUT' && /^\/api\/auth\/me\/?$/.test(url))) {
     return res.status(403).json({ success: false, error: 'Customer portal accounts can only use the customer portal.', code: 'PORTAL_ONLY' });
   }
 
@@ -82,6 +90,11 @@ function routeGuard(req, res, next) {
   if (Array.isArray(user.modules) && user.role !== 'Owner' && user.role !== 'Administrator') {
     const mod = moduleOf(url);
     if (mod && !user.modules.includes(mod)) return res.status(403).json({ success: false, error: 'Your account does not have access to this module. Ask your administrator.', code: 'MODULE_FORBIDDEN' });
+  }
+
+  // the list of companies: administrators, and employees the administrator has allowed (a customer never; see ADMIN_ONLY)
+  if (/^\/api\/companies/.test(url) && !getRolePermissions(user.role).canManageUsers && !(user.role !== 'Customer' && (user.extras || []).includes('companies'))) {
+    return res.status(403).json({ success: false, error: 'The list of companies is available to administrators, or to employees an administrator has allowed.', code: 'FORBIDDEN' });
   }
 
   const rule = RULES.find((r) => (!r.m || r.m === req.method) && r.re.test(url));

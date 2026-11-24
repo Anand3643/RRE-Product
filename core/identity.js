@@ -15,7 +15,7 @@ const { hashPassword, verifyPassword, needsRehash, createSessionToken } = requir
 const { checkPassword } = require('./passwordPolicy');
 const mailer = require('./mailer');
 
-const { get, all, run } = db;
+const { get, all, run } = db.sys; // accounts always live in the active company's database, even while a request runs inside a customer's own company
 const bad = (m, s = 400, code) => { const e = new Error(m); e.status = s; if (code) e.code = code; return e; };
 
 // ---------------------------------------------------------------------------------------------------- roles, login types, modules
@@ -35,7 +35,8 @@ const MODULE_PATHS = [
   ['quotations', /^\/api\/(quotations|documents)(\/|$)/]
 ];
 const moduleOf = (url) => { const m = MODULE_PATHS.find(([, re]) => re.test(url)); return m ? m[0] : null; };
-const parseModules = (v) => { if (v == null || v === '') return null; try { const a = JSON.parse(v); return Array.isArray(a) ? a.filter((k) => MODULES.some((m) => m.key === k)) : null; } catch (e) { return null; } };
+const EXTRAS = [{ key: 'logins', label: 'See login and sign-up activity' }, { key: 'companies', label: 'See the companies in the application' }];
+const parseModules = (v, extras = false) => { if (v == null || v === '') return null; try { const a = JSON.parse(v); const ok = extras ? EXTRAS : MODULES; return Array.isArray(a) ? a.filter((k) => ok.some((m) => m.key === k)) : null; } catch (e) { return null; } };
 
 const VERIFY_HOURS = 24;
 const SESSION_HOURS = 12, REMEMBER_HOURS = 14 * 24, MAX_FAILS = 5, LOCK_MINUTES = 15, RESET_MINUTES = 30, INVITE_HOURS = 72;
@@ -58,7 +59,7 @@ let schemaFor = null;
 async function ready() {
   const f = db.getDbPath(); if (schemaFor === f) return;
   const cols = (await all('PRAGMA table_info(users)')).map((c) => c.name);
-  if (cols.length && !cols.includes('failed_logins')) await require('./migrations').runMigrations();
+  if (cols.length && !cols.includes('extra_access')) await require('./migrations').runMigrations();
   schemaFor = f;
 }
 
@@ -68,8 +69,8 @@ const onRevoke = (fn) => state.revokeHooks.push(fn);
 const onChange = (fn) => state.changeHooks.push(fn); // an account's role / name / status changed: other modules (inventory) follow
 const changed = (id) => { for (const f of state.changeHooks) { try { f(id); } catch (e) { /* best effort */ } } };
 async function refreshUser(id) {
-  const u = await get('SELECT id, username, role, status, module_access, party_id, must_change_password FROM users WHERE id = ?', [id]);
-  if (u) state.users.set(id, { status: u.status, role: u.role, modules: parseModules(u.module_access), party_id: u.party_id, username: u.username }); else state.users.delete(id);
+  const u = await get('SELECT id, username, role, status, module_access, extra_access, company_id, party_id, must_change_password FROM users WHERE id = ?', [id]);
+  if (u) state.users.set(id, { status: u.status, role: u.role, modules: parseModules(u.module_access), extras: parseModules(u.extra_access, true) || [], party_id: u.party_id, company_id: u.company_id || null, username: u.username }); else state.users.delete(id);
   return u;
 }
 let sweeper = null;
@@ -146,7 +147,7 @@ const permissionsOf = (role) => db.getRolePermissions(role);
 async function profileOf(u) {
   const party = u.party_id ? await get('SELECT id, name FROM ledgers WHERE id = ?', [u.party_id]) : null;
   return { id: u.id, username: u.username, full_name: u.full_name, role: u.role, email: u.email, phone: u.phone, status: u.status, allow_backdated_entries: u.allow_backdated_entries,
-    login_type: TYPE_OF[u.role] || 'employee', modules: parseModules(u.module_access), customer: party ? { id: party.id, name: party.name } : null, created_at: u.created_at, last_login: u.last_login };
+    login_type: TYPE_OF[u.role] || 'employee', modules: parseModules(u.module_access), extras: parseModules(u.extra_access, true) || [], own_company: !!u.company_id, customer: party ? { id: party.id, name: party.name } : null, created_at: u.created_at, last_login: u.last_login };
 }
 
 /** Signs a verified person in: records the login, starts a server-side session and returns the token. */
@@ -304,9 +305,11 @@ async function signup(b = {}, meta = {}) {
     await audit('AUTH_SIGNUP_DUPLICATE', { username: email.slice(0, 80), ip: meta.ip });
     return generic;
   }
-  const party = (await customerLedger(name, email, phone)).id;
   const username = await uniqueUsername(email.split('@')[0]);
-  const r = await run(`INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries, must_change_password, party_id, email_verified) VALUES (?, ?, ?, 'Customer', ?, ?, ?, 0, 0, ?, 0)`, [username, hashPassword(pw), name, email, phone, noMail ? 'Active' : 'Pending', party]);
+  const r = await run(`INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries, must_change_password, party_id, email_verified) VALUES (?, ?, ?, 'Customer', ?, ?, ?, 1, 0, NULL, 0)`, [username, hashPassword(pw), name, email, phone, noMail ? 'Active' : 'Pending']);
+  // the customer's private books: a company of their own, created beside the owner's without touching it
+  const companyNo = await require('./companies').createForUser({ id: r.lastID, username, full_name: name, email });
+  await run('UPDATE users SET company_id = ? WHERE id = ?', [companyNo, r.lastID]);
   const created = await get('SELECT * FROM users WHERE id = ?', [r.lastID]);
   await audit('AUTH_SIGNUP', { user: created, ip: meta.ip, details: { activated_without_email: noMail } });
   if (noMail) { // no confirmation step: the new customer is signed straight in and lands in the application
@@ -365,12 +368,12 @@ async function listUsers(q = {}) {
   if (q.type && LOGIN_TYPES.includes(q.type)) { const roles = Object.keys(TYPE_OF).filter((r) => TYPE_OF[r] === q.type); where.push(`u.role IN (${roles.map(() => '?').join(',')})`); p.push(...roles); }
   if (q.status === 'Active' || q.status === 'Inactive') { where.push('u.status = ?'); p.push(q.status); }
   if (q.q) { where.push("(u.username LIKE ? OR u.full_name LIKE ? OR u.email LIKE ?)"); const n = `%${String(q.q).replace(/[%_]/g, '')}%`; p.push(n, n, n); }
-  const rows = await all(`SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.created_at, u.last_login, u.must_change_password, u.email_verified, u.auth_provider, u.module_access, u.party_id, u.needs_review, u.locked_until, u.failed_logins, u.password_changed_at,
+  const rows = await all(`SELECT u.id, u.username, u.full_name, u.role, u.email, u.phone, u.status, u.created_at, u.last_login, u.must_change_password, u.email_verified, u.auth_provider, u.extra_access, u.company_id, u.module_access, u.party_id, u.needs_review, u.locked_until, u.failed_logins, u.password_changed_at,
       l.name AS customer, (SELECT COUNT(*) FROM user_logins x WHERE x.user_id = u.id) AS logins, (SELECT COUNT(*) FROM auth_sessions s WHERE s.user_id = u.id AND s.revoked_at IS NULL AND s.expires_at > ?) AS open_sessions,
       (SELECT COUNT(*) FROM password_resets r WHERE r.user_id = u.id AND r.used_at IS NULL AND r.expires_at > ?) AS reset_pending
     FROM users u LEFT JOIN ledgers l ON l.id = u.party_id WHERE ${where.join(' AND ')} ORDER BY CASE u.role WHEN 'Owner' THEN 0 WHEN 'Customer' THEN 2 ELSE 1 END, u.full_name COLLATE NOCASE LIMIT 500`, [iso(), iso(), ...p]);
   return rows.map((r) => ({ id: r.id, username: r.username, full_name: r.full_name, email: r.email, phone: r.phone, role: r.role, login_type: TYPE_OF[r.role] || 'employee', status: r.status, created_at: r.created_at, last_login: r.last_login,
-    must_change_password: !!r.must_change_password, auth_provider: r.auth_provider || 'local', email_verified: !!r.email_verified, modules: parseModules(r.module_access), customer: r.customer || null, party_id: r.party_id, needs_review: !!r.needs_review, locked: !!(r.locked_until && Date.parse(r.locked_until) > Date.now()), login_count: r.logins, open_sessions: r.open_sessions, reset_pending: !!r.reset_pending, password_set: r.password !== db.SETUP_MARKER }));
+    must_change_password: !!r.must_change_password, auth_provider: r.auth_provider || 'local', email_verified: !!r.email_verified, modules: parseModules(r.module_access), extras: parseModules(r.extra_access, true) || [], own_company: !!r.company_id, customer: r.customer || null, party_id: r.party_id, needs_review: !!r.needs_review, locked: !!(r.locked_until && Date.parse(r.locked_until) > Date.now()), login_count: r.logins, open_sessions: r.open_sessions, reset_pending: !!r.reset_pending, password_set: r.password !== db.SETUP_MARKER }));
 }
 
 async function createUser(b = {}, actor) {
@@ -393,8 +396,10 @@ async function createUser(b = {}, actor) {
   if (temp) { const weak = checkPassword(temp, { username }); if (weak) throw bad(weak, 400); }
   else if (!mailer.isConfigured()) throw bad('E-mail is not set up on this computer, so the invitation link cannot be sent. Enter a temporary password instead (the person must change it at first sign-in), or set up e-mail (see .env.example).', 409, 'MAIL_NOT_CONFIGURED');
   const modules = role === 'Customer' || role === 'Owner' ? null : cleanModules(b.modules);
+  const extraJson = role === 'Customer' || role === 'Owner' || !Array.isArray(b.extras) ? null : JSON.stringify(b.extras.filter((k) => EXTRAS.some((x) => x.key === k)));
   const r = await run(`INSERT INTO users (username, password, full_name, role, email, phone, status, allow_backdated_entries, must_change_password, party_id, module_access, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
     [username, hashPassword(temp || crypto.randomBytes(24).toString('hex')), name, role, email, String(b.phone || '').trim().slice(0, 30), temp ? 'Active' : 'Invited', b.allow_backdated_entries ? 1 : 0, party ? party.id : null, modules === undefined ? null : modules, actor ? actor.userId : null]);
+  if (extraJson) await run('UPDATE users SET extra_access = ? WHERE id = ?', [extraJson, r.lastID]);
   await refreshUser(r.lastID);
   const created = await get('SELECT * FROM users WHERE id = ?', [r.lastID]);
   await audit('AUTH_USER_CREATE', { userId: actor && actor.userId, username: actor && actor.username, role: actor && actor.role, details: { created: created.username, role, how: temp ? 'temporary_password' : 'invitation' } });
@@ -420,6 +425,7 @@ async function updateUser(id, b = {}, actor) {
     set('role', b.role); set('needs_review', 0); // live role applies to open sessions at once (see auth.identify)
   }
   if (b.modules !== undefined) { if (u.role === 'Customer' || u.role === 'Owner') throw bad('Module access applies to employees only.'); set('module_access', cleanModules(b.modules)); }
+  if (b.extras !== undefined) { if (u.role === 'Customer' || u.role === 'Owner') throw bad('Extra access applies to employees only.'); set('extra_access', JSON.stringify((Array.isArray(b.extras) ? b.extras : []).filter((k) => EXTRAS.some((x) => x.key === k)))); }
   if (b.status !== undefined && b.status !== u.status) {
     if (!['Active', 'Inactive'].includes(b.status)) throw bad('Status must be Active or Inactive.');
     if (b.status === 'Inactive') { if (actor && actor.userId === id) throw bad('You cannot deactivate your own account.', 400); if (u.role === 'Owner' && (await ownerCount(id)) < 1) throw bad('There must always be one active administrator.', 409); }
@@ -462,7 +468,7 @@ async function updateOwnProfile(userId, b = {}) {
 }
 
 module.exports = {
-  TYPE_OF, EMPLOYEE_ROLES, LOGIN_TYPES, MODULES, MODULE_PATHS, moduleOf, parseModules, GENERIC_FAIL,
+  TYPE_OF, EMPLOYEE_ROLES, LOGIN_TYPES, MODULES, EXTRAS, MODULE_PATHS, moduleOf, parseModules, GENERIC_FAIL,
   preload, refreshAll, liveSession, refreshUser, onRevoke, onChange, createSession, revokeSession, revokeUserSessions,
   authenticate, issueLogin, logout, me, findAccount,
   requestReset, validateResetToken, resetPassword, signup, verifyEmail, resendVerification,

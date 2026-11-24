@@ -71,7 +71,7 @@ router.put('/me', async (req, res) => { if (!needUser(req, res)) return; try { r
 router.post('/logout', async (req, res) => { try { res.json(await identity.logout(req.user, meta(req))); } catch (e) { fail(res, e, 500); } });
 
 // ---- administrators
-router.get('/modules', (req, res) => { if (!needAdmin(req, res)) return; res.json({ success: true, data: identity.MODULES }); });
+router.get('/modules', (req, res) => { if (!needAdmin(req, res)) return; res.json({ success: true, data: identity.MODULES, extras: identity.EXTRAS }); });
 router.get('/users', async (req, res) => { if (!needAdmin(req, res)) return; try { res.json({ success: true, data: await identity.listUsers(req.query) }); } catch (e) { fail(res, e, 500); } });
 router.post('/users', async (req, res) => {
   if (!needAdmin(req, res)) return;
@@ -100,7 +100,8 @@ router.post('/users/:id/unlock', async (req, res) => {
   try { await db.run('UPDATE users SET failed_logins = 0, locked_until = NULL WHERE id = ?', [parseInt(req.params.id, 10)]); res.json({ success: true }); } catch (e) { fail(res, e); }
 });
 router.post('/users/:id/sign-out', async (req, res) => { if (!needAdmin(req, res)) return; try { await identity.revokeUserSessions(parseInt(req.params.id, 10), 'signed_out_by_admin'); res.json({ success: true }); } catch (e) { fail(res, e); } });
-router.get('/login-activity', async (req, res) => { if (!needAdmin(req, res)) return; try { res.json({ success: true, data: await identity.loginActivity(req.query) }); } catch (e) { fail(res, e, 500); } });
+const needLogins = (req, res) => { if (!needUser(req, res)) return false; if (getRolePermissions(req.user.role).canManageUsers || (req.user.role !== 'Customer' && (req.user.extras || []).includes('logins'))) return true; res.status(403).json({ success: false, error: 'Login activity is available to administrators, or to employees an administrator has allowed.', code: 'FORBIDDEN' }); return false; };
+router.get('/login-activity', async (req, res) => { if (!needLogins(req, res)) return; try { res.json({ success: true, data: await identity.loginActivity(req.query) }); } catch (e) { fail(res, e, 500); } });
 
 // Bringing existing people (RRE and the old inventory accounts) into this one list. Preview first; nothing is deleted either way.
 router.get('/migration', async (req, res) => { if (!needAdmin(req, res)) return; try { res.json({ success: true, data: await require('../../core/identityMigration').lastReport() }); } catch (e) { fail(res, e, 500); } });

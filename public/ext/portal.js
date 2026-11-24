@@ -4,7 +4,7 @@
  */
 (function () {
   'use strict';
-  const isCustomer = () => { try { return typeof appState !== 'undefined' && appState.currentUser && appState.currentUser.role === 'Customer'; } catch (e) { return false; } };
+  const isCustomer = () => { try { return typeof appState !== 'undefined' && appState.currentUser && appState.currentUser.role === 'Customer' && !appState.currentUser.own_company; } catch (e) { return false; } };
   const wrap = (name, fn) => { const f = window[name]; if (typeof f !== 'function' || f.__portalWrapped) return; const w = function () { return fn.call(this, f, arguments); }; w.__portalWrapped = true; window[name] = w; };
   function install() {
     wrap('showGateway', function (orig, args) { if (isCustomer() && window.RREPortal) { window.RREPortal.open(); return; } if (window.RREPortal) window.RREPortal.close(); return orig.apply(this, args); });

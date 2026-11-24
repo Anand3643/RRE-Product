@@ -600,6 +600,14 @@ const MIGRATIONS = [
     statements: [
       'ALTER TABLE password_resets ADD COLUMN claim_hash TEXT'
     ]
+  },
+  {
+    id: '021_customer_companies',
+    description: 'Each self-registered customer works in a private company of their own; employees can be given extra monitoring access (additive only)',
+    statements: [
+      'ALTER TABLE users ADD COLUMN company_id TEXT',
+      'ALTER TABLE users ADD COLUMN extra_access TEXT'
+    ]
   }
 ];
 

@@ -105,15 +105,40 @@ async function switchDatabase(number) {
   dbPath = path.resolve(dir, 'company.db');
   connectDb();
 }
-const getDbPath = () => dbPath;
-const getDataDir = () => dataDir;
-const getCompanyNumber = () => activeCompany;
+// ---------------------------------------------------------------------------------------------------- per-request company
+// The application has one "active" company (the one the owner works in). In addition, any request can run INSIDE another company
+// (withCompany): every query, file path and company number then belongs to that company, on its own database connection, without
+// touching the active one. This is how each self-registered customer gets private books of their own, side by side with everyone else.
+const { AsyncLocalStorage } = require('async_hooks');
+const als = new AsyncLocalStorage();
+const conns = new Map(); // company number -> { db, dir, path }
+const otherRoot = singleFolderMode ? path.join(path.resolve(process.env.RRE_DATA_DIR), '_companies') : null;
+const companyDirOf = (number) => (singleFolderMode ? path.join(otherRoot, String(number)) : paths.companyDir(number));
+const ctxCompany = () => { const st = als.getStore(); return st && st.company && String(st.company) !== activeCompany ? String(st.company) : null; };
+function handleFor(number) {
+  let h = conns.get(number);
+  if (!h) {
+    const dir = companyDirOf(number); fs.mkdirSync(dir, { recursive: true });
+    const p = path.resolve(dir, 'company.db');
+    h = { dir, path: p, db: new sqlite3.Database(p, (err) => { if (err) console.error('Failed to open company ' + number + ':', err.message); }) };
+    conns.set(number, h);
+  }
+  return h;
+}
+const curDb = () => { const c = ctxCompany(); if (c) return handleFor(c).db; if (!db) connectDb(); return db; };
+/** Runs fn with everything (queries, data folder, company number) belonging to the given company. */
+const withCompany = (number, fn) => als.run({ company: number == null ? null : String(number) }, fn);
+const companyExists = (number) => fs.existsSync(path.join(companyDirOf(number), 'company.db'));
+function closeCompany(number) { const h = conns.get(String(number)); if (!h) return Promise.resolve(); conns.delete(String(number)); return new Promise((r) => h.db.close(() => r())); }
+const getDbPath = () => { const c = ctxCompany(); return c ? handleFor(c).path : dbPath; };
+const getDataDir = () => { const c = ctxCompany(); return c ? handleFor(c).dir : dataDir; };
+const getCompanyNumber = () => ctxCompany() || activeCompany;
+const getActiveCompanyNumber = () => activeCompany; // the owner's company, whatever company the current request runs in
 
 // Promisified query wrappers
 const run = (sql, params = []) => {
   return new Promise((resolve, reject) => {
-    if (!db) connectDb();
-    db.run(sql, params, function (err) {
+    curDb().run(sql, params, function (err) {
       if (err) reject(err);
       else {
         const out = { lastID: this.lastID, changes: this.changes };
@@ -127,8 +152,7 @@ const run = (sql, params = []) => {
 
 const get =(sql, params = []) => {
   return new Promise((resolve, reject) => {
-    if (!db) connectDb();
-    db.get(sql, params, (err, row) => {
+    curDb().get(sql, params, (err, row) => {
       if (err) reject(err);
       else resolve(row);
     });
@@ -137,12 +161,18 @@ const get =(sql, params = []) => {
 
 const all = (sql, params = []) => {
   return new Promise((resolve, reject) => {
-    if (!db) connectDb();
-    db.all(sql, params, (err, rows) => {
+    curDb().all(sql, params, (err, rows) => {
       if (err) reject(err);
       else resolve(rows);
     });
   });
+};
+
+// Account data (users, sessions, reset tokens) always lives in the active company's database, even while a request runs inside a customer's own company.
+const sys = {
+  run: (sql, params = []) => new Promise((res, rej) => { if (!db) connectDb(); db.run(sql, params, function (e) { if (e) rej(e); else res({ lastID: this.lastID, changes: this.changes }); }); }),
+  get: (sql, params = []) => new Promise((res, rej) => { if (!db) connectDb(); db.get(sql, params, (e, r) => (e ? rej(e) : res(r))); }),
+  all: (sql, params = []) => new Promise((res, rej) => { if (!db) connectDb(); db.all(sql, params, (e, r) => (e ? rej(e) : res(r))); })
 };
 
 async function initDb() {
@@ -1042,7 +1072,7 @@ let hardenedFor = null;
  * Runs once per company database per process.
  */
 async function hardenAccounts(force = false) {
-  if (!force && hardenedFor === dbPath) return;
+  if (!force && hardenedFor === getDbPath()) return;
   await ensureSecurityColumns();
   const users = await all('SELECT id, username, role, password, status, must_change_password, password_changed_at FROM users');
   for (const u of users) {
@@ -1064,7 +1094,7 @@ async function hardenAccounts(force = false) {
     }
   }
   await refreshGuestFlag(); // the guest account itself is only created when someone first uses the Guest button
-  hardenedFor = dbPath;
+  hardenedFor = getDbPath();
 }
 
 // ---- guest access (one-click, read-only, no password). The Owner can switch it off; it is on by default.
@@ -1077,7 +1107,7 @@ async function guestAccessEnabled() {
   const r = await get("SELECT value FROM app_settings WHERE key = 'guest_access'");
   return !r || r.value !== '0';
 }
-async function refreshGuestFlag() { guestFlag = await guestAccessEnabled(); return guestFlag; }
+async function refreshGuestFlag() { if (ctxCompany()) return guestFlag; guestFlag = await guestAccessEnabled(); return guestFlag; } // a customer's own company never changes the application-wide guest switch
 /** Synchronous answer for the request path; kept current by refreshGuestFlag(). */
 function isGuestAccessOn() { return guestFlag; }
 
@@ -1229,19 +1259,21 @@ function getRolePermissions(role) {
         allowedVoucherTypes: []
       };
     case 'Customer':
-      // portal customers have NO staff permissions at all; they can only use /api/portal (see core/portal.js)
+      // A self-registered customer works in a company of their own: full accounting rights THERE, never user management.
+      // (A customer who is only linked to the owner's customer account has no company of their own and is confined to /api/portal,
+      // see routeGuard.js and core/portal.js.)
       return {
         role: 'Customer',
-        canCreateVouchers: false,
-        canEditVouchers: false,
-        canDeleteVouchers: false,
-        canViewFinancials: false,
-        canViewAuditTrail: false,
+        canCreateVouchers: true,
+        canEditVouchers: true,
+        canDeleteVouchers: true,
+        canViewFinancials: true,
+        canViewAuditTrail: true,
         canManageUsers: false,
-        canAlterCompany: false,
-        canCleanSlate: false,
+        canAlterCompany: true,
+        canCleanSlate: true,
         badgeColor: 'sky',
-        allowedVoucherTypes: []
+        allowedVoucherTypes: ['Contra', 'Payment', 'Receipt', 'Journal', 'Sales', 'Purchase', 'Debit Note', 'Credit Note']
       };
     case 'Guest':
       return {
@@ -1531,6 +1563,11 @@ module.exports = {
   getDbPath,
   getDataDir,
   getCompanyNumber,
+  getActiveCompanyNumber,
+  withCompany,
+  companyExists,
+  closeCompany,
+  sys,
   singleFolderMode,
   reopenDb,
   run,

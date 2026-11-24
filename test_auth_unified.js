@@ -255,10 +255,10 @@ async function main() {
   outbox.length = 0;
   const su1 = await signup({ ...good, role: 'Owner', status: 'Active', login_type: 'admin', party_id: 1 });
   const sam = await get("SELECT * FROM users WHERE email = 'sam@shop.example'");
-  assert(su1.status === 201 && sam && sam.role === 'Customer' && sam.status === 'Pending' && sam.party_id, 'a customer registers: the role is always Customer and the account waits for e-mail confirmation (role / status in the request are ignored)', JSON.stringify(su1.json));
+  assert(su1.status === 201 && sam && sam.role === 'Customer' && sam.status === 'Pending' && sam.company_id, 'a customer registers: the role is always Customer and the account waits for e-mail confirmation (role / status in the request are ignored)', JSON.stringify(su1.json));
   assert(sam.password.startsWith('argon2id$') && !JSON.stringify(su1.json).includes(good.password), 'the password is stored hashed and never returned');
-  const ledger = await get("SELECT l.name, g.name grp FROM ledgers l JOIN account_groups g ON g.id = l.group_id WHERE l.id = ?", [sam.party_id]);
-  assert(ledger && ledger.grp === 'Sundry Debtors' && ledger.name === 'Sam Shopper', 'the customer gets their own customer account in the books (linked to the user)', JSON.stringify(ledger));
+  assert(sam.company_id === 'U' + sam.id && require('fs').existsSync(require('path').join(tmp, '_companies', sam.company_id, 'company.db')), 'the customer gets books of their own: a private company with its own database file');
+  assert(!(await get("SELECT 1 x FROM ledgers WHERE name LIKE 'Sam Shopper%'")), 'nothing is added to the owner\'s books for them');
   assert(outbox.length === 1 && outbox[0].to === 'sam@shop.example' && /verify=/.test(outbox[0].text), 'a confirmation e-mail with a single-use link is sent');
   const pre = await login('sam@shop.example', good.password, 'customer');
   assert(pre.status === 401 && pre.json.code === 'EMAIL_NOT_VERIFIED' && !pre.json.data, 'signing in before confirming the e-mail is refused');
@@ -289,7 +289,8 @@ async function main() {
   assert(samLogin.status === 200 && samLogin.json.data.home === 'app' && samLogin.json.data.user.role === 'Customer', 'a confirmed customer signs in and lands in the customer portal');
   const SC = samLogin.json.data.token;
   assert((await login('pend@shop.example', good.password, 'employee')).status === 401 && (await login('pend@shop.example', good.password, 'admin')).status === 401, 'a customer cannot enter through the Employee or Admin option');
-  assert((await g(SC, '/api/portal/me')).status === 200 && (await g(SC, '/api/auth/users')).status === 403 && (await g(SC, '/api/vouchers')).status === 403 && (await g(SC, '/api/inv/items')).status === 403 && (await g(SC, '/api/inventory-app/status')).status === 403, 'a customer sees only the portal: no user management, accounting or inventory', [(await g(SC, '/api/portal/me')).status, (await g(SC, '/api/auth/users')).status, (await g(SC, '/api/vouchers')).status, (await g(SC, '/api/inv/items')).status, (await g(SC, '/api/inventory-app/status')).status].join());
+  assert((await g(SC, '/api/auth/users')).status === 403 && (await g(SC, '/api/companies')).status === 403 && (await g(SC, '/api/auth/login-activity')).status === 403 && (await g(SC, '/api/inventory-app/status')).status === 403 && (await g(SC, '/api/portal/me')).status === 403, 'a customer cannot reach user management, the company list, login activity or the owner\'s portal');
+  assert((await g(SC, '/api/vouchers')).status === 200 && (await g(SC, '/api/inv/items')).status === 200 && (await g(SC, '/api/reports/trial-balance')).status === 200, 'but has the whole accounting, inventory and reports application, in their own company');
   require('./core/identity')._resetLimits(); const forgotC = await forgotFor('pend@shop.example'); assert(!!forgotC.mail, 'a self-registered customer can use Forgot password');
 
   calm();
@@ -305,7 +306,7 @@ async function main() {
   const cl3 = await signup({ ...good, email: 'claim3@shop.example', full_name: 'Claim Three' }); const tk_3 = vTok(outbox[outbox.length - 1]);
   const right = await req('POST', '/api/auth/verify-email', { body: { token: tk_3, claim: cl3.json.claim } });
   assert(right.json.success && right.json.data && right.json.data.token && right.json.data.user.role === 'Customer' && right.json.data.home === 'app', 'the browser that created the account is signed in when it confirms: straight into the application');
-  assert((await req('GET', '/api/portal/me', { token: right.json.data.token })).status === 200, 'and that session is a normal customer session');
+  assert((await req('GET', '/api/auth/me', { token: right.json.data.token })).status === 200 && (await req('GET', '/api/vouchers', { token: right.json.data.token })).status === 200, 'and that session works in the application');
   assert((await req('POST', '/api/auth/verify-email', { body: { token: tk_3, claim: cl3.json.claim } })).status === 400, 'the link and claim work only once');
 
   console.log('\n--- 10. Employees: invitation only ---');

@@ -121,6 +121,31 @@ async function create(body, user) {
   return { number, name: v.name };
 }
 
+/**
+ * A self-registered customer gets books of their own: a clean company with its own database file, created WITHOUT switching the
+ * application away from the owner's company (the new company is initialised on its own connection). Nobody else can reach it.
+ * The customer's user row is copied in under the same id so records can name who did the work.
+ */
+async function createForUser(u) {
+  const number = 'U' + u.id; // never collides with the numbered companies the owner creates
+  if (db.companyExists(number)) return number;
+  await db.withCompany(number, async () => {
+    await db.initDb(); await runMigrations();
+    await db.resetCleanCompany();
+    await db.run('DELETE FROM godowns'); await db.run('DELETE FROM cost_centres'); await db.run('DELETE FROM stock_groups');
+    await db.run("INSERT INTO godowns (name, location) VALUES ('Main Location', 'Primary Godown')");
+    await db.run("INSERT INTO cost_centres (name, category) VALUES ('Primary Cost Centre', 'Default')");
+    await db.run("INSERT INTO stock_groups (name) VALUES ('Primary')");
+    for (const n of ['Input CGST 9%', 'Input SGST 9%', 'Input IGST 18%', 'Output CGST 9%', 'Output SGST 9%', 'Output IGST 18%']) await db.run('INSERT OR IGNORE INTO ledgers (name, group_id, opening_balance, opening_balance_type) VALUES (?, 20, 0, ?)', [n, n.startsWith('Output') ? 'Cr' : 'Dr']);
+    const fy = `${new Date().getFullYear() - (new Date().getMonth() < 3 ? 1 : 0)}-04-01`;
+    await db.run('UPDATE ledgers SET state = ?, state_code = ?', ['Tamil Nadu', '33']);
+    await db.run("UPDATE company_info SET company_number = ?, name = ?, formal_name = ?, financial_year_from = ?, books_beginning_from = ?, state = 'Tamil Nadu', state_code = '33' WHERE id = (SELECT MIN(id) FROM company_info)", [number, `${u.full_name}'s Company`, `${u.full_name}'s Company`, fy, fy]);
+    await db.run('DELETE FROM user_logins'); await db.run('DELETE FROM users');
+    await db.run("INSERT INTO users (id, username, password, full_name, role, email, status, allow_backdated_entries) VALUES (?, ?, '!no-sign-in-here!', ?, 'Owner', ?, 'Active', 1)", [u.id, u.username, u.full_name, u.email || '']);
+  });
+  return number;
+}
+
 async function switchTo(number, user) {
   if (db.singleFolderMode) throw bad('Switching companies is unavailable in single-folder mode.', 409);
   if (switching) throw bad('Another company operation is in progress. Try again in a moment.', 409);
@@ -146,4 +171,5 @@ async function switchTo(number, user) {
   return { active: String(number), name: await liveName(), changed: true, note: 'Everyone is signed out and must sign in to this company.' };
 }
 
-module.exports = { list, create, switchTo, gate, isSwitching };
+module.exports = {
+  createForUser, list, create, switchTo, gate, isSwitching };

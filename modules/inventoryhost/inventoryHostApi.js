@@ -31,7 +31,7 @@ router.post('/launch', async (req, res) => {
   try {
     const user = identify(req);
     if (!user) return fail(res, 401, 'Please sign in.');
-    if (user.role === 'Customer') return fail(res, 403, 'Customer accounts use the customer portal.');
+    if (user.role === 'Customer') return fail(res, 403, 'Use Inventory Management from the Gateway: it works on your own company.');
     if (Array.isArray(user.modules) && !['Owner', 'Administrator'].includes(user.role) && !user.modules.includes('inventory')) return fail(res, 403, 'Your account does not have access to Inventory. Ask your administrator.');
     const row = await db.get('SELECT id, username, full_name, email, role FROM users WHERE id = ? AND status = ?', [user.userId, 'Active']);
     if (!row) return fail(res, 401, 'This account is not active.');

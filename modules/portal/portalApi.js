@@ -12,6 +12,7 @@ const handle = (fn) => async (req, res) => {
 };
 const id = (req) => { const n = /^\d{1,12}$/.test(req.params.id) ? parseInt(req.params.id, 10) : 0; if (n < 1) { const e = new Error('Not found.'); e.status = 404; throw e; } return n; };
 
+router.use((req, res, next) => require('../../core/db').withCompany(null, next)); // the owner's customers: always the active company
 router.use(portal.portalOnly);
 router.get('/me', handle((req) => portal.me(req.portal)));
 const extra = require('../../core/portalExtra');

@@ -128,6 +128,14 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(logger.requestMiddleware);
 app.use(companies.gate); // briefly refuses /api calls while the database is swapped during a company switch
 app.use(routeGuard);
+// A customer with books of their own works inside THEIR company for the whole request (their own database connection, folder and
+// company number); everyone else works in the active company exactly as before.
+app.use((req, res, next) => {
+  const own = req.user && req.user.role === 'Customer' && req.user.companyId;
+  if (!own) return next();
+  if (!require('./core/db').companyExists(own)) return res.status(503).json({ success: false, error: 'Your company is being prepared. Please try again in a moment.' });
+  return require('./core/db').withCompany(own, next);
+});
 // Vouchers that trigger an approval rule are held for an approver instead of being posted
 app.use(approvals.gate);
 // A newly posted voucher is tagged with the poster's default branch/department (if they set one). The response waits for the tag

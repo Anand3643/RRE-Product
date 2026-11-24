@@ -20,15 +20,17 @@ function identify(req) {
   if (!r.valid) return null;
   if (r.user.role === 'Guest' && !isGuestAccessOn()) return null; // guest access switched off: existing guest sessions stop working
   // A token only works in the company it was issued for (tokens from before multi-company belong to the original company).
+  // A customer's session belongs to their own private company instead, which the server checks below.
   const tokenCompany = r.user.company || require('./paths').DEFAULT_COMPANY;
-  if (String(tokenCompany) !== String(getCompanyNumber())) return null;
+  const tokenOwn = r.user.sid && require('./identity').liveSession(r.user.sid, r.user.userId);
+  if (!(tokenOwn && tokenOwn.company_id) && String(tokenCompany) !== String(require('./db').getActiveCompanyNumber())) return null;
   // The token is only a handle: the session must still be open on the server and the account still active.
   // The role and module list always come from the account as it is NOW, so a change by an administrator applies at once.
   if (!r.user.sid) return process.env.RRE_LEGACY_TOKENS === '1' ? r.user : null; // test suites only: tokens without a server-side session
 
   const live = require('./identity').liveSession(r.user.sid, r.user.userId);
   if (!live) return null;
-  return { ...r.user, role: live.role, modules: live.modules, partyId: live.party_id };
+  return { ...r.user, role: live.role, modules: live.modules, extras: live.extras || [], partyId: live.party_id, companyId: live.company_id || null };
 }
 
 /**
@@ -42,7 +44,7 @@ function requireAuth(permissionKey, opts = {}) {
       return res.status(401).json({ success: false, error: 'Authentication required. Please log in again.' });
     }
     // A customer-portal login may only use the portal. Every other route (reads included) refuses it unless it opts in.
-    if (user.role === 'Customer' && !opts.allowCustomer) {
+    if (user.role === 'Customer' && !user.companyId && !opts.allowCustomer) {
       return res.status(403).json({ success: false, error: 'Customer portal accounts can only use the customer portal.', code: 'PORTAL_ONLY' });
     }
     if (user.pwc) {

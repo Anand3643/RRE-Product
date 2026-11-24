@@ -159,7 +159,7 @@ async function main() {
   console.log('\n--- 9. Integrity ---');
   assert(await balanced(), 'Debits equal credits across the books');
   const mg = (await get(`SELECT COUNT(*) c FROM schema_migrations`)).c;
-  assert(mg === 20, 'Migrations applied: 20', 'got ' + mg);
+  assert(mg === 21, 'Migrations applied: 21', 'got ' + mg);
 
   console.log(`\n=== ${passed} passed, ${failed} failed ===`);
   process.exit(failed ? 1 : 0);

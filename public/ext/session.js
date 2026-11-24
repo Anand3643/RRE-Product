@@ -25,7 +25,9 @@
     const canUsers = !!(perms && perms.canManageUsers);
     document.querySelectorAll('#au-rail [data-act="users"]').forEach((b) => { b.style.display = canUsers ? '' : 'none'; });
     const inv = document.querySelector('#au-rail button.item.inv'), sub = document.getElementById('au-inv-sub');
-    const invOk = allowedModule('inventory');
+    const invOk = allowedModule('inventory') && me.role !== 'Customer'; // the sidecar inventory is the owner's; customers use Inventory Management in the Gateway (their own company)
+    const canCompanies = canUsers || (me.role !== 'Customer' && Array.isArray(me.extras) && me.extras.includes('companies'));
+    const co = document.getElementById('btn-companies'); if (co) co.style.display = canCompanies ? '' : 'none';
     if (inv) inv.style.display = invOk ? '' : 'none'; if (sub && !invOk) sub.style.display = 'none';
     document.querySelectorAll('#au-tabbar button.inv').forEach((b) => { b.style.display = invOk ? '' : 'none'; });
     // inventory sub-list: the inventory application's own user screen is not used (users are managed in RRE)
@@ -46,7 +48,7 @@
 
   function apply(detail) {
     me = detail.user; perms = detail.permissions; css(); chip(); limitNavigation();
-    if (me.role === 'Customer') { // the customer dashboard replaces the staff screens (the server refuses a customer every staff route anyway)
+    if (me.role === 'Customer' && !me.own_company) { // a customer linked to the owner's customer account: their own dashboard only (the server refuses every staff route)
       document.documentElement.classList.add('rre-customer');
       const open = () => { if (window.RREPortal) window.RREPortal.open(); else setTimeout(open, 150); }; open();
     }
