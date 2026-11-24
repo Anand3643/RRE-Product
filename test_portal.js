@@ -80,7 +80,7 @@ async function main() {
   console.log('\n--- 2. Signing in ---');
   const l1 = await login('cust1.buyer', PW);
   assert(l1.status === 200 && l1.json.data.user.role === 'Customer' && l1.json.data.must_change_password === true, 'Signs in as a Customer and is told to change the password');
-  assert(l1.json.data.permissions.canCreateVouchers === false && l1.json.data.permissions.canViewFinancials === false && l1.json.data.permissions.canManageUsers === false, 'The Customer role holds no staff permission');
+  assert(l1.json.data.permissions.canManageUsers === false && l1.json.data.user.own_company === false, 'A customer linked to the owner\'s customer account has no user-management permission and no company of their own (so the server confines them to the portal)');
   const early = await req('GET', '/api/portal/me', { token: l1.json.data.token });
   assert(early.status === 403 && early.json.code === 'PASSWORD_CHANGE_REQUIRED', 'Nothing works until the password is changed');
   assert((await login('cust1.buyer', 'wrong-password')).status === 401, 'A wrong password is refused');
