@@ -38,6 +38,15 @@ router.post('/login', rateLimitLoginMiddleware, async (req, res) => {
   } catch (e) { loginRateLimiter.recordFailure(m.ip); fail(res, e, 500); }
 });
 
+// Login screen switched off (RRE_SKIP_LOGIN=1 in .env): only requests from this same computer are signed in, as the owner.
+const LOOPBACK = ['127.0.0.1', '::1', '::ffff:127.0.0.1'];
+const skipLogin = () => process.env.RRE_SKIP_LOGIN === '1';
+router.post('/auto', async (req, res) => {
+  const ip = (req.socket && req.socket.remoteAddress) || '';
+  if (!skipLogin() || !LOOPBACK.includes(ip)) return res.status(404).json({ success: false, error: 'Not available.' });
+  try { res.json(await identity.autoLogin(meta(req))); } catch (e) { fail(res, e, 500); }
+});
+
 // Customers create their own account (always the Customer role, confirmed by e-mail before it works).
 router.post('/signup', async (req, res) => {
   try { res.status(201).json(await identity.signup(req.body || {}, meta(req))); } catch (e) { fail(res, e); }

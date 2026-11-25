@@ -210,6 +210,19 @@ async function authenticate(identifier, password, meta = {}, { loginType = null,
   return issueLogin(user, meta, { remember });
 }
 
+/**
+ * "Skip the login screen" (RRE_SKIP_LOGIN=1, this computer only): opens a normal server-side session for the first active owner account.
+ * The session never carries the change-password flag, so the app opens straight away; turning the setting off brings the sign-in page back.
+ */
+async function autoLogin(meta = {}) {
+  await ready();
+  const owner = await get("SELECT * FROM users WHERE role = 'Owner' AND status = 'Active' ORDER BY id LIMIT 1");
+  if (!owner) throw bad('No active administrator account exists.', 409);
+  const r = await issueLogin({ ...owner, must_change_password: 0 }, { ...meta, agent: 'RRE (login skipped) ' + (meta.agent || '') }, { remember: true });
+  r.data.must_change_password = false; r.data.auto = true;
+  return r;
+}
+
 async function logout(user, meta = {}) {
   if (user && user.sid) await revokeSession(user.sid, 'logout');
   if (user) await audit('AUTH_LOGOUT', { userId: user.userId, username: user.username, role: user.role, ip: meta.ip });
@@ -488,7 +501,7 @@ async function updateOwnProfile(userId, b = {}) {
 
 module.exports = {
   TYPE_OF, EMPLOYEE_ROLES, LOGIN_TYPES, MODULES, EXTRAS, MODULE_PATHS, moduleOf, parseModules, GENERIC_FAIL,
-  preload, upgradeSelfRegistered, refreshAll, liveSession, refreshUser, onRevoke, onChange, createSession, revokeSession, revokeUserSessions,
+  autoLogin, preload, upgradeSelfRegistered, refreshAll, liveSession, refreshUser, onRevoke, onChange, createSession, revokeSession, revokeUserSessions,
   authenticate, issueLogin, logout, me, findAccount,
   requestReset, validateResetToken, resetPassword, signup, verifyEmail, resendVerification,
   listUsers, createUser, updateUser, sendResetFor, loginActivity, updateOwnProfile, ownerCount, audit,

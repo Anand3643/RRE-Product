@@ -192,6 +192,11 @@
       } catch (e) { /* fall through to the message */ }
       show('badlink'); return;
     }
+    // login screen switched off on this computer (RRE_SKIP_LOGIN=1): open the application straight away
+    try {
+      const a = await api('POST', '/auth/auto');
+      if (a && a.success) { saveSession(a.data, true); try { const s = JSON.parse(store.get(SESSION)); s.auto = true; store.set(SESSION, JSON.stringify(s)); } catch (e) { /* ignore */ } return enter(a.data); }
+    } catch (e) { /* not switched on: the normal sign-in page */ }
     // already signed in? go straight to the right place (unless the person asked to switch accounts)
     const raw = store.get(SESSION);
     if (raw && !params.get('switch')) {

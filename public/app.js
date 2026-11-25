@@ -309,7 +309,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (res.status === 401 || res.status === 403) { window.startWithFreshLogin(); return; }
       const j = await res.json();
       if (j && j.success && j.data) {
-        if (j.data.must_change_password) { location.replace('login.html?switch=1'); return; }
+        if (j.data.must_change_password && !saved.auto) { location.replace('login.html?switch=1'); return; }
         who = j.data.user; perms = j.data.permissions;
         try { localStorage.setItem('tally_user_session', JSON.stringify({ ...saved, user: who, permissions: perms, modules: who.modules })); } catch (e) { /* ignore */ }
       }
