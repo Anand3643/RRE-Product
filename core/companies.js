@@ -36,6 +36,14 @@ async function liveName() {
 async function registry() {
   const active = db.getCompanyNumber();
   if (db.singleFolderMode) return { active, companies: [{ number: active, name: await liveName(), created_at: null }], single: true };
+  if (db.isPostgres()) { // the companies live in the shared database: its registry is the list (the local file only remembers the active one)
+    const rows = await db.pgCompanyRows();
+    const companies = rows.map((r) => ({ number: r.company_no, name: r.name, created_at: r.created_at ? new Date(r.created_at).toISOString() : null }));
+    for (const co of companies) if (!co.name) co.name = co.number === active ? await liveName() : 'Company ' + co.number;
+    const local = paths.readRegistry();
+    if (!local) paths.writeRegistry({ active, companies }); // this server remembers its active company across restarts, as on SQLite
+    return { ...(local || {}), active, companies };
+  }
   let reg = paths.readRegistry();
   if (!reg) {
     reg = { active, companies: [{ number: active, name: await liveName(), created_at: now() }] };
@@ -112,6 +120,7 @@ async function create(body, user) {
     await db.run(`INSERT INTO users (username, password, full_name, role, email, status, allow_backdated_entries) VALUES (?, ?, ?, 'Owner', '', 'Active', 1)`, [v.username, hashPassword(v.password), v.full_name]);
     await reopen(original);
     reg.companies.push({ number, name: v.name, created_at: now(), created_by: user ? user.username : null });
+    if (db.isPostgres()) await db.setPgCompanyName(number, v.name);
     paths.writeRegistry({ ...reg, active: original });
   } catch (err) {
     try { await reopen(original); } catch (e) { /* best effort: original database stays untouched */ }
@@ -156,7 +165,7 @@ async function switchTo(number, user) {
   if (!target) throw bad('Company not found.', 404);
   const original = db.getCompanyNumber();
   if (String(number) === original) return { active: original, name: await liveName(), changed: false };
-  if (!fs.existsSync(path.join(paths.companyDir(number), 'company.db'))) throw bad('That company\'s data file is missing.', 409);
+  if (!db.companyExists(String(number))) throw bad('That company\'s data is missing.', 409);
 
   await logActivity({ user, action: 'COMPANY_SWITCH', entity: 'company', entityId: number, details: { from: original, to: String(number) } });
   switching = true;

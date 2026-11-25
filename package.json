@@ -44,7 +44,17 @@
     "test:auth": "node test_auth_unified.js",
     "admin:reset": "node scripts/set-admin-password.js",
     "mail:setup": "node scripts/setup-mail.js",
-    "db:init": "node scripts/init-local-db.js"
+    "db:init": "node scripts/init-local-db.js",
+    "db:schema": "node scripts/pg-schema.js",
+    "db:migrate": "node scripts/pg-migrate.js",
+    "db:copy": "node scripts/pg-copy.js",
+    "db:local": "node scripts/pg-local.js",
+    "test:pg": "node scripts/test-pg.js",
+    "db:backup": "node scripts/pg-backup.js",
+    "db:restore": "node scripts/pg-backup.js restore",
+    "test:integrity": "node test_integrity.js",
+    "test:cloud": "node test_pg_cloud.js",
+    "test:loadtest": "node scripts/load-test.js"
   },
   "repository": {
     "type": "git",
@@ -66,13 +76,15 @@
     "express": "^5.3.0",
     "hash-wasm": "^4.13.0",
     "nodemailer": "^7.0.13",
+    "pg": "^8.23.1",
     "sqlite3": "^6.0.1",
     "tesseract.js": "^7.0.0",
     "xml2js": "^0.6.2"
   },
   "devDependencies": {
     "electron": "^45.4.1",
-    "electron-builder": "^26.18.0"
+    "electron-builder": "^26.18.0",
+    "embedded-postgres": "^17.11.0-beta.19"
   },
   "build": {
     "appId": "com.rre.entries",

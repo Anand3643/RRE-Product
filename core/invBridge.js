@@ -42,7 +42,7 @@ async function setting(key, def) { const r = await get('SELECT value FROM app_se
 async function eventOf(source, kind, id) { return get('SELECT * FROM inv_bridge_events WHERE source = ? AND kind = ? AND src_id = ?', [source, kind, id]); }
 async function record(source, kind, id, status, f = {}) {
   await run(`INSERT INTO inv_bridge_events (source, kind, src_id, status, voucher_id, number, message, attempts, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-             ON CONFLICT(source, kind, src_id) DO UPDATE SET status = excluded.status, voucher_id = COALESCE(excluded.voucher_id, voucher_id), number = COALESCE(excluded.number, number), message = excluded.message, attempts = attempts + ?, updated_at = CURRENT_TIMESTAMP
+             ON CONFLICT(source, kind, src_id) DO UPDATE SET status = excluded.status, voucher_id = COALESCE(excluded.voucher_id, inv_bridge_events.voucher_id), number = COALESCE(excluded.number, inv_bridge_events.number), message = excluded.message, attempts = inv_bridge_events.attempts + ?, updated_at = CURRENT_TIMESTAMP
              WHERE inv_bridge_events.status NOT IN ('synced', 'history') OR excluded.status = 'synced'`,
     [source, kind, id, status, f.voucher_id || null, f.number || null, f.message || null, status === 'failed' ? 1 : 0, status === 'failed' ? 1 : 0]);
 }
@@ -187,7 +187,7 @@ async function syncOnce({ force = false } = {}) {
     if (!fs.existsSync(dbFile())) return { skipped: 'The inventory application has not been opened yet.' };
     src = await imp.openSource(dbFile());
     const orgId = await orgOf(src); if (!orgId) return { skipped: 'The inventory database has no organisation yet.' };
-    const source = imp.srcKey(orgId), out = { posted: { purchases: 0, sales: 0, transfers: 0, adjustments: 0 }, failed: [], history_marked: 0, retried: 0 };
+    const source = await imp.sourceKey(src, orgId), out = { posted: { purchases: 0, sales: 0, transfers: 0, adjustments: 0 }, failed: [], history_marked: 0, retried: 0 };
 
     // first run: everything that already exists is history (its stock is already in RRE's opening balances)
     if (!(await eventOf(source, 'baseline', 0))) {

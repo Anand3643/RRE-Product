@@ -2,15 +2,44 @@
 // Voucher Posting Service — single double-entry write path
 // Used by the Vouchers API and by Quotation -> Invoice conversion.
 // ========================================================
-const { get, run } = require('./db');
+const { get, all, run } = require('./db');
 
 class VoucherValidationError extends Error {}
+/** The voucher number is already used (HTTP 409). */
+class VoucherConflictError extends Error {}
 
 const round2 = (n) => Math.round((parseFloat(n) || 0) * 100) / 100;
+const paise = (n) => Math.round((parseFloat(n) || 0) * 100); // exact integer arithmetic for the balance check
+
+/**
+ * Next free number for vouchers without one: <prefix><n>, n one above the highest number already used with that prefix.
+ * Called inside the posting transaction, which the company's transaction queue runs one at a time, so two vouchers can never get
+ * the same number (the UNIQUE constraint on voucher_no is the final guard).
+ */
+async function nextVoucherNo(voucherType) {
+  const prefix = `RRE/${String(voucherType).toUpperCase().slice(0, 3)}/`;
+  const rows = await all('SELECT voucher_no FROM vouchers WHERE voucher_no LIKE ?', [prefix.replace(/[\\%_]/g, (c) => '\\' + c) + '%']);
+  let max = 0;
+  for (const r of rows) { const tail = r.voucher_no.slice(prefix.length); if (/^\d{1,12}$/.test(tail)) max = Math.max(max, parseInt(tail, 10)); }
+  return prefix + String(max + 1).padStart(5, '0');
+}
+
+/** 'allow' (default) or 'block': may a sale / purchase return take an item below zero? */
+async function negativeStockPolicy() {
+  const r = await get("SELECT value FROM app_settings WHERE key = 'negative_stock'").catch(() => null);
+  return r && r.value === 'block' ? 'block' : 'allow';
+}
+async function setNegativeStockPolicy(value) {
+  if (!['allow', 'block'].includes(value)) throw new VoucherValidationError("negative_stock must be 'allow' or 'block'.");
+  await run('CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)');
+  await run("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('negative_stock', ?)", [value]);
+  return value;
+}
 
 /**
  * Posts a balanced voucher inside a transaction.
- * When `options.inTransaction` is true, the caller owns BEGIN/COMMIT.
+ * When `options.inTransaction` is true, the caller owns the transaction (withTransaction).
+ * `options.idempotencyKey` (the Idempotency-Key header, per user): the same key always returns the first result and never posts twice.
  */
 async function postVoucher(payload, options = {}) {
   const {
@@ -28,18 +57,23 @@ async function postVoucher(payload, options = {}) {
   if (!voucher_type || !entries || !Array.isArray(entries) || entries.length < 2) {
     throw new VoucherValidationError('Voucher type and at least 2 double-entry lines are required');
   }
+  if (date != null && date !== '' && (!/^\d{4}-\d{2}-\d{2}$/.test(String(date)) || Number.isNaN(Date.parse(date)))) throw new VoucherValidationError('Voucher date must be YYYY-MM-DD.');
 
-  // Mathematical Double-Entry Invariant Guard: Sum(Dr) == Sum(Cr)
-  let totalDebit = 0;
-  let totalCredit = 0;
+  // Mathematical Double-Entry Invariant Guard: Sum(Dr) == Sum(Cr), to the paisa
+  let drPaise = 0;
+  let crPaise = 0;
 
-  const validatedEntries = entries.map((e) => {
+  const validatedEntries = entries.map((e, i) => {
     const dr = round2(e.debit_amount);
     const cr = round2(e.credit_amount);
-    totalDebit += dr;
-    totalCredit += cr;
+    const ledgerId = parseInt(e.ledger_id, 10);
+    if (!Number.isInteger(ledgerId) || ledgerId <= 0) throw new VoucherValidationError(`Line ${i + 1}: choose a ledger.`);
+    if (!Number.isFinite(dr) || !Number.isFinite(cr) || dr < 0 || cr < 0) throw new VoucherValidationError(`Line ${i + 1}: amounts cannot be negative.`);
+    if ((dr > 0) === (cr > 0)) throw new VoucherValidationError(`Line ${i + 1}: enter either a debit or a credit amount (not both, not neither).`);
+    drPaise += paise(dr);
+    crPaise += paise(cr);
     return {
-      ledger_id: parseInt(e.ledger_id, 10),
+      ledger_id: ledgerId,
       entry_type: dr > 0 ? 'Dr' : 'Cr',
       debit_amount: dr,
       credit_amount: cr,
@@ -48,20 +82,41 @@ async function postVoucher(payload, options = {}) {
     };
   });
 
-  const diff = Math.abs(totalDebit - totalCredit);
-  if (diff > 0.05) {
+  if (drPaise !== crPaise) {
     throw new VoucherValidationError(
-      `Tally Invariant Violation: Total Debits (₹${totalDebit.toFixed(2)}) != Total Credits (₹${totalCredit.toFixed(2)}). Diff: ₹${diff.toFixed(2)}`
+      `Tally Invariant Violation: Total Debits (₹${(drPaise / 100).toFixed(2)}) != Total Credits (₹${(crPaise / 100).toFixed(2)}). Diff: ₹${(Math.abs(drPaise - crPaise) / 100).toFixed(2)}`
     );
   }
-
-  const vNo = voucher_no || `RRE/${voucher_type.toUpperCase().slice(0, 3)}/${Date.now().toString().slice(-5)}`;
+  const totalDebit = drPaise / 100;
   const vDate = date || new Date().toISOString().split('T')[0];
+  const idemKey = options.idempotencyKey ? `voucher:${options.userId == null ? '-' : options.userId}:${String(options.idempotencyKey).slice(0, 120)}` : null;
 
-  const ownTx = !options.inTransaction;
-  if (ownTx) await run('BEGIN TRANSACTION');
+  const work = async () => {
+    // the same request again (double click, network retry): the first result, nothing posted twice
+    if (idemKey) {
+      const prev = await get('SELECT result FROM idempotency_keys WHERE scope_key = ?', [idemKey]);
+      if (prev) return { ...JSON.parse(prev.result), replayed: true };
+    }
+    const ids = [...new Set(validatedEntries.map((e) => e.ledger_id))];
+    const found = await get(`SELECT COUNT(*) AS n FROM ledgers WHERE id IN (${ids.map(() => '?').join(', ')})`, ids);
+    if (Number(found.n) !== ids.length) throw new VoucherValidationError('One or more ledgers on this voucher do not exist.');
 
-  try {
+    // Company setting "negative stock": 'allow' (default, as Tally) or 'block'. Checked inside the posting transaction, which runs one
+    // at a time per company, so two sales at the same moment can never both take the last unit.
+    const outward = ['Sales', 'Debit Note'].includes(voucher_type) && Array.isArray(inventory) ? inventory.filter((i) => i.stock_item_id && (parseFloat(i.quantity) || 0) > 0) : [];
+    if (outward.length && (await negativeStockPolicy()) === 'block') {
+      const want = new Map();
+      for (const i of outward) want.set(parseInt(i.stock_item_id, 10), (want.get(parseInt(i.stock_item_id, 10)) || 0) + parseFloat(i.quantity));
+      for (const [itemId, qty] of want) {
+        const s = await get(`SELECT s.name, s.opening_qty + COALESCE((SELECT SUM(CASE WHEN e.direction = 'IN' THEN e.quantity ELSE -e.quantity END) FROM inventory_entries e WHERE e.stock_item_id = s.id), 0) AS on_hand FROM stock_items s WHERE s.id = ?`, [itemId]);
+        if (!s) throw new VoucherValidationError(`Stock item #${itemId} does not exist.`);
+        if (Number(s.on_hand) - qty < -1e-9) throw Object.assign(new VoucherValidationError(`Not enough stock of ${s.name}: ${Number(s.on_hand)} on hand, ${qty} requested. (Negative stock is blocked for this company.)`), { status: 409 });
+      }
+    }
+
+    const vNo = voucher_no || await nextVoucherNo(voucher_type);
+    if (await get('SELECT id FROM vouchers WHERE voucher_no = ?', [vNo])) throw new VoucherConflictError(`Voucher number ${vNo} is already used. Choose another number.`);
+
     const vResult = await run(
       `INSERT INTO vouchers (voucher_type, voucher_no, date, reference_no, narration, party_ledger_id, total_amount)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -122,12 +177,41 @@ async function postVoucher(payload, options = {}) {
       }
     }
 
-    if (ownTx) await run('COMMIT');
-    return { id: voucherId, voucher_no: vNo, voucher_type, total_amount: totalDebit };
-  } catch (txErr) {
-    if (ownTx) await run('ROLLBACK').catch(() => {});
-    throw txErr;
-  }
+    const result = { id: voucherId, voucher_no: vNo, voucher_type, total_amount: totalDebit };
+    if (idemKey) await run('INSERT INTO idempotency_keys (scope_key, result) VALUES (?, ?)', [idemKey, JSON.stringify(result)]);
+    return result;
+  };
+
+  // the company's transaction queue: postings never overlap (a second BEGIN on the same connection used to fail under load)
+  if (options.inTransaction) return work();
+  return require('./tx').withTransaction(work);
 }
 
-module.exports = { postVoucher, VoucherValidationError, round2 };
+/**
+ * Reverses a posted voucher by posting its mirror image (debits and credits swapped; stock moved back), instead of deleting it.
+ * Sales <-> Credit Note and Purchase <-> Debit Note keep the stock right; other vouchers are reversed by a Journal.
+ * A voucher can be reversed once.
+ */
+const REVERSE_TYPE = { Sales: 'Credit Note', 'Credit Note': 'Sales', Purchase: 'Debit Note', 'Debit Note': 'Purchase' };
+async function reverseVoucher(id, { date, narration, userId } = {}) {
+  return require('./tx').withTransaction(async () => {
+    const v = await get('SELECT * FROM vouchers WHERE id = ?', [id]);
+    if (!v) throw Object.assign(new VoucherValidationError('Voucher not found.'), { status: 404 });
+    const ref = `Reversal of ${v.voucher_no}`;
+    const done = await get('SELECT voucher_no FROM vouchers WHERE reference_no = ?', [ref]);
+    if (done) throw new VoucherConflictError(`Voucher ${v.voucher_no} was already reversed by ${done.voucher_no}.`);
+    const entries = (await all('SELECT ledger_id, debit_amount, credit_amount, particulars, cost_centre_id FROM ledger_entries WHERE voucher_id = ? ORDER BY id', [id]))
+      .map((e) => ({ ledger_id: e.ledger_id, debit_amount: e.credit_amount, credit_amount: e.debit_amount, particulars: e.particulars, cost_centre_id: e.cost_centre_id }));
+    const type = REVERSE_TYPE[v.voucher_type] || 'Journal';
+    const inventory = REVERSE_TYPE[v.voucher_type]
+      ? (await all('SELECT stock_item_id, quantity, rate, amount, discount_pct, godown_id FROM inventory_entries WHERE voucher_id = ? ORDER BY id', [id]))
+      : [];
+    if (!REVERSE_TYPE[v.voucher_type] && (await get('SELECT COUNT(*) AS n FROM inventory_entries WHERE voucher_id = ?', [id])).n > 0) {
+      throw new VoucherValidationError(`A ${v.voucher_type} voucher with stock lines cannot be reversed automatically. Post a correcting stock journal.`);
+    }
+    return postVoucher({ voucher_type: type, date: date || new Date().toISOString().slice(0, 10), reference_no: ref, narration: narration || `Reversal of ${v.voucher_type} ${v.voucher_no}`,
+      party_ledger_id: v.party_ledger_id, entries, inventory }, { inTransaction: true, userId });
+  });
+}
+
+module.exports = { postVoucher, reverseVoucher, nextVoucherNo, negativeStockPolicy, setNegativeStockPolicy, VoucherValidationError, VoucherConflictError, round2 };

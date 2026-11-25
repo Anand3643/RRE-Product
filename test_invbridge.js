@@ -101,6 +101,10 @@ async function main() {
   assert(old.status === 201 && /^GRN-/.test(old.grn.number), 'A goods receipt of 10 bolts exists BEFORE the accounting link starts', JSON.stringify(old.grn).slice(0, 120));
   const base = await bridge.syncOnce();
   assert(base.history_marked >= 1 && Object.values(base.posted).every((n) => n === 0) && base.failed.length === 0, 'The first run marks existing documents as history and posts nothing', JSON.stringify(base));
+  // regression: the link belongs to THIS inventory database (organisation number + creation time), not to "organisation 1" of any database
+  const baseRows = await all("SELECT source FROM inv_bridge_events WHERE kind = 'baseline'");
+  assert(baseRows.some((r) => /^stockpilot:\d+@[0-9a-f]{12}$/.test(r.source)) && baseRows.filter((r) => /^stockpilot:\d+@/.test(r.source)).length === 1,
+    'The accounting link is tied to this specific inventory database (a new inventory database never inherits an older one\'s link)', JSON.stringify(baseRows));
   assert((await get("SELECT COUNT(*) c FROM vouchers WHERE voucher_no LIKE 'SP-%'")).c === 0, 'No voucher was created for history');
 
   console.log('\n--- 2. Purchases ---');

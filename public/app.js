@@ -1740,7 +1740,7 @@ async function handleSaveVoucher(e) {
   // Double-Entry Verification check on client side
   let sumDr = entries.reduce((s, e) => s + (e.debit_amount || 0), 0);
   let sumCr = entries.reduce((s, e) => s + (e.credit_amount || 0), 0);
-  if (Math.abs(sumDr - sumCr) > 0.05) {
+  if (Math.round(sumDr * 100) !== Math.round(sumCr * 100)) { // exact to the paisa, as the server checks
     alert(`Double-entry out of balance! Dr: ${formatCurrency(sumDr)}, Cr: ${formatCurrency(sumCr)}. Diff: ${formatCurrency(Math.abs(sumDr - sumCr))}`);
     return;
   }

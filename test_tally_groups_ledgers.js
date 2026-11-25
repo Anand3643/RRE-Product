@@ -1,6 +1,9 @@
 // ========================================================
 // Test: 96 Standard Tally Ledgers & Group Creation Engine
 // ========================================================
+// a DISPOSABLE copy of the company (this suite used to run against the real data folder) and a signed-in owner, like the other suites
+process.env.RRE_DATA_DIR = process.env.RRE_DATA_DIR || require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'rre_ledgers_test_'));
+process.env.RRE_LEGACY_TOKENS = '1';
 const assert = require('assert');
 const { initDb, all, get, seedStandardTallyLedgers, STANDARD_TALLY_LEDGERS } = require('./core/db');
 const { runMigrations } = require('./core/migrations');
@@ -77,7 +80,7 @@ async function runTests() {
       port,
       path,
       method,
-      headers: { 'Content-Type': 'application/json' }
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + require('./core/security').createSessionToken({ id: 1, username: 'admin', role: 'Owner' }) }
     }, (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);

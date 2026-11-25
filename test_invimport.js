@@ -91,6 +91,7 @@ async function main() {
   const grp = (await get('SELECT id FROM stock_groups LIMIT 1')).id, uom = (await get('SELECT id FROM units_of_measure LIMIT 1')).id;
   await run('INSERT INTO stock_items (name, stock_group_id, uom_id, opening_qty, opening_rate, opening_val) VALUES (?, ?, ?, 0, 0, 0)', ['Report Item Existing', grp, uom]);
   const beforeLedgers = (await get('SELECT COUNT(*) c FROM ledgers')).c;
+  const beforeMap = (await get('SELECT COUNT(*) c FROM inv_import_map')).c; // the copied company may already hold mappings from its own earlier imports
   await buildSource();
   const hashBefore = sha(srcFile);
   const P = (body, token = admin) => req('POST', '/api/inv/import/preview', { token, body });
@@ -125,12 +126,12 @@ async function main() {
   assert(/reserved/.test(w) && /HSN "XY"/.test(w) && /GSTIN "33BAD"/.test(w) && /already exists in RRE/.test(w) && /Chennai Auto Components/.test(w), 'Warnings cover reserved stock, bad HSN, bad GSTIN and existing records');
   assert(pv.not_imported.some((n) => n.what === 'User accounts' && n.count === 2) && pv.not_imported.some((n) => n.what === 'Sales orders' && n.count === 2) && pv.not_imported.some((n) => n.what === 'Payments'), 'It states what is NOT imported, with reasons (users, sales orders, payments)');
   assert(!JSON.stringify(pv).includes('hash1') && !JSON.stringify(pv).includes('owner@sp.test'), 'No password hashes or user emails leave the StockPilot file');
-  assert((await get('SELECT COUNT(*) c FROM stock_items')).c === 1 && (await get('SELECT COUNT(*) c FROM ledgers')).c === beforeLedgers && (await get('SELECT COUNT(*) c FROM inv_import_map')).c === 0, 'After previewing, RRE is unchanged (nothing written)');
+  assert((await get('SELECT COUNT(*) c FROM stock_items')).c === 1 && (await get('SELECT COUNT(*) c FROM ledgers')).c === beforeLedgers && (await get('SELECT COUNT(*) c FROM inv_import_map')).c === beforeMap, 'After previewing, RRE is unchanged (nothing written)');
   assert(sha(srcFile) === hashBefore, 'The StockPilot file is byte-for-byte unchanged');
 
   console.log('\n--- 4. Running the import ---');
   assert((await req('POST', '/api/inv/import/run', { body: { path: srcFile, org_id: 1 } })).status === 400, 'The import will not run without explicit confirmation');
-  assert((await get('SELECT COUNT(*) c FROM inv_import_map')).c === 0, '…and nothing was written by the refused call');
+  assert((await get('SELECT COUNT(*) c FROM inv_import_map')).c === beforeMap, '…and nothing was written by the refused call');
   const run1 = await req('POST', '/api/inv/import/run', { body: { path: srcFile, org_id: 1, confirm: true } });
   const o = run1.json.data;
   assert(run1.status === 200 && o.created.items === 5 && o.created.customers === 2 && o.created.suppliers === 1 && o.created.warehouses === 2 && o.created.stock_documents === 2, 'Created 5 items, 2 customers, 1 supplier, 2 warehouses and 2 stock documents', JSON.stringify(o));

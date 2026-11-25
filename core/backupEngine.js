@@ -107,7 +107,31 @@ function decryptBuffer(packedBuffer, secretKey) {
  * @param {object} [options.metadata]
  * @returns {object} Backup summary
  */
+/**
+ * Cloud database (PostgreSQL): the active company's rows from one consistent snapshot, as a checksummed .cloud.json.gz file
+ * (optionally AES-256 encrypted: .cloud.enc). Supabase's own backups remain the primary protection; this is the copy you keep.
+ */
+async function createCloudBackup(options = {}, prefix = 'backup') {
+  ensureBackupDir();
+  const db = require('./db');
+  const timestamp = getTimestampString();
+  const isEncrypted = Boolean(options.encrypt && options.password);
+  const plainName = `${prefix}_${timestamp}.cloud.json.gz`, filename = isEncrypted ? `${prefix}_${timestamp}.cloud.enc` : plainName;
+  const targetPath = path.join(getBackupDir(), filename);
+  const tmp = isEncrypted ? path.join(getBackupDir(), `.snapshot_${timestamp}.tmp`) : targetPath;
+  await require('../scripts/pg-backup').backup(null, { shared: true, companies: [db.getCompanyNumber()], out: tmp, log: () => {} });
+  const unencryptedChecksum = calculateChecksum(tmp);
+  if (isEncrypted) { fs.writeFileSync(targetPath, encryptBuffer(fs.readFileSync(tmp), options.password)); try { fs.unlinkSync(tmp); } catch (e) { /* ignore */ } }
+  const st = fs.statSync(targetPath);
+  const metadata = { filename, created_at: new Date().toISOString(), size_bytes: st.size, size_formatted: (st.size / (1024 * 1024)).toFixed(2) + ' MB', sha256: calculateChecksum(targetPath),
+    unencrypted_sha256: unencryptedChecksum, encrypted: isEncrypted, engine: 'postgresql', company: db.getCompanyNumber(), notes: options.notes || 'Cloud database snapshot (this company)', ...(options.metadata || {}) };
+  fs.writeFileSync(path.join(getBackupDir(), `${prefix}_${timestamp}.meta.json`), JSON.stringify(metadata, null, 2), 'utf8');
+  if (prefix === 'backup') pruneBackups();
+  return { success: true, data: metadata };
+}
+
 async function createBackup(options = {}) {
+  if (require('./db').isPostgres()) return createCloudBackup(options);
   ensureBackupDir();
 
   if (!fs.existsSync(getDbFile())) {
@@ -167,7 +191,7 @@ function pruneBackups() {
   try {
     ensureBackupDir();
     const files = fs.readdirSync(getBackupDir())
-      .filter(f => f.endsWith('.bak') || f.endsWith('.enc'))
+      .filter(f => f.endsWith('.bak') || f.endsWith('.enc') || f.endsWith('.cloud.json.gz'))
       .map(f => {
         const full = path.join(getBackupDir(), f);
         return { name: f, time: fs.statSync(full).mtimeMs, path: full };
@@ -179,7 +203,7 @@ function pruneBackups() {
       const toRemove = files.slice(MAX_BACKUP_RETENTION);
       for (const item of toRemove) {
         fs.unlinkSync(item.path);
-        const metaPath = item.path.replace(/\.(sqlite\.(bak|enc))$/, '.meta.json');
+        const metaPath = item.path.replace(/\.(sqlite\.(bak|enc)|cloud\.json\.gz|cloud\.enc)$/, '.meta.json');
         if (fs.existsSync(metaPath)) {
           fs.unlinkSync(metaPath);
         }
@@ -198,14 +222,14 @@ function listBackups() {
   ensureBackupDir();
 
   const files = fs.readdirSync(getBackupDir())
-    .filter(f => f.endsWith('.bak') || f.endsWith('.enc'))
+    .filter(f => f.endsWith('.bak') || f.endsWith('.enc') || f.endsWith('.cloud.json.gz'))
     .sort()
     .reverse();
 
   return files.map(filename => {
     const fullPath = path.join(getBackupDir(), filename);
     const stat = fs.statSync(fullPath);
-    const baseName = filename.replace(/\.(sqlite\.(bak|enc))$/, '');
+    const baseName = filename.replace(/\.(sqlite\.(bak|enc)|cloud\.json\.gz|cloud\.enc)$/, '');
     const metaPath = path.join(getBackupDir(), `${baseName}.meta.json`);
 
     let meta = {};
@@ -237,7 +261,35 @@ function listBackups() {
  * @param {function} [options.afterRestoreHook]
  * @returns {object} Restore result
  */
+/** Cloud database: restores the active company from a .cloud backup, after a safety snapshot; one transaction, verified row counts. */
+async function restoreCloudBackup(safeFilename, options = {}) {
+  const db = require('./db');
+  const file = path.join(getBackupDir(), safeFilename);
+  if (!/\.cloud\.(json\.gz|enc)$/.test(safeFilename)) throw Object.assign(new Error('This is a local (SQLite) backup; the data is now in the cloud database. Restore a cloud backup (.cloud) instead.'), { status: 409 });
+  let plain = file;
+  if (safeFilename.endsWith('.enc')) {
+    if (!options.password) throw new Error('This backup is encrypted with AES-256. Password is required to restore.');
+    plain = path.join(getBackupDir(), `.restore_${getTimestampString()}.tmp`);
+    try { fs.writeFileSync(plain, decryptBuffer(fs.readFileSync(file), options.password)); } catch (e) { throw new Error('Incorrect decryption password or corrupted backup archive.'); }
+  }
+  try {
+    const pgb = require('../scripts/pg-backup');
+    const co = db.getCompanyNumber();
+    if (!pgb.readBackup(plain).companies[co]) throw Object.assign(new Error(`This backup does not contain company ${co}.`), { status: 409 });
+    const rollback = await createCloudBackup({ notes: 'Safety snapshot before restore' }, 'rollback_pre_restore');
+    await pgb.restore(null, plain, { shared: true, companies: [co], replace: true, log: () => {} });
+    if (typeof options.afterRestoreHook === 'function') await options.afterRestoreHook();
+    return { success: true, message: `Company ${co} successfully restored from "${safeFilename}".`, restored_file: safeFilename, rollback_snapshot: rollback.data.filename };
+  } finally { if (plain !== file) try { fs.unlinkSync(plain); } catch (e) { /* ignore */ } }
+}
+
 async function restoreBackup(filename, options = {}) {
+  if (require('./db').isPostgres()) {
+    ensureBackupDir();
+    const safe = path.basename(filename);
+    if (!fs.existsSync(path.join(getBackupDir(), safe))) throw new Error(`Backup file "${safe}" does not exist in backup archive.`);
+    return restoreCloudBackup(safe, options);
+  }
   ensureBackupDir();
 
   // Prevent directory traversal attacks

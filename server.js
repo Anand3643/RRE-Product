@@ -131,6 +131,8 @@ app.use(companies.gate); // briefly refuses /api calls while the database is swa
 app.use(routeGuard);
 // A customer with books of their own works inside THEIR company for the whole request (their own database connection, folder and
 // company number); everyone else works in the active company exactly as before.
+// The database learns who is signed in (PostgreSQL: the _created_by audit column and the customer-portal own-documents rule).
+app.use((req, res, next) => (req.user ? require('./core/db').withRequestUser(req.user, next) : next()));
 app.use((req, res, next) => {
   const own = req.user && req.user.role === 'Customer' && req.user.companyId;
   if (!own) return next();
@@ -194,10 +196,17 @@ app.get('/api/health', async (req, res) => {
     let dbSizeBytes = 0;
     let integrityCheck = 'unknown';
 
+    let dbEngine = 'sqlite', dbLatencyMs = null;
     try {
+      if (require('./core/db').isPostgres()) {
+        // a real round trip to the cloud database (PRAGMA integrity_check does not exist there)
+        const t0 = Date.now(); const r = await get('SELECT 1 AS ok'); dbLatencyMs = Date.now() - t0;
+        dbEngine = 'postgresql'; integrityCheck = r && r.ok === 1 ? 'ok' : 'no answer';
+      } else {
       const integrityRow = await get('PRAGMA integrity_check');
       integrityCheck = integrityRow ? Object.values(integrityRow)[0] : 'ok';
-      if (fs.existsSync(getDbPath())) {
+      }
+      if (dbEngine === 'sqlite' && fs.existsSync(getDbPath())) {
         dbSizeBytes = fs.statSync(getDbPath()).size;
       }
     } catch (e) {
@@ -207,13 +216,15 @@ app.get('/api/health', async (req, res) => {
     const totalVouchers = await get('SELECT COUNT(*) as count FROM vouchers').catch(() => ({ count: 0 }));
     const totalLedgers = await get('SELECT COUNT(*) as count FROM ledgers').catch(() => ({ count: 0 }));
     const totalItems = await get('SELECT COUNT(*) as count FROM stock_items').catch(() => ({ count: 0 }));
-    const totalUsers = await get('SELECT COUNT(*) as count FROM users WHERE status = "Active"').catch(() => ({ count: 0 }));
+    const totalUsers = await get("SELECT COUNT(*) as count FROM users WHERE status = 'Active'").catch(() => ({ count: 0 }));
 
     const backups = listBackups();
     const mem = process.memoryUsage();
 
     res.json({
       status: (dbStatus === 'healthy' && integrityCheck === 'ok') ? 'healthy' : 'degraded',
+      database_engine: dbEngine,
+      database_latency_ms: dbLatencyMs,
       application: 'RRE Entries',
       version: '1.0.0',
       timestamp: new Date().toISOString(),
@@ -859,6 +870,11 @@ app.post('/api/system/perform-update', async (req, res) => {
     download_url: 'https://github.com/Anand3643/RRE-Product',
     message: 'To install the latest release on this PC, please run the setup installer RRE Entries Setup 1.0.0.exe. All your company accounting data in company.db remains 100% intact.'
   });
+});
+
+// An API address that does not exist answers 404 - never the web page with "200 OK", which made a write to a wrong address look saved
+app.use('/api', (req, res) => {
+  res.status(404).json({ success: false, error: `No such API: ${req.method} ${req.originalUrl.split('?')[0]}` });
 });
 
 // SPA Fallback

@@ -119,19 +119,30 @@ router.get('/daybook', async (req, res) => {
     }
 
     sql += ' ORDER BY v.date DESC, v.id DESC';
+    // optional paging for large books: ?limit=&offset= (without them, every voucher as before); the total is in X-Total-Count
+    const limit = parseInt(req.query.limit, 10), offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    if (limit > 0) {
+      const total = await get(`SELECT COUNT(*) AS n FROM (${sql}) AS t`, params);
+      res.set('X-Total-Count', String(total.n));
+      sql += ' LIMIT ? OFFSET ?'; params.push(Math.min(limit, 1000), offset);
+    }
     const vouchers = await all(sql, params);
 
-    const detailed = [];
-    for (const v of vouchers) {
-      const entries = await all(`
+    // the lines of all these vouchers in a few queries (one query per voucher took seconds on a large book)
+    const byVoucher = new Map(vouchers.map((v) => [v.id, []]));
+    const ids = vouchers.map((v) => v.id);
+    for (let i = 0; i < ids.length; i += 500) {
+      const part = ids.slice(i, i + 500);
+      const rows = await all(`
         SELECT e.*, l.name as ledger_name
         FROM ledger_entries e
         JOIN ledgers l ON e.ledger_id = l.id
-        WHERE e.voucher_id = ?
-        ORDER BY e.entry_type DESC
-      `, [v.id]);
-      detailed.push({ ...v, entries });
+        WHERE e.voucher_id IN (${part.map(() => '?').join(', ')})
+        ORDER BY e.voucher_id, e.entry_type DESC, e.id
+      `, part);
+      for (const r of rows) byVoucher.get(r.voucher_id).push(r);
     }
+    const detailed = vouchers.map((v) => ({ ...v, entries: byVoucher.get(v.id) }));
 
     res.json({ success: true, data: detailed });
   } catch (err) {

@@ -68,6 +68,9 @@ async function main() {
   assert((await runMigrations()).length === 0, 'Migrations are idempotent (second run applies nothing)');
   const cols = await all('PRAGMA table_info(stock_items)');
   assert(cols.some((c) => c.name === 'reorder_level'), 'stock_items.reorder_level column added');
+  // the 28 statutory groups (plus any alias groups the standard-masters seeding added to this company) must never be lost
+  const groupNames = async () => (await all('SELECT name FROM account_groups ORDER BY name')).map((g) => g.name).join('|');
+  const groupsAtStart = await groupNames();
   const before = {
     vouchers: (await get('SELECT COUNT(*) c FROM vouchers')).c,
     ledgers: (await get('SELECT COUNT(*) c FROM ledgers')).c,
@@ -169,7 +172,7 @@ async function main() {
   const b = await createBackup({ notes: 'platform test' });
   const v = await req('POST', '/api/platform/backup/verify', { token: admin, body: { filename: b.data.filename } });
   assert(v.json.success && v.json.data.checks.find((c) => c.name.startsWith('SHA-256')).ok, 'Verify: checksum OK on untouched snapshot');
-  assert(v.json.data.checks.find((c) => c.name === 'SQLite integrity_check')?.ok === true, 'Verify: snapshot opens and passes integrity_check');
+  assert(v.json.data.checks.find((c) => c.name === 'SQLite integrity_check' || c.name === 'Cloud snapshot content checksum')?.ok === true, 'Verify: snapshot opens and passes integrity_check');
   const snap = v.json.data.checks.find((c) => c.name.startsWith('Snapshot has the same data'));
   console.log(`  ℹ️  ${snap.detail}`);
   assert(snap.ok === true, 'Verify: snapshot contains the same vouchers/ledgers as the live DB (detects WAL-omission data loss)');
@@ -186,7 +189,7 @@ async function main() {
   };
   assert(after.dr === after.cr, 'Total Dr == total Cr across ledger', `${after.dr} / ${after.cr}`);
   assert(after.vouchers === before.vouchers + 1, 'Only the one intentionally posted voucher was added');
-  assert((await get("SELECT COUNT(*) c FROM account_groups")).c === 28, '28 statutory groups still present');
+  assert(groupsAtStart.split('|').length >= 28 && (await groupNames()) === groupsAtStart, '28 statutory groups still present (all account groups unchanged)');
 
   console.log('\n--- 8b. Scheduled reports ---');
   const sch = require('./core/scheduler');
@@ -257,15 +260,21 @@ async function main() {
   assert(rest.json && rest.json.success, 'Restore succeeds', rest.raw.slice(0, 150));
   assert((await get('SELECT COUNT(*) c FROM vouchers')).c === vCountAtBackup, 'Restore returns database to the snapshot state');
   assert((await get("SELECT COUNT(*) c FROM vouchers WHERE voucher_no='T/CON/2'")).c === 0, 'Post-snapshot voucher is gone after restore');
-  assert((await get('SELECT COUNT(*) c FROM account_groups')).c === 28 && (await get('SELECT COUNT(*) c FROM ledgers')).c > 0, 'Masters intact after restore');
+  assert((await groupNames()) === groupsAtStart && (await get('SELECT COUNT(*) c FROM ledgers')).c > 0, 'Masters intact after restore');
   const mig = await get("SELECT COUNT(*) c FROM schema_migrations");
-  assert(mig.c === 21, 'Migrations table survives restore', String(mig.c));
+  assert(mig.c === require('./core/migrations').MIGRATIONS.length, 'Migrations table survives restore', String(mig.c));
   // the safety rollback taken just before the restore must itself hold the post-snapshot voucher
-  const rb = fs.readdirSync(path.join(tmp, 'backups')).filter((f) => f.startsWith('rollback_pre_restore_')).sort().pop();
-  const sq = require('sqlite3');
-  const rbDb = await new Promise((res, rej) => { const d = new sq.Database(path.join(tmp, 'backups', rb), sq.OPEN_READONLY, (e) => (e ? rej(e) : res(d))); });
-  const rbRow = await new Promise((res, rej) => rbDb.get("SELECT COUNT(*) c FROM vouchers WHERE voucher_no='T/CON/2'", (e, r) => (e ? rej(e) : res(r))));
-  rbDb.close();
+  const rb = fs.readdirSync(path.join(tmp, 'backups')).filter((f) => f.startsWith('rollback_pre_restore_') && !f.endsWith('.meta.json')).sort().pop();
+  let rbRow;
+  if (/\.cloud\.json\.gz$/.test(rb)) { // cloud database: the safety snapshot is a checksummed file of the company's rows
+    const doc = require('./scripts/pg-backup').readBackup(path.join(tmp, 'backups', rb));
+    rbRow = { c: (Object.values(doc.companies)[0].tables.vouchers || []).filter((v) => v.voucher_no === 'T/CON/2').length };
+  } else {
+    const sq = require('sqlite3');
+    const rbDb = await new Promise((res, rej) => { const d = new sq.Database(path.join(tmp, 'backups', rb), sq.OPEN_READONLY, (e) => (e ? rej(e) : res(d))); });
+    rbRow = await new Promise((res, rej) => rbDb.get("SELECT COUNT(*) c FROM vouchers WHERE voucher_no='T/CON/2'", (e, r) => (e ? rej(e) : res(r))));
+    rbDb.close();
+  }
   assert(rbRow.c === 1, 'Pre-restore rollback snapshot preserved the un-backed-up voucher (no data loss on restore)');
   assert((await req('GET', '/api/platform/notifications', { token: admin })).status === 200, 'App fully functional after restore');
 

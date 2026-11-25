@@ -48,7 +48,7 @@ async function stockState({ itemId = null } = {}) {
   const dg = await defaultGodown();
   const items = await all(`${ITEM_SQL} ${itemId ? 'WHERE s.id = ?' : ''} ORDER BY s.name`, itemId ? [itemId] : []);
   const agg = await all(`SELECT stock_item_id AS id, COALESCE(godown_id, ?) AS gid, direction AS dir, SUM(quantity) AS q, SUM(amount) AS a
-                         FROM inventory_entries ${itemId ? 'WHERE stock_item_id = ?' : ''} GROUP BY stock_item_id, COALESCE(godown_id, ?), direction`, itemId ? [dg, itemId, dg] : [dg, dg]);
+                         FROM inventory_entries ${itemId ? 'WHERE stock_item_id = ?' : ''} GROUP BY stock_item_id, 2, direction`, itemId ? [dg, itemId] : [dg]); // "2" = the gid column (one parameter, valid in SQLite and PostgreSQL)
   const res = await all(`SELECT item_id AS id, godown_id AS gid, SUM(qty) AS q FROM inv_reservations ${itemId ? 'WHERE item_id = ?' : ''} GROUP BY item_id, godown_id`, itemId ? [itemId] : []);
   const by = new Map();
   for (const it of items) by.set(it.id, { item: it, perGodown: new Map([[dg, it.opening_qty || 0]]), inQty: 0, inAmt: 0, reserved: new Map() });

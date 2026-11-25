@@ -116,18 +116,25 @@ async function main() {
   const before = (await get('SELECT COUNT(*) c FROM voucher_attachment_data')).c;
   const bk = await createBackup({ notes: 'attachments test' });
   const snap = path.join(tmp, 'backups', bk.data.filename);
-  const copy = path.join(tmp, 'snap_copy.sqlite'); fs.copyFileSync(snap, copy);
-  const sdb = await new Promise((res, rej) => { const d = new sqlite3.Database(copy, sqlite3.OPEN_READONLY, (e) => (e ? rej(e) : res(d))); });
-  const row = await new Promise((res, rej) => sdb.get('SELECT COUNT(*) c, SUM(LENGTH(data)) s FROM voucher_attachment_data', (e, r) => (e ? rej(e) : res(r))));
+  let row;
+  if (/\.cloud\.json\.gz$/.test(bk.data.filename)) { // cloud database snapshot: the attachment rows inside the checksummed file
+    const doc = require('./scripts/pg-backup').readBackup(snap);
+    const rows = Object.values(doc.companies)[0].tables.voucher_attachment_data || [];
+    row = { c: rows.length, s: rows.reduce((t, r) => t + Buffer.from(r.data.$b64, 'base64').length, 0) };
+  } else {
+    const copy = path.join(tmp, 'snap_copy.sqlite'); fs.copyFileSync(snap, copy);
+    const sdb = await new Promise((res, rej) => { const d = new sqlite3.Database(copy, sqlite3.OPEN_READONLY, (e) => (e ? rej(e) : res(d))); });
+    row = await new Promise((res, rej) => sdb.get('SELECT COUNT(*) c, SUM(LENGTH(data)) s FROM voucher_attachment_data', (e, r) => (e ? rej(e) : res(r))));
+    sdb.close();
+  }
   const live = await get('SELECT COUNT(*) c, SUM(LENGTH(data)) s FROM voucher_attachment_data');
-  sdb.close();
   assert(row.c === before && row.s === live.s, `Backup snapshot contains all ${before} attachments (${live.s} bytes)`, JSON.stringify(row));
   const del = await raw('DELETE', `/api/vouchers/${v1}`);
   assert(del.status === 200 && (await get('SELECT COUNT(*) c FROM voucher_attachments WHERE voucher_id = ?', [v1])).c === 0, 'Deleting a voucher deletes its attachments');
   assert((await get('SELECT COUNT(*) c FROM voucher_attachment_data WHERE attachment_id NOT IN (SELECT id FROM voucher_attachments)')).c === 0, 'No orphaned file data remains');
   const dr = (await get('SELECT ROUND(SUM(debit_amount),2) s FROM ledger_entries')).s, cr = (await get('SELECT ROUND(SUM(credit_amount),2) s FROM ledger_entries')).s;
   assert(dr === cr, 'Total Dr == total Cr', `${dr}/${cr}`);
-  assert((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 21, 'Migration 007 recorded');
+  assert((await get('SELECT COUNT(*) c FROM schema_migrations')).c === require('./core/migrations').MIGRATIONS.length, 'Migration 007 recorded');
   void all;
 
   console.log('\n====================================================');

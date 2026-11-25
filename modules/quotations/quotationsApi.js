@@ -4,7 +4,8 @@
 const express = require('express');
 const router = express.Router();
 const { all, get, run } = require('../../core/db');
-const { postVoucher, VoucherValidationError, round2 } = require('../../core/voucherService');
+const { postVoucher, VoucherValidationError, VoucherConflictError, round2 } = require('../../core/voucherService');
+const { withTransaction } = require('../../core/tx');
 
 const STATUSES = ['Draft', 'Sent', 'Accepted', 'Declined', 'Expired', 'Revised', 'Invoiced'];
 const OPEN_STATUSES = ['Draft', 'Sent', 'Accepted'];
@@ -23,7 +24,7 @@ function addDays(dateStr, days) {
 }
 
 function sendError(res, err) {
-  const status = err.status || (err instanceof VoucherValidationError ? 400 : 500);
+  const status = err.status || (err instanceof VoucherValidationError ? 400 : err instanceof VoucherConflictError ? 409 : 500);
   res.status(status).json({ success: false, error: err.message });
 }
 
@@ -202,19 +203,14 @@ async function insertLines(quotationId, lines) {
 async function insertQuotation(row, lines, extra = {}) {
   const full = { ...row, ...extra };
   const cols = Object.keys(full);
-  await run('BEGIN TRANSACTION');
-  try {
+  return withTransaction(async () => { // the company's transaction queue: never overlaps another posting
     const r = await run(
       `INSERT INTO quotations (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`,
       cols.map((c) => full[c])
     );
     await insertLines(r.lastID, lines);
-    await run('COMMIT');
     return r.lastID;
-  } catch (e) {
-    await run('ROLLBACK').catch(() => {});
-    throw e;
-  }
+  });
 }
 
 // --------------------------------------------------------
@@ -343,19 +339,14 @@ router.put('/:id', async (req, res) => {
     if (existing.status === 'Expired' && !req.body.status && row.expiry_date >= today()) row.status = 'Draft';
 
     const cols = Object.keys(row);
-    await run('BEGIN TRANSACTION');
-    try {
+    await withTransaction(async () => {
       await run(
         `UPDATE quotations SET ${cols.map((c) => `${c} = ?`).join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
         [...cols.map((c) => row[c]), existing.id]
       );
       await run('DELETE FROM quotation_items WHERE quotation_id = ?', [existing.id]);
       await insertLines(existing.id, lines);
-      await run('COMMIT');
-    } catch (e) {
-      await run('ROLLBACK').catch(() => {});
-      throw e;
-    }
+    });
     res.json({ success: true, id: existing.id, data: await loadQuotation(existing.id), message: `Quotation ${existing.quote_no} updated` });
   } catch (err) {
     sendError(res, err);
@@ -504,8 +495,10 @@ router.post('/:id/convert', async (req, res) => {
     const company = await getCompany();
     const date = (req.body && req.body.date) || today();
 
-    await run('BEGIN TRANSACTION');
-    try {
+    const result = await withTransaction(async () => {
+      // checked again inside the transaction: two people converting the same quotation at once get ONE invoice
+      const now = await get('SELECT status, converted_voucher_id FROM quotations WHERE id = ?', [q.id]);
+      if (now && now.status === 'Invoiced' && now.converted_voucher_id) throw new HttpError(409, `Already invoiced (voucher #${now.converted_voucher_id}).`);
       // Customer ledger: use linked ledger, or create one under Sundry Debtors
       let partyId = q.party_ledger_id;
       if (!partyId) {
@@ -560,7 +553,7 @@ router.post('/:id/convert', async (req, res) => {
       const vNo = `RRE/SAL/${q.quote_no}`;
       const held = await require('../../core/approvals').evaluate({ voucher_type: 'Sales', entries, inventory }, req.user);
       if (held.length) throw new HttpError(403, `This invoice needs approval (${held.map((h) => h.reason).join('; ')}). An Owner or Accountant must convert it.`);
-      const result = await postVoucher({
+      const posted = await postVoucher({
         voucher_type: 'Sales',
         voucher_no: (await get('SELECT id FROM vouchers WHERE voucher_no = ?', [vNo])) ? undefined : vNo,
         date,
@@ -574,14 +567,11 @@ router.post('/:id/convert', async (req, res) => {
 
       await run(
         "UPDATE quotations SET status = 'Invoiced', converted_voucher_id = ?, next_followup_date = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        [result.id, q.id]
+        [posted.id, q.id]
       );
-      await run('COMMIT');
-      res.json({ success: true, voucher: result, data: await loadQuotation(q.id), message: `Sales Invoice ${result.voucher_no} created from ${q.quote_no}` });
-    } catch (e) {
-      await run('ROLLBACK').catch(() => {});
-      throw e;
-    }
+      return posted;
+    });
+    res.json({ success: true, voucher: result, data: await loadQuotation(q.id), message: `Sales Invoice ${result.voucher_no} created from ${q.quote_no}` });
   } catch (err) {
     sendError(res, err);
   }

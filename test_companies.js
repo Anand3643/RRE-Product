@@ -77,7 +77,7 @@ async function main() {
   l = (await req('GET', '/api/companies', { token: adminA })).json.data;
   assert(l.companies.length === 2 && l.companies.find((c) => c.number === '100001' && !c.active) && l.companies.find((c) => c.number === '100000').active, 'Both companies listed; the original is still active');
   assert((await get('SELECT COUNT(*) c FROM vouchers')).c === aVouchers && (await get('SELECT COUNT(*) c FROM ledgers')).c === aLedgers && (await get('SELECT COUNT(*) c FROM users')).c === aUsers, 'Company A\'s data is exactly as it was (vouchers, ledgers, users)');
-  assert(fs.existsSync(path.join(paths.companyDir('100001'), 'company.db')), 'The new company has its own database file');
+  assert(db.companyExists('100001'), 'The new company exists separately (its own database file on SQLite, its own company number on PostgreSQL)');
   assert((await req('POST', '/api/companies', { token: adminA, body: good })).status === 409, 'Creating the same name again is refused');
 
   console.log('\n--- 3. Switching: tokens, isolation, clean books ---');
@@ -97,6 +97,13 @@ async function main() {
   const ledB = (await req('GET', '/api/masters/ledgers', { token: ownerB })).json.data;
   assert(!ledB.some((x) => x.name === 'A-Only Ledger') && !ledB.some((x) => /Chennai|HDFC|Elgi/.test(x.name)), 'Company B contains none of company A\'s (or the demo) ledgers');
   assert(ledB.some((x) => x.name === 'Cash') && ledB.some((x) => x.name === 'Output CGST 9%') && ledB.some((x) => x.name === 'Round Off A/c') && ledB.length === 20 && ledB.every((x) => x.state_code === '29'), 'It starts with 20 neutral ledgers (the standard clean-slate set plus the exact-name GST ledgers the invoice screens use), all in the chosen state (29)', String(ledB.length));
+  // regression (it used to become 115): start-up and migrations run again in the new company must add no ledger and no group
+  const groupsB = (await get('SELECT COUNT(*) c FROM account_groups')).c;
+  await initDb(); await runMigrations(); await require('./core/db').seedStandardTallyLedgers();
+  assert((await get('SELECT COUNT(*) c FROM ledgers')).c === 20 && (await get('SELECT COUNT(*) c FROM account_groups')).c === groupsB, 'Re-running start-up, migrations and the standard-ledger seeding adds nothing to the new company (still 20 ledgers)');
+  const dupNames = await all('SELECT lower(name) AS n, COUNT(*) AS c FROM ledgers GROUP BY lower(name) HAVING COUNT(*) > 1');
+  assert(dupNames.length === 0, 'No ledger name exists twice in the new company');
+  assert((await get('SELECT COUNT(*) c FROM ledgers l LEFT JOIN account_groups g ON g.id = l.group_id WHERE g.id IS NULL')).c === 0, 'Every default ledger belongs to an existing account group of this company');
   assert((await get('SELECT COUNT(*) c FROM vouchers')).c === 0 && (await get('SELECT COUNT(*) c FROM stock_items')).c === 0, 'Company B has no vouchers and no stock items');
   const ci = await get('SELECT name, state_code, financial_year_from, company_number FROM company_info');
   assert(ci.name === 'Second Traders' && ci.state_code === '29' && ci.financial_year_from === '2026-04-01' && ci.company_number === '100001', 'Company B\'s details are the ones entered');

@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const { all, get, run } = require('../../core/db');
-const { postVoucher, VoucherValidationError } = require('../../core/voucherService');
+const { postVoucher, reverseVoucher, negativeStockPolicy, setNegativeStockPolicy, VoucherValidationError, VoucherConflictError } = require('../../core/voucherService');
+const { withTransaction } = require('../../core/tx');
+const { logActivity } = require('../../core/auth');
 
 // List vouchers with filters
 router.get('/', async (req, res) => {
@@ -83,14 +85,42 @@ router.get('/:id', async (req, res) => {
 // Post Master Double-Entry Voucher
 router.post('/', async (req, res) => {
   try {
-    const result = await postVoucher(req.body || {});
+    // Idempotency-Key: a retried or double-clicked request with the same key returns the first voucher instead of posting again
+    const idem = req.get('Idempotency-Key');
+    const result = await postVoucher(req.body || {}, { idempotencyKey: idem || null, userId: req.user ? req.user.userId : null });
     res.json({
       success: true,
       ...result,
-      message: `${result.voucher_type} Voucher ${result.voucher_no} recorded successfully`
+      message: result.replayed ? `${result.voucher_type} Voucher ${result.voucher_no} was already recorded (same request)` : `${result.voucher_type} Voucher ${result.voucher_no} recorded successfully`
     });
   } catch (err) {
-    const status = err instanceof VoucherValidationError ? 400 : 500;
+    const status = err instanceof VoucherValidationError ? (err.status || 400) : err instanceof VoucherConflictError ? 409 : /UNIQUE/.test(String(err.message)) ? 409 : 500;
+    res.status(status).json({ success: false, error: status === 409 && !(err instanceof VoucherConflictError) && !(err instanceof VoucherValidationError) ? 'That voucher number is already used. Choose another number.' : err.message });
+  }
+});
+
+// Company setting: may sales take stock below zero? ('allow' as Tally does by default, or 'block')
+router.get('/settings/negative-stock', async (req, res) => {
+  try { res.json({ success: true, data: { negative_stock: await negativeStockPolicy() } }); } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+router.put('/settings/negative-stock', async (req, res) => {
+  try {
+    const v = await setNegativeStockPolicy(String((req.body || {}).negative_stock || ''));
+    await logActivity({ user: req.user, action: 'SETTING_NEGATIVE_STOCK', entity: 'setting', entityId: 'negative_stock', details: { value: v } });
+    res.json({ success: true, data: { negative_stock: v } });
+  } catch (err) { res.status(err instanceof VoucherValidationError ? 400 : 500).json({ success: false, error: err.message }); }
+});
+
+// Reverse a posted voucher: posts its mirror image (Credit/Debit Note or Journal) and keeps the original - the accounting way to
+// correct a posted voucher, with both visible in the books.
+router.post('/:id/reverse', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const r = await reverseVoucher(parseInt(req.params.id, 10), { date: b.date, narration: b.narration, userId: req.user ? req.user.userId : null });
+    await logActivity({ user: req.user, action: 'VOUCHER_REVERSE', entity: 'voucher', entityId: req.params.id, details: { reversal_voucher: r.voucher_no } });
+    res.json({ success: true, ...r, message: `Reversed by ${r.voucher_type} ${r.voucher_no}` });
+  } catch (err) {
+    const status = err instanceof VoucherValidationError ? (err.status || 400) : err instanceof VoucherConflictError ? 409 : 500;
     res.status(status).json({ success: false, error: err.message });
   }
 });
@@ -106,19 +136,25 @@ router.delete('/:id', async (req, res) => {
     const linked = await get('SELECT o.number AS order_no, d.number AS doc_no FROM inv_order_docs d JOIN inv_orders o ON o.id = d.order_id WHERE d.voucher_id = ?', [v.id]).catch(() => null);
     if (linked) return res.status(409).json({ success: false, error: `Voucher ${v.voucher_no} was created from order ${linked.order_no} (${linked.doc_no}), so it cannot be deleted. Reverse it with a ${v.voucher_type === 'Purchase' ? 'Debit' : 'Credit'} Note instead.` });
 
-    await run('BEGIN TRANSACTION');
-    try {
+    await withTransaction(async () => {
+      // never silent: the complete voucher (lines, stock lines, bills) goes to the audit log in the SAME transaction, so it can be
+      // reconstructed; if the audit record cannot be written, nothing is deleted
+      const snapshot = {
+        voucher: v,
+        entries: await all('SELECT ledger_id, entry_type, debit_amount, credit_amount, particulars, cost_centre_id FROM ledger_entries WHERE voucher_id = ? ORDER BY id', [v.id]),
+        inventory: await all('SELECT stock_item_id, direction, quantity, rate, amount, discount_pct, godown_id FROM inventory_entries WHERE voucher_id = ? ORDER BY id', [v.id]),
+        bill_allocations: await all('SELECT ledger_id, bill_type, bill_ref, amount, due_date FROM bill_allocations WHERE voucher_id = ? ORDER BY id', [v.id])
+      };
+      const u = req.user || {};
+      await run('INSERT INTO activity_log (user_id, username, role, action, entity, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [u.userId || null, u.username || 'system', u.role || null, 'VOUCHER_DELETE', 'voucher', String(v.id), JSON.stringify(snapshot), req.ip || null]);
       await run('DELETE FROM ledger_entries WHERE voucher_id = ?', [v.id]);
       await run('DELETE FROM inventory_entries WHERE voucher_id = ?', [v.id]);
       await run('DELETE FROM bill_allocations WHERE voucher_id = ?', [v.id]);
       await run("UPDATE quotations SET converted_voucher_id = NULL, status = 'Accepted' WHERE converted_voucher_id = ?", [v.id]).catch(() => {});
       await run('DELETE FROM vouchers WHERE id = ?', [v.id]);
-      await run('COMMIT');
-      res.json({ success: true, message: `Voucher ${v.voucher_no} deleted successfully` });
-    } catch (err) {
-      await run('ROLLBACK');
-      throw err;
-    }
+    });
+    res.json({ success: true, message: `Voucher ${v.voucher_no} deleted successfully (a full copy is kept in the audit log)` });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

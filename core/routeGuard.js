@@ -45,6 +45,8 @@ const RULES = [
   { re: /^\/api\/export\/tally-xml/, perm: 'canViewFinancials' },
   { re: /^\/api\/reports\/(trial-balance|profit-loss|balance-sheet|ratio-analysis)/, perm: 'canViewFinancials' },
   { m: 'DELETE', re: /^\/api\/vouchers\/\d+/, perm: 'canDeleteVouchers' },
+  { m: 'POST', re: /^\/api\/vouchers\/\d+\/reverse\/?$/, perm: 'canEditVouchers' }, // correcting posted books
+  { m: 'PUT', re: /^\/api\/vouchers\/settings\//, perm: 'canManageUsers' },          // company accounting settings: administrators
   { m: 'POST', re: /^\/api\/vouchers\/?$/, perm: 'canCreateVouchers', checkVoucherType: true },
   { m: 'POST', re: /^\/api\/masters\//, perm: 'canCreateVouchers' },
   // Quotations can be converted into Sales invoices (a posting), so changing them needs the same permission as posting

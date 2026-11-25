@@ -163,7 +163,10 @@ async function extractInvoice(rawText, { ocrConfidence = null } = {}) {
   const needTotal = total ? total.n : (taxableVal !== null ? r2(taxableVal + taxTotal) : null);
   if (needTotal) {
     // Use the interstate purchase ledger only when the invoice carries IGST; otherwise a local purchase ledger
-    const purchaseLedgers = await all(`SELECT l.id, l.name FROM ledgers l JOIN account_groups g ON g.id = l.group_id WHERE g.name = 'Purchase Accounts' ORDER BY l.name`);
+    // The purchase ledger this company actually uses most (never a returns ledger), not simply the first name in the alphabet:
+    // the standard ledgers include a generic "Purchase" and "Purchase Return ..." that would otherwise win.
+    const purchaseLedgers = (await all(`SELECT l.id, l.name, (SELECT COUNT(*) FROM ledger_entries e WHERE e.ledger_id = l.id) AS used
+      FROM ledgers l JOIN account_groups g ON g.id = l.group_id WHERE g.name = 'Purchase Accounts' ORDER BY used DESC, l.name`)).filter((l) => !/return/i.test(l.name));
     const isInter = (n) => /interstate|igst/i.test(n);
     const purchase = (tax.igst ? purchaseLedgers.find((l) => isInter(l.name)) : purchaseLedgers.find((l) => !isInter(l.name))) || purchaseLedgers[0] || null;
     const inputLedger = async (kind) => {

@@ -217,7 +217,7 @@ async function main() {
   assert((await g(EE, '/api/auth/login-activity')).status === 403, 'employees cannot read login activity');
   const roles = await all('SELECT role, COUNT(*) c FROM users GROUP BY role');
   assert(roles.some((r) => r.role === 'Owner') && roles.some((r) => r.role === 'Accountant') && roles.some((r) => r.role === 'Customer'), 'administrator, employee and customer accounts all live in the one users table');
-  const dupEmails = await all("SELECT email, COUNT(*) c FROM users WHERE email <> '' GROUP BY lower(email) HAVING c > 1");
+  const dupEmails = await all("SELECT lower(email) AS email, COUNT(*) AS c FROM users WHERE email <> '' GROUP BY lower(email) HAVING COUNT(*) > 1");
   assert(dupEmails.length === 0, 'no duplicate e-mail addresses in the user table');
 
   console.log('\n--- 8. Existing inventory accounts are brought into the one list safely ---');
@@ -257,7 +257,7 @@ async function main() {
   const sam = await get("SELECT * FROM users WHERE email = 'sam@shop.example'");
   assert(su1.status === 201 && sam && sam.role === 'Customer' && sam.status === 'Pending' && sam.company_id, 'a customer registers: the role is always Customer and the account waits for e-mail confirmation (role / status in the request are ignored)', JSON.stringify(su1.json));
   assert(sam.password.startsWith('argon2id$') && !JSON.stringify(su1.json).includes(good.password), 'the password is stored hashed and never returned');
-  assert(sam.company_id === 'U' + sam.id && require('fs').existsSync(require('path').join(tmp, '_companies', sam.company_id, 'company.db')), 'the customer gets books of their own: a private company with its own database file');
+  assert(sam.company_id === 'U' + sam.id && require('./core/db').companyExists(sam.company_id), 'the customer gets books of their own: a private company with its own database file');
   assert(!(await get("SELECT 1 x FROM ledgers WHERE name LIKE 'Sam Shopper%'")), 'nothing is added to the owner\'s books for them');
   assert(outbox.length === 1 && outbox[0].to === 'sam@shop.example' && /verify=/.test(outbox[0].text), 'a confirmation e-mail with a single-use link is sent');
   const pre = await login('sam@shop.example', good.password, 'customer');

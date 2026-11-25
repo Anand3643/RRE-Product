@@ -42,3 +42,8 @@ inventory-app/backend/uploads/
 # Python bytecode (generated when the inventory application runs)
 __pycache__/
 *.pyc
+
+# Local PostgreSQL used for development and tests (npm run db:local)
+.pg-local/
+# Cloud database backups made by npm run db:backup (business data: never commit)
+backups/

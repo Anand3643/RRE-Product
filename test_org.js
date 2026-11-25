@@ -226,7 +226,7 @@ async function main() {
 
   console.log('\n--- 8. Integrity ---');
   assert(await dr(), 'Total Dr == total Cr');
-  assert((await get('SELECT COUNT(*) c FROM schema_migrations')).c === 21, 'Migration 009 recorded');
+  assert((await get('SELECT COUNT(*) c FROM schema_migrations')).c === require('./core/migrations').MIGRATIONS.length, 'Migration 009 recorded');
   void all; void wait; void e7;
 
   console.log('\n====================================================');

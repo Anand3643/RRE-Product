@@ -608,6 +608,17 @@ const MIGRATIONS = [
       'ALTER TABLE users ADD COLUMN company_id TEXT',
       'ALTER TABLE users ADD COLUMN extra_access TEXT'
     ]
+  },
+  {
+    id: '022_idempotency_keys',
+    description: 'A financial request repeated with the same Idempotency-Key (double click, network retry) returns the first result instead of posting twice (additive only)',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS idempotency_keys (
+         scope_key TEXT PRIMARY KEY,
+         result TEXT NOT NULL,
+         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+       )`
+    ]
   }
 ];
 

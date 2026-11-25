@@ -53,7 +53,7 @@ async function main() {
   const B = await mk('Bob Retailer', 'bob@t.example');
   assert(A.status === 201 && A.token && A.company && B.token, 'two customers register and are signed in', JSON.stringify([A.status, B.status]));
   assert(ms < 20000, 'creating a customer\'s company does not take long', ms + ' ms');
-  assert(fs.existsSync(path.join(tmp, '_companies', 'U' + (await get("SELECT id FROM users WHERE email = 'alice@t.example'")).id, 'company.db')), 'each customer\'s company is a separate database file');
+  assert(require('./core/db').companyExists('U' + (await get("SELECT id FROM users WHERE email = 'alice@t.example'")).id), 'each customer\'s company is a separate company (its own database file on SQLite, its own company number on PostgreSQL)');
 
   const names = async (tk) => ((await req('GET', '/api/masters/ledgers', { token: tk })).json.data || []).map((l) => l.name);
   assert((await req('POST', '/api/masters/ledgers', { token: A.token, body: { name: 'Alice Secret Ledger', group_id: grp } })).json.success, 'Alice creates a ledger in her company');

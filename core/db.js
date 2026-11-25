@@ -61,7 +61,55 @@ require('./security').setCompanyProvider(() => activeCompany);
 
 let db = null;
 
+// ---------------------------------------------------------------------------------------------------- PostgreSQL (Supabase) mode
+// RRE_DB=postgres + DATABASE_URL: every company lives in one shared PostgreSQL database instead of a SQLite file (core/pgAdapter.js).
+const PG = process.env.RRE_DB === 'postgres';
+const pgAdapter = PG ? require('./pgAdapter') : null;
+let pgReady = null; const pgCompanies = new Set();
+function ensurePg() {
+  if (!pgReady) {
+    if (!process.env.DATABASE_URL) return Promise.reject(new Error('RRE_DB=postgres needs DATABASE_URL in .env (see docs/CLOUD_DATABASE.md).'));
+    pgReady = (async () => {
+      await pgAdapter.init(process.env.DATABASE_URL);
+      await pgAdapter.withClient(async (c) => { await c.query('SET ROLE rre_app'); for (const r of (await c.query('SELECT company_no FROM rre_meta.companies')).rows) pgCompanies.add(r.company_no); });
+      if (!pgCompanies.has(activeCompany)) await registerPgCompany(activeCompany, 'company');
+      // test suites only: an empty company is filled from the SQLite copy the test prepared, so every suite runs unchanged on PostgreSQL
+      if (process.env.RRE_PG_IMPORT_SQLITE === '1' && fs.existsSync(dbPath)) {
+        const empty = await pgAdapter.withClient(async (c) => { await c.query('SET ROLE rre_app; SET search_path = rre, public'); await c.query("SELECT set_config('rre.company_id', $1, false)", [activeCompany]); const n = (await c.query('SELECT count(*)::int n FROM company_info')).rows[0].n; await c.query('RESET ROLE'); await c.query("SELECT set_config('rre.company_id', '', false)"); return n === 0; });
+        if (empty) await require('./pgImport').importCompany({ sqliteFile: dbPath, company: activeCompany, log: (m) => console.log('[Tally Core DB] ' + m) });
+      }
+      console.log(`[Tally Core DB] Connected to PostgreSQL (company ${activeCompany}; ${pgCompanies.size} compan${pgCompanies.size === 1 ? 'y' : 'ies'} in the database)`);
+    })();
+    pgReady.catch((e) => {
+      const cert = /certificate|self[- ]signed|CERT_|UNABLE_TO_VERIFY/i.test(String(e.code || '') + ' ' + e.message);
+      console.error('[Tally Core DB] PostgreSQL connection failed:', e.message + (cert ? '\n  The database certificate could not be verified. Download the CA certificate from Supabase (Project Settings > Database > SSL) and set RRE_PG_CA_FILE to its path in .env.' : ''));
+      pgReady = null;
+    });
+  }
+  return pgReady;
+}
+/** PostgreSQL mode: the companies in the database (not customers' own books), for the company list. */
+async function pgCompanyRows() {
+  await ensurePg();
+  return pgAdapter.withClient(async (c) => { await c.query('SET ROLE rre_app'); return (await c.query("SELECT company_no, name, created_at FROM rre_meta.companies WHERE kind = 'company' ORDER BY company_no")).rows; });
+}
+async function setPgCompanyName(number, name) {
+  await ensurePg();
+  await pgAdapter.withClient(async (c) => { await c.query('SET ROLE rre_app'); await c.query('UPDATE rre_meta.companies SET name = $2 WHERE company_no = $1', [String(number), name]); });
+}
+/** PostgreSQL mode: the company's rows go to a checksummed file (npm run db:restore can load it) before a destructive reset. */
+async function pgSafetySnapshot(reason) {
+  const co = getCompanyNumber();
+  const out = path.join(getDataDir(), 'backups', `cloud-${co}-${reason}-${new Date().toISOString().replace(/[:.]/g, '-')}.json.gz`);
+  await require('../scripts/pg-backup').backup(null, { shared: true, companies: [co], out, log: (m) => console.log('[Disaster Recovery] ' + m) });
+}
+async function registerPgCompany(number, kind = 'company', name = null) {
+  await pgAdapter.withClient(async (c) => { await c.query('SET ROLE rre_app'); await c.query('INSERT INTO rre_meta.companies (company_no, kind, name) VALUES ($1, $2, $3) ON CONFLICT (company_no) DO NOTHING', [String(number), kind, name]); });
+  pgCompanies.add(String(number));
+}
+
 function connectDb() {
+  if (PG) return null;
   if (db) return db;
   db = new sqlite3.Database(dbPath, (err) => {
     if (err) {
@@ -77,6 +125,7 @@ function connectDb() {
 connectDb();
 
 function closeDb() {
+  if (PG) return Promise.resolve();
   return new Promise((resolve) => {
     if (!db) return resolve();
     db.close((err) => {
@@ -99,6 +148,7 @@ async function switchDatabase(number) {
   if (singleFolderMode) throw new Error('Company switching is unavailable when RRE_DATA_DIR is set.');
   const dir = paths.companyDir(number);
   fs.mkdirSync(dir, { recursive: true });
+  if (PG) await ensurePg().then(() => registerPgCompany(number));
   await closeDb();
   activeCompany = String(number);
   dataDir = dir;
@@ -120,23 +170,38 @@ function handleFor(number) {
   if (!h) {
     const dir = companyDirOf(number); fs.mkdirSync(dir, { recursive: true });
     const p = path.resolve(dir, 'company.db');
-    h = { dir, path: p, db: new sqlite3.Database(p, (err) => { if (err) console.error('Failed to open company ' + number + ':', err.message); }) };
+    h = { dir, path: p, db: PG ? null : new sqlite3.Database(p, (err) => { if (err) console.error('Failed to open company ' + number + ':', err.message); }) };
     conns.set(number, h);
   }
   return h;
 }
 const curDb = () => { const c = ctxCompany(); if (c) return handleFor(c).db; if (!db) connectDb(); return db; };
 /** Runs fn with everything (queries, data folder, company number) belonging to the given company. */
-const withCompany = (number, fn) => als.run({ company: number == null ? null : String(number) }, fn);
-const companyExists = (number) => fs.existsSync(path.join(companyDirOf(number), 'company.db'));
-function closeCompany(number) { const h = conns.get(String(number)); if (!h) return Promise.resolve(); conns.delete(String(number)); return new Promise((r) => h.db.close(() => r())); }
+const withCompany = (number, fn) => als.run({ ...(als.getStore() || {}), company: number == null ? null : String(number) }, fn);
+/** Runs fn knowing who is signed in (PostgreSQL: the _created_by audit column of every row written). */
+const withRequestUser = (user, fn) => als.run({ ...(als.getStore() || {}), user: user ? user.userId : null }, fn);
+const companyExists = (number) => (PG ? pgCompanies.has(String(number)) : fs.existsSync(path.join(companyDirOf(number), 'company.db')));
+function closeCompany(number) { if (PG) { conns.delete(String(number)); return Promise.resolve(); } const h = conns.get(String(number)); if (!h) return Promise.resolve(); conns.delete(String(number)); return new Promise((r) => h.db.close(() => r())); }
 const getDbPath = () => { const c = ctxCompany(); return c ? handleFor(c).path : dbPath; };
 const getDataDir = () => { const c = ctxCompany(); return c ? handleFor(c).dir : dataDir; };
 const getCompanyNumber = () => ctxCompany() || activeCompany;
 const getActiveCompanyNumber = () => activeCompany; // the owner's company, whatever company the current request runs in
 
 // Promisified query wrappers
+const pgCtx = (system) => { const st = als.getStore() || {}; return { company: system ? activeCompany : getCompanyNumber(), user: st.user == null ? null : st.user, txId: st.txId || null }; };
+/** Runs fn as one transaction's work (core/tx.js): on PostgreSQL its statements, and only those, use the transaction's connection. */
+const withTxContext = (fn) => als.run({ ...(als.getStore() || {}), txId: crypto.randomUUID() }, fn);
+const refreshUsersAfter = (sql) => { if (/^\s*(UPDATE|DELETE)\s+(FROM\s+)?users\b/i.test(sql) && !/^\s*UPDATE users SET (last_login|failed_logins)/i.test(sql)) setImmediate(() => { try { require('./identity').refreshAll(); } catch (e) { /* identity not loaded yet */ } }); };
+const pgCall = async (fn, sql, params, system) => {
+  await ensurePg();
+  const ctx = pgCtx(system);
+  if (!system && !pgCompanies.has(String(ctx.company))) await registerPgCompany(ctx.company, /^U\d+$/.test(ctx.company) ? 'customer' : 'company');
+  const out = await pgAdapter[fn](sql, params, ctx);
+  if (fn === 'run') refreshUsersAfter(sql);
+  return out;
+};
 const run = (sql, params = []) => {
+  if (PG) return pgCall('run', sql, params, false);
   return new Promise((resolve, reject) => {
     curDb().run(sql, params, function (err) {
       if (err) reject(err);
@@ -151,6 +216,7 @@ const run = (sql, params = []) => {
 };
 
 const get =(sql, params = []) => {
+  if (PG) return pgCall('get', sql, params, false);
   return new Promise((resolve, reject) => {
     curDb().get(sql, params, (err, row) => {
       if (err) reject(err);
@@ -160,6 +226,7 @@ const get =(sql, params = []) => {
 };
 
 const all = (sql, params = []) => {
+  if (PG) return pgCall('all', sql, params, false);
   return new Promise((resolve, reject) => {
     curDb().all(sql, params, (err, rows) => {
       if (err) reject(err);
@@ -169,7 +236,11 @@ const all = (sql, params = []) => {
 };
 
 // Account data (users, sessions, reset tokens) always lives in the active company's database, even while a request runs inside a customer's own company.
-const sys = {
+const sys = PG ? {
+  run: (sql, params = []) => pgCall('run', sql, params, true),
+  get: (sql, params = []) => pgCall('get', sql, params, true),
+  all: (sql, params = []) => pgCall('all', sql, params, true)
+} : {
   run: (sql, params = []) => new Promise((res, rej) => { if (!db) connectDb(); db.run(sql, params, function (e) { if (e) rej(e); else res({ lastID: this.lastID, changes: this.changes }); }); }),
   get: (sql, params = []) => new Promise((res, rej) => { if (!db) connectDb(); db.get(sql, params, (e, r) => (e ? rej(e) : res(r))); }),
   all: (sql, params = []) => new Promise((res, rej) => { if (!db) connectDb(); db.all(sql, params, (e, r) => (e ? rej(e) : res(r))); })
@@ -643,7 +714,7 @@ const STANDARD_TALLY_LEDGERS = [
   { sno: 96, name: 'Sundry Debtors', group: 'Sundry Debtors', side: 'Dr' }
 ];
 
-async function seedStandardTallyLedgers() {
+async function seedStandardTallyLedgers(opts = {}) {
   try {
     const cols = (await all('PRAGMA table_info(ledgers)')).map(c => c.name);
     if (!cols.includes('description')) {
@@ -656,6 +727,14 @@ async function seedStandardTallyLedgers() {
     await run("UPDATE ledgers SET description = NULL WHERE description IS NOT NULL");
   } catch (err) {}
 
+  // The standard Tally groups and ledgers are added ONCE per company, then the company is marked: they used to be re-added at every
+  // start and after every migration, which turned a new company's clean 20 ledgers into 115 the first time it was reopened.
+  // 'clean' = a company created (or reset) with the clean set on purpose: it never receives them automatically.
+  await ensureSettingsTable();
+  const mark = await get("SELECT value FROM app_settings WHERE key = 'standard_masters'");
+  if (mark && !opts.force) return { total: STANDARD_TALLY_LEDGERS.length, newlySeeded: 0, skipped: mark.value };
+  let seeded = 0;
+  await require('./tx').withTransaction(async () => { // all or nothing
   // Ensure common Tally group aliases exist
   const groupAliases = [
     { name: 'Bank Account', parentName: 'Bank Accounts', nature: 'Assets', aff: 0 },
@@ -714,7 +793,6 @@ async function seedStandardTallyLedgers() {
     return gMap['current assets'] || 6;
   };
 
-  let seeded = 0;
   for (const it of STANDARD_TALLY_LEDGERS) {
     const targetGid = resolveGroupId(it.group);
     const existing = await get('SELECT id FROM ledgers WHERE LOWER(name) = LOWER(?)', [it.name]);
@@ -727,8 +805,15 @@ async function seedStandardTallyLedgers() {
       seeded++;
     }
   }
+  await run("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('standard_masters', 'seeded')");
+  });
 
   return { total: STANDARD_TALLY_LEDGERS.length, newlySeeded: seeded };
+}
+/** This company keeps its clean set of masters: the standard Tally groups / ledgers are never added to it automatically. */
+async function markCleanMasters() {
+  await ensureSettingsTable();
+  await run("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('standard_masters', 'clean')");
 }
 
 async function seedTallyMasters(force = false) {
@@ -1405,8 +1490,11 @@ async function getLoginAuditTrail(limit = 50) {
 async function resetCleanCompany() {
   console.log('[Tally Core DB] Creating pre-reset safety backup...');
   try {
+    if (PG) await pgSafetySnapshot('before-reset');
+    else {
     const { createBackup } = require('./backupEngine');
     await createBackup({ notes: 'Automated Disaster Recovery snapshot before Resetting to Clean Slate' });
+    }
   } catch (bErr) {
     console.warn('[Disaster Recovery] Auto-backup notice:', bErr.message);
   }
@@ -1478,6 +1566,7 @@ async function resetCleanCompany() {
     );
   }
 
+  await markCleanMasters(); // the clean set stays clean: no standard groups / ledgers are added when it is reopened
   console.log('[Tally Core DB] Clean Production Slate active (0 vouchers, 0 stock items, ₹0 Dr/Cr)!');
   return { success: true, message: 'Company reset to clean production state successfully.' };
 }
@@ -1485,8 +1574,11 @@ async function resetCleanCompany() {
 async function loadDemoCompany() {
   console.log('[Tally Core DB] Creating pre-reload safety backup...');
   try {
+    if (PG) await pgSafetySnapshot('before-demo-reload');
+    else {
     const { createBackup } = require('./backupEngine');
     await createBackup({ notes: 'Automated Disaster Recovery snapshot before Reloading Demo Data' });
+    }
   } catch (bErr) {
     console.warn('[Disaster Recovery] Auto-backup notice:', bErr.message);
   }
@@ -1504,6 +1596,7 @@ async function loadDemoCompany() {
   await run('DELETE FROM stock_items');
   await run('DELETE FROM ledgers');
   await run('PRAGMA foreign_keys = ON');
+  await run("DELETE FROM app_settings WHERE key = 'standard_masters'").catch(() => {}); // the demo company gets the full standard set again
   await seedTallyMasters(true);
   return { success: true, message: 'Demo sample data reloaded successfully.' };
 }
@@ -1545,7 +1638,7 @@ async function registerUser(userData, clientMeta = {}) {
   const weak = checkPassword(password, { username: cleanUsername });
   if (weak) throw new Error(weak);
 
-  const existing = await get('SELECT id, username, email FROM users WHERE username = ? COLLATE NOCASE OR (email != "" AND email = ? COLLATE NOCASE)', [cleanUsername, cleanEmail]);
+  const existing = await get("SELECT id, username, email FROM users WHERE username = ? COLLATE NOCASE OR (email != '' AND email = ? COLLATE NOCASE)", [cleanUsername, cleanEmail]);
   if (existing) {
     if (existing.email && existing.email.toLowerCase() === cleanEmail) throw new Error(`An account with email "${cleanEmail}" already exists. Please log in.`);
     cleanUsername = `${cleanUsername}_${Date.now().toString().slice(-3)}`;
@@ -1572,6 +1665,12 @@ module.exports = {
   getCompanyNumber,
   getActiveCompanyNumber,
   withCompany,
+  withRequestUser,
+  withTxContext,
+  isPostgres: () => PG,
+  pgCompanyRows,
+  setPgCompanyName,
+  ensurePg,
   companyExists,
   closeCompany,
   sys,
@@ -1603,6 +1702,7 @@ module.exports = {
   getLoginAuditTrail,
   getRolePermissions,
   seedStandardTallyLedgers,
+  markCleanMasters,
   STANDARD_TALLY_LEDGERS
 };
 

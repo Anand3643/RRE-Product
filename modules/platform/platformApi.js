@@ -324,6 +324,19 @@ async function verifyBackupFile(meta) {
 
   if (meta.encrypted) {
     add('Database readable', null, 'Encrypted snapshot: needs the password to open (checksum verified only)');
+  } else if (/\.cloud\.json\.gz$/.test(meta.filename)) {
+    // cloud database snapshot (PostgreSQL): its own checksum, then the same counts as for a SQLite snapshot
+    try {
+      const doc = require('../../scripts/pg-backup').readBackup(file); // refuses a damaged file (checksum of the content)
+      add('Cloud snapshot content checksum', true, 'match');
+      const co = doc.companies[require('../../core/db').getCompanyNumber()] || Object.values(doc.companies)[0];
+      const counts = co ? { vouchers: co.counts.vouchers, ledgers: co.counts.ledgers, stock_items: co.counts.stock_items } : { vouchers: null, ledgers: null, stock_items: null };
+      add('Contains core tables', counts.vouchers != null && counts.ledgers != null, `vouchers=${counts.vouchers}, ledgers=${counts.ledgers}, stock_items=${counts.stock_items}`);
+      const live = { vouchers: (await get('SELECT COUNT(*) c FROM vouchers')).c, ledgers: (await get('SELECT COUNT(*) c FROM ledgers')).c };
+      result.snapshot_counts = counts; result.live_counts = live;
+      add('Snapshot has the same data as live DB right now', counts.vouchers === live.vouchers && counts.ledgers === live.ledgers,
+        `snapshot vouchers/ledgers = ${counts.vouchers}/${counts.ledgers}, live = ${live.vouchers}/${live.ledgers} (differences are expected if data changed after the snapshot was taken)`);
+    } catch (e) { add('Cloud snapshot readable', false, e.message); }
   } else {
     const tmp = path.join(require('os').tmpdir(), `rre_verify_${Date.now()}.sqlite`);
     let d;

@@ -4,6 +4,9 @@
  */
 
 const http = require('http');
+// a disposable copy of the company: a load test never runs against the real data folder
+process.env.RRE_DATA_DIR = process.env.RRE_DATA_DIR || require('fs').mkdtempSync(require('path').join(require('os').tmpdir(), 'rre_load_test_'));
+process.env.RRE_LEGACY_TOKENS = '1';
 const { startServer } = require('../server');
 
 const TEST_PORT = 4015;

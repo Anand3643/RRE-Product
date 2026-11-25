@@ -139,6 +139,13 @@ Credentials come only from environment variables (a local `.env` file, which is 
 
 Tests: `npm run test:auth`.
 
+## ☁️ Cloud database (Supabase / PostgreSQL) — optional
+
+By default every company is a SQLite file on this computer. RRE can instead keep all companies in one shared PostgreSQL database
+(Supabase), with each company's rows separated by row level security. Set `RRE_DB=postgres` and `DATABASE_URL` in `.env`, then
+`npm run db:migrate` and `npm run db:copy`. Backups: `npm run db:backup` / `npm run db:restore`. Full guide, security model, recovery
+steps and current limits: [docs/CLOUD_DATABASE.md](docs/CLOUD_DATABASE.md).
+
 ## 💻 Install and Run on PC
 
 ### 1. Ready-to-Use Windows Desktop App

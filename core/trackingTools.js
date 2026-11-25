@@ -277,7 +277,7 @@ async function lookup(code) {
   if (!c || c.length > 80) throw bad('Enter or scan a code.');
   const results = [];
   const qtyOf = async (itemId) => {
-    const r = await get(`SELECT s.opening_qty + COALESCE(SUM(CASE WHEN i.direction='IN' THEN i.quantity ELSE -i.quantity END),0) AS q FROM stock_items s LEFT JOIN inventory_entries i ON i.stock_item_id = s.id WHERE s.id = ?`, [itemId]);
+    const r = await get(`SELECT MAX(s.opening_qty) + COALESCE(SUM(CASE WHEN i.direction='IN' THEN i.quantity ELSE -i.quantity END),0) AS q FROM stock_items s LEFT JOIN inventory_entries i ON i.stock_item_id = s.id WHERE s.id = ?`, [itemId]);
     return r3(r.q);
   };
   for (const it of await all('SELECT id, name, hsn_code, barcode FROM stock_items WHERE lower(barcode) = lower(?)', [c])) results.push({ type: 'barcode', item_id: it.id, item: it.name, hsn_code: it.hsn_code, quantity_on_hand: await qtyOf(it.id) });

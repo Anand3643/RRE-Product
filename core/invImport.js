@@ -60,7 +60,35 @@ async function tableRows(src, table, orgId, extra = '') {
 const count = async (src, table, orgId) => (src.names.has(table) ? (await tableRows(src, table, orgId)).length : 0);
 
 // ---------------------------------------------------------------------------------------------------- planning (read-only)
-const srcKey = (orgId) => `stockpilot:${orgId}`;
+const srcKey = (orgId) => `stockpilot:${orgId}`; // the old key: an organisation number alone (every new inventory database starts at 1)
+/**
+ * The key that identifies ONE inventory database's organisation: its number plus when it was created. The organisation number alone
+ * repeats in every new inventory database, so a replaced or re-created inventory would have inherited the old one's import map and
+ * "already synchronised" marks (its own history would then be posted to the books, or its items wrongly treated as already imported).
+ * Records made under the old key are adopted once, but only by an inventory database that already existed when they were made.
+ */
+async function sourceKey(src, orgId) {
+  const org = (await src.q('SELECT created_at FROM organizations WHERE id = ?', [orgId]).catch(() => []))[0]
+    || (await src.q('SELECT name FROM organizations WHERE id = ?', [orgId]).catch(() => []))[0];
+  const born = org && org.created_at ? String(org.created_at).replace('T', ' ').slice(0, 19) : null;
+  if (!born) { // a file without creation times (exports, older versions): its organisation's name tells it apart; nothing old is adopted
+    const nm = org && org.name ? String(org.name).trim().toLowerCase() : '';
+    return nm ? `stockpilot:${orgId}#${require('crypto').createHash('sha256').update(nm).digest('hex').slice(0, 12)}` : srcKey(orgId);
+  }
+  const key = `stockpilot:${orgId}@${require('crypto').createHash('sha256').update(born).digest('hex').slice(0, 12)}`;
+  const legacy = srcKey(orgId);
+  const mine = await get('SELECT 1 x FROM inv_import_map WHERE source = ? UNION ALL SELECT 1 FROM inv_bridge_events WHERE source = ? LIMIT 1', [key, key]);
+  if (!mine) {
+    const old = await get("SELECT MIN(t) AS first FROM (SELECT MIN(created_at) AS t FROM inv_import_map WHERE source = ? UNION ALL SELECT MIN(updated_at) FROM inv_bridge_events WHERE source = ?) AS x", [legacy, legacy]);
+    if (old && old.first && born <= String(old.first).slice(0, 19)) {
+      await withTransaction(async () => {
+        await run('UPDATE inv_import_map SET source = ? WHERE source = ?', [key, legacy]);
+        await run('UPDATE inv_bridge_events SET source = ? WHERE source = ?', [key, legacy]);
+      });
+    }
+  }
+  return key;
+}
 const mapped = async (source, kind, id) => (await get('SELECT rre_id FROM inv_import_map WHERE source = ? AND kind = ? AND src_id = ?', [source, kind, id]))?.rre_id ?? null;
 const clean = (s, max) => { const v = String(s == null ? '' : s).trim().slice(0, max); return v || null; };
 const num = (v) => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
@@ -71,7 +99,7 @@ function stateCode(gstin, stateName) {
 }
 
 async function buildPlan(src, orgId) {
-  const source = srcKey(orgId);
+  const source = await sourceKey(src, orgId);
   const [cats, prods, whs, bals, custs, vends] = await Promise.all(['categories', 'products', 'warehouses', 'stock_balances', 'customers', 'vendors'].map((t) => tableRows(src, t, orgId)));
   const plan = { source, categories: [], units: [], warehouses: [], products: [], parties: [], stock: [], warnings: [], not_imported: [] };
 
@@ -268,4 +296,4 @@ async function importAll(file, orgId, user) {
   } finally { running = false; src.close(); }
 }
 
-module.exports = { detect, preview, importAll, openSource, mapped, remember, clean, num, findUnit, stateCode, srcKey, DECIMAL_UNITS };
+module.exports = { detect, preview, importAll, openSource, mapped, remember, clean, num, findUnit, stateCode, srcKey, sourceKey, DECIMAL_UNITS };

@@ -53,7 +53,7 @@ async function main() {
   await post('Sales', 'INV-2026-002', '2026-06-01', southern, [[southern, 5000, 0], [salesAcc, 0, 5000]]);
   const uom = (await get('SELECT id FROM units_of_measure LIMIT 1')).id, grp = (await get('SELECT id FROM stock_groups LIMIT 1')).id;
   await run(`INSERT INTO stock_items (name, stock_group_id, uom_id, hsn_code, opening_qty, opening_rate, opening_val, reorder_level) VALUES ('Screw Compressor Airend 22kW', ?, ?, '84148011', 10, 50000, 500000, 12)`, [grp, uom]);
-  const itemId = (await get(`SELECT id FROM stock_items WHERE name LIKE 'Screw Compressor%'`)).id;
+  const itemId = (await get(`SELECT id FROM stock_items WHERE name = 'Screw Compressor Airend 22kW'`)).id;
   await run(`INSERT INTO inventory_entries (voucher_id, stock_item_id, direction, quantity, rate, amount) VALUES (?, ?, 'OUT', 2, 61728.39, 123456.78)`, [sv, itemId]);
 
   console.log('\n--- 1. Access and input ---');
