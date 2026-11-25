@@ -75,8 +75,8 @@
     ['RRE Inventory', 'boxes', () => (window.RREInventoryGo ? window.RREInventoryGo('/admin') : null), ['__inventory'], 'inv']
   ];
   // Inventory lives in the rail only: its features open from this list (the screens themselves are the original inventory application)
-  const INV_SUB = [['Dashboard', '/admin'], ['Items', '/products'], ['Stock levels', '/inventory'], ['Warehouses', '/warehouses'], ['Transfers', '/transfers'], ['Adjustments', '/adjustments'], ['Sales Orders', '/sales-orders'], ['Purchase Orders', '/purchase-orders'],
-    ['Customers', '/customers'], ['Vendors', '/vendors'], ['Packages', '/packages'], ['Shipments', '/shipments'], ['Reports', '/reports'], ['AI Insights', '/insights'], ['Settings', '/settings']];
+  const INV_SUB = [['Dashboard', '/admin'], ['Low stock alerts', '/alerts'], ['Items', '/products'], ['Stock levels', '/inventory'], ['Movement history', '/movements'], ['Warehouses', '/warehouses'], ['Transfers', '/transfers'], ['Adjustments', '/adjustments'],
+    ['Customers', '/customers'], ['Sales Orders', '/sales-orders'], ['Sales history', '/sales-history'], ['Suppliers', '/vendors'], ['Purchase Orders', '/purchase-orders'], ['Purchase history', '/purchase-history'], ['Categories', '/categories'], ['Units', '/units'], ['Reports', '/reports']];
   const railItem = (it, i) => {
     if (it[0] === 'sep') return '<div class="sep"></div>';
     const inv = it[4] === 'inv';
@@ -101,7 +101,7 @@
     railEl.addEventListener('click', (e) => {
       const sb = e.target.closest('.sub button[data-path]'); if (sb) { try { window.RREInventoryGo(sb.dataset.path); } catch (err) { /* ignore */ } return; }
       const b = e.target.closest('button.item'); if (!b) return;
-      if (b.classList.contains('inv')) { const wasOpen = $('#au-inv-sub').classList.contains('open'); toggleInvMenu(); if (!wasOpen || !$('#rre-inv-host') || !$('#rre-inv-host').classList.contains('open')) { try { window.RREInventoryGo('/admin'); } catch (err) { /* ignore */ } } return; }
+      if (b.classList.contains('inv')) { const wasOpen = $('#au-inv-sub').classList.contains('open'); toggleInvMenu(); if (!wasOpen || !(window.RREInventory && window.RREInventory.isOpen && window.RREInventory.isOpen())) { try { window.RREInventoryGo('/admin'); } catch (err) { /* ignore */ } } return; }
       if (b.dataset.act === 'collapse') { doc.body.classList.toggle('au-rail-open'); store.set('au_rail_open', doc.body.classList.contains('au-rail-open') ? '1' : '0'); setTimeout(moveInd, 380); return; }
       if (b.dataset.act === 'users') { if (window.__RRE_AUTH_ENABLED === true && typeof openUserManagement === 'function') openUserManagement(); return; }
       if (b.dataset.act === 'theme') { if (typeof openThemeSelectorModal === 'function') openThemeSelectorModal(); return; }
@@ -121,7 +121,7 @@
     icons();
   }
   function activeIndex() {
-    const inv = $('#rre-inv-host'); if (inv && inv.classList.contains('open')) return ITEMS.findIndex((x) => x[3] && x[3][0] === '__inventory');
+    if ((window.RREInventory && window.RREInventory.isOpen && window.RREInventory.isOpen())) return ITEMS.findIndex((x) => x[3] && x[3][0] === '__inventory');
     const cur = (typeof appState !== 'undefined' && appState.currentView) || '';
     return ITEMS.findIndex((x) => x[3] && x[3].includes(cur));
   }

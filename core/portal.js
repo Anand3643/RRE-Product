@@ -224,6 +224,8 @@ async function portalUserOr404(id) {
 async function setPortalUserStatus(id, active, admin) {
   const u = await portalUserOr404(id);
   await run('UPDATE users SET status = ? WHERE id = ?', [active ? 'Active' : 'Inactive', id]);
+  // disabling ends every session of that login NOW (not later in the background: re-enabling quickly must never revive an old session)
+  if (!active) await require('./identity').revokeUserSessions(id, 'disabled');
   await logActivity({ user: admin, action: active ? 'PORTAL_USER_ENABLE' : 'PORTAL_USER_DISABLE', entity: 'user', entityId: id, details: { username: u.username } });
   return (await listPortalUsers()).find((x) => x.id === id);
 }

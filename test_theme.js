@@ -53,7 +53,10 @@ async function main() {
   const invapp = read('public/ext/invapp.js'), hostJs = read('public/ext/inventory_host.js');
   assert(!/rre-inv-menu/.test(invapp) && !/rre-inv-menu/.test(js) && !/data-act="inventory"/.test(js), 'There is no Inventory button in the header or on the dashboard: only the side bar');
   assert(/INV_SUB/.test(js) && /toggleInvMenu/.test(js) && /id="au-inv-sub"/.test(js) && /\[data-theme="aurora"\] #gw-inventory-section/.test(css), 'The side bar Inventory entry expands into its features; the Gateway shortcuts are hidden in the new look');
-  assert(/rre-mode/.test(hostJs) && /postMessage\(\{ rre: 'theme'/.test(hostJs) && /mode=/.test(hostJs),'The inventory frame is told the Light / Dark choice');
+  { // RRE Inventory is part of the application now (no separate frame): its screens follow RRE's Light / Dark switch directly
+    const invJs = require('fs').readFileSync(require('path').join(__dirname, 'public', 'inv', 'inv.js'), 'utf8'), invCss = require('fs').readFileSync(require('path').join(__dirname, 'public', 'inv', 'inv.css'), 'utf8');
+    assert(/attributeFilter: \['data-au'\]/.test(invJs) && /\[data-au="dark"\] #sp-app/.test(invCss) && /\[data-au="light"\] #sp-app/.test(invCss) && /window\.StockPilotInv\.open/.test(hostJs), 'RRE Inventory follows the Light / Dark choice and opens inside RRE (no separate frame)');
+  }
   const rt = read('inventory-app/backend/rre_theme.css'), hostPy = read('inventory-app/backend/rre_host.py'), rtCode = rt.replace(/\/\*[\s\S]*?\*\//g, '');
   assert(/:root\s*\{/.test(rt) && /\.dark\s*\{/.test(rt) && /--brand: 79 107 255/.test(rt), 'The inventory skin defines the application colours for light and dark');
   assert(!/https?:\/\/|@import|url\(/.test(rtCode), 'The inventory skin makes no network request');

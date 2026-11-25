@@ -90,3 +90,12 @@
 #pt-app .pt-cart-btn { position: relative; }
 #pt-app .pt-count { position: absolute; top: -6px; right: -6px; min-width: 18px; height: 18px; border-radius: 9px; background: rgb(var(--brand)); color: #fff; font-size: 11px; display: grid; place-items: center; padding: 0 4px; }
 #pt-app .pt-count[hidden] { display: none; }
+
+/* ---------- RRE Inventory inside the RRE look (Aurora): one feature of the application, not a separate window ---------- */
+/* it opens next to RRE's side rail (which lists every inventory screen), so the rail stays visible and works as its menu */
+[data-theme="aurora"] #sp-app { left: var(--au-rail-w, 68px); transition: left .35s cubic-bezier(.16, 1, .3, 1); }
+[data-theme="aurora"] #sp-app .sp-side, [data-theme="aurora"] #sp-app #sp-theme { display: none; }
+@media (max-width: 899px) { [data-theme="aurora"] #sp-app { left: 0; } [data-theme="aurora"] #sp-app .sp-side { display: flex; } }
+/* RRE's colours: indigo on white (Light), amber on black (Dark) */
+[data-au="light"] #sp-app { --bg: 244 246 255; --surface: 255 255 255; --muted: 238 241 255; --line: 220 225 245; --ink: 15 23 42; --sub: 71 85 105; --brand: 79 70 229; }
+[data-au="dark"] #sp-app, [data-au="dark"] #sp-app.dark { --bg: 0 0 0; --surface: 16 16 16; --muted: 26 26 26; --line: 44 44 44; --ink: 240 240 240; --sub: 160 160 160; --brand: 245 158 11; }

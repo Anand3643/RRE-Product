@@ -1,21 +1,19 @@
 /**
- * RRE Tally — entry points to the Inventory (the ORIGINAL StockPilot application, see inventory_host.js).
+ * RRE Tally — entry points to RRE Inventory (RRE's own inventory screens on the company's books, see inventory_host.js and inv/inv.js).
  *   - In the Aurora theme Inventory lives in the side rail only (an expandable entry listing its features; see theme/aurora.js).
  *   - Go To (Alt+G) / Ask AI commands for every inventory feature, in every theme.
  *   - Older themes have no side rail, so they keep a dedicated Inventory section on the Gateway (hidden in Aurora).
- * The inventory application itself is untouched; this file only adds the entries.
  */
 (function () {
   'use strict';
   // paths are the original application's own routes
   const GROUPS = [
-    ['Overview', [['Dashboard', '/admin'], ['Operations', '/']]],
-    ['Items', [['Items (Products)', '/products'], ['Adjustments', '/adjustments']]],
-    ['Sales', [['Customers', '/customers'], ['Sales Orders', '/sales-orders'], ['Packages', '/packages'], ['Shipments', '/shipments']]],
-    ['Purchases', [['Vendors', '/vendors'], ['Purchase Orders', '/purchase-orders']]],
-    ['Stock', [['Stock levels', '/inventory'], ['Warehouses', '/warehouses'], ['Transfers', '/transfers']]],
-    ['Insights', [['Reports', '/reports'], ['AI Insights', '/insights']]],
-    ['Admin', [['Users', '/team'], ['Login history', '/login-activity'], ['Support tickets', '/support'], ['Settings', '/settings']]]
+    ['Overview', [['Dashboard', '/admin'], ['Low stock alerts', '/alerts']]],
+    ['Items', [['Items', '/products'], ['Categories', '/categories'], ['Units', '/units']]],
+    ['Sales', [['Customers', '/customers'], ['Sales Orders', '/sales-orders'], ['Sales history', '/sales-history']]],
+    ['Purchases', [['Suppliers', '/vendors'], ['Purchase Orders', '/purchase-orders'], ['Purchase history', '/purchase-history']]],
+    ['Stock', [['Stock levels', '/inventory'], ['Movement history', '/movements'], ['Warehouses', '/warehouses'], ['Transfers', '/transfers'], ['Adjustments', '/adjustments']]],
+    ['Insights', [['Reports', '/reports']]]
   ];
   const openInv = (route) => { if (window.RREInventory) window.RREInventory.open(route || '/'); };
   window.RREInventoryGo = openInv;
@@ -29,9 +27,7 @@
     const sec = document.createElement('div'); sec.id = 'gw-inventory-section';
     const row = (t, p, hot, tag) => `<div class="gateway-item" onclick="RREInventoryGo('${p}')"><span>${hot ? `<span class="hotkey">${hot}</span>` : ''}${esc(t)}</span><span class="text-[10px] text-slate-400 font-mono">${esc(tag || '')}</span></div>`;
     sec.innerHTML = `<div class="text-[10px] font-black text-teal-600 uppercase tracking-widest px-3 mb-1">RRE Inventory</div><div class="space-y-0.5">
-      ${row('RRE Inventory Dashboard', '/admin', 'M', 'Overview')}${row('Items (Products)', '/products', '', 'Catalogue')}${row('Stock levels', '/inventory', '', 'On hand')}${row('Warehouses', '/warehouses', '', 'Locations')}
-      ${row('Stock Transfers', '/transfers', '', 'Between warehouses')}${row('Stock Adjustments', '/adjustments', '', 'Corrections')}${row('Sales Orders', '/sales-orders', '', 'Sell')}${row('Purchase Orders', '/purchase-orders', '', 'Buy')}
-      ${row('Customers', '/customers', '', 'Parties')}${row('Vendors', '/vendors', '', 'Parties')}${row('Packages & Shipments', '/shipments', '', 'Dispatch')}${row('Inventory Reports', '/reports', '', 'Reports')}${row('AI Insights', '/insights', '', 'Forecasts')}${row('Inventory Users & Settings', '/team', '', 'Admin')}</div>`;
+      ${row('RRE Inventory Dashboard', '/admin', 'M', 'Overview')}${row('Items', '/products', '', 'Catalogue')}${row('Stock levels', '/inventory', '', 'On hand')}${row('Warehouses', '/warehouses', '', 'Locations')}${row('Stock Transfers', '/transfers', '', 'Between warehouses')}${row('Stock Adjustments', '/adjustments', '', 'Corrections')}${row('Sales Orders', '/sales-orders', '', 'Sell')}${row('Purchase Orders', '/purchase-orders', '', 'Buy')}${row('Customers', '/customers', '', 'Parties')}${row('Suppliers', '/vendors', '', 'Parties')}${row('Inventory Reports', '/reports', '', 'Reports')}</div>`;
     label.parentElement.parentElement.insertBefore(sec, label.parentElement);
     const old = document.getElementById('gw-inventory-suite'); if (old) old.remove();
   }

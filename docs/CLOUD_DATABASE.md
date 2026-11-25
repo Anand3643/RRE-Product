@@ -164,8 +164,10 @@ Results are in the commit / release notes of this phase.
   RRE servers against one database is not supported yet.
 * **Postings inside one company are serialised** (one transaction at a time per company, so numbers and stock checks are safe);
   reads and other companies run in parallel. Under load the write queue is what grows (see the load test).
-* **The embedded inventory application (RRE Inventory, Python)** still keeps its own SQLite file per company; it is not on
-  PostgreSQL yet.
+* **RRE Inventory is part of the books:** its screens (`public/inv/inv.js`) work on the company's own tables (stock items, warehouses,
+  customers / suppliers = ledgers, orders = vouchers), so on PostgreSQL inventory is in the cloud database too. The former separate
+  inventory application (Python, its own `stockpilot.db`) is no longer opened; its code is still in `inventory-app/` but unused.
+  Not carried over from it: packages / shipment tracking and AI insights.
 * **Attachments** are stored inside the database (`voucher_attachment_data`); moving them to Supabase Storage is not done.
 * **Posted vouchers can still be deleted** by roles allowed to (Owner; not Data Entry). A delete is never silent any more: the complete
   voucher is written to the audit log in the same transaction. The accounting-correct alternative, `POST /api/vouchers/:id/reverse`,
