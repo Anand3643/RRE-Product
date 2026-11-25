@@ -51,7 +51,7 @@ async function initSingleTarget(clean) {
 
   if (clean) {
     await db.resetCleanCompany();
-    await db.seedStandardTallyLedgers();
+    await db.seedStandardTallyLedgers({ force: true });
     await db.run('PRAGMA foreign_keys = OFF');
     await db.run('DELETE FROM activity_log').catch(() => {});
     await db.run('DELETE FROM notifications').catch(() => {});
