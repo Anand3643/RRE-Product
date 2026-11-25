@@ -419,7 +419,7 @@ async function txControl(word, sql, ctx) {
   if (word === 'BEGIN') {
     if (pinned.has(key)) throw new Error('cannot start a transaction within a transaction');
     const client = await pool.connect();
-    try { await applyCtx(client, ctx); await client.query('BEGIN'); } catch (e) { client.release(); throw e; }
+    try { await applyCtx(client, ctx); await client.query(/ISOLATION LEVEL (SERIALIZABLE|REPEATABLE READ|READ COMMITTED)/i.test(sql) ? 'BEGIN ISOLATION LEVEL ' + /ISOLATION LEVEL (SERIALIZABLE|REPEATABLE READ|READ COMMITTED)/i.exec(sql)[1].toUpperCase() : 'BEGIN'); } catch (e) { client.release(); throw e; }
     pinned.set(key, { client, lock: makeLock(), company: String(ctx.company) });
     return { rows: [], rowCount: 0 };
   }

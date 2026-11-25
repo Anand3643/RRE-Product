@@ -16,9 +16,11 @@ const paise = (n) => Math.round((parseFloat(n) || 0) * 100); // exact integer ar
  * Called inside the posting transaction, which the company's transaction queue runs one at a time, so two vouchers can never get
  * the same number (the UNIQUE constraint on voucher_no is the final guard).
  */
+const voucherPrefix = (voucherType) => `RRE/${String(voucherType).toUpperCase().slice(0, 3)}/`;
 async function nextVoucherNo(voucherType) {
-  const prefix = `RRE/${String(voucherType).toUpperCase().slice(0, 3)}/`;
-  const rows = await all('SELECT voucher_no FROM vouchers WHERE voucher_no LIKE ?', [prefix.replace(/[\\%_]/g, (c) => '\\' + c) + '%']);
+  const prefix = voucherPrefix(voucherType);
+  // a range on the voucher-number index (not LIKE over the whole table): only postings that use the SAME prefix ever compete for a number
+  const rows = await all('SELECT voucher_no FROM vouchers WHERE voucher_no >= ? AND voucher_no < ?', [prefix, prefix + '~']);
   let max = 0;
   for (const r of rows) { const tail = r.voucher_no.slice(prefix.length); if (/^\d{1,12}$/.test(tail)) max = Math.max(max, parseInt(tail, 10)); }
   return prefix + String(max + 1).padStart(5, '0');
@@ -93,7 +95,9 @@ async function postVoucher(payload, options = {}) {
 
   const work = async () => {
     // the same request again (double click, network retry): the first result, nothing posted twice
+    const { lockKeys } = require('./tx');
     if (idemKey) {
+      await lockKeys(['idem:' + idemKey]); // the same request sent twice at once: the second waits here and then finds the first's result
       const prev = await get('SELECT result FROM idempotency_keys WHERE scope_key = ?', [idemKey]);
       if (prev) return { ...JSON.parse(prev.result), replayed: true };
     }
@@ -107,6 +111,7 @@ async function postVoucher(payload, options = {}) {
     if (outward.length && (await negativeStockPolicy()) === 'block') {
       const want = new Map();
       for (const i of outward) want.set(parseInt(i.stock_item_id, 10), (want.get(parseInt(i.stock_item_id, 10)) || 0) + parseFloat(i.quantity));
+      await lockKeys([...want.keys()].map((id) => 'stock:' + id)); // sales of the same item take turns for its last units; other items do not wait
       for (const [itemId, qty] of want) {
         const s = await get(`SELECT s.name, s.opening_qty + COALESCE((SELECT SUM(CASE WHEN e.direction = 'IN' THEN e.quantity ELSE -e.quantity END) FROM inventory_entries e WHERE e.stock_item_id = s.id), 0) AS on_hand FROM stock_items s WHERE s.id = ?`, [itemId]);
         if (!s) throw new VoucherValidationError(`Stock item #${itemId} does not exist.`);
@@ -114,6 +119,7 @@ async function postVoucher(payload, options = {}) {
       }
     }
 
+    if (!voucher_no) await lockKeys(['voucher-no:' + voucherPrefix(voucher_type)]); // one number series at a time; other series do not wait
     const vNo = voucher_no || await nextVoucherNo(voucher_type);
     if (await get('SELECT id FROM vouchers WHERE voucher_no = ?', [vNo])) throw new VoucherConflictError(`Voucher number ${vNo} is already used. Choose another number.`);
 
@@ -184,7 +190,7 @@ async function postVoucher(payload, options = {}) {
 
   // the company's transaction queue: postings never overlap (a second BEGIN on the same connection used to fail under load)
   if (options.inTransaction) return work();
-  return require('./tx').withTransaction(work);
+  return require('./tx').withTransaction(work, { concurrent: true }); // PostgreSQL: runs alongside other postings (locks above where they compete)
 }
 
 /**

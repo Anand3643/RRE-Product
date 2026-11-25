@@ -55,7 +55,7 @@ async function main() {
   assert(/INV_SUB/.test(js) && /toggleInvMenu/.test(js) && /id="au-inv-sub"/.test(js) && /\[data-theme="aurora"\] #gw-inventory-section/.test(css), 'The side bar Inventory entry expands into its features; the Gateway shortcuts are hidden in the new look');
   { // RRE Inventory is part of the application now (no separate frame): its screens follow RRE's Light / Dark switch directly
     const invJs = require('fs').readFileSync(require('path').join(__dirname, 'public', 'inv', 'inv.js'), 'utf8'), invCss = require('fs').readFileSync(require('path').join(__dirname, 'public', 'inv', 'inv.css'), 'utf8');
-    assert(/attributeFilter: \['data-au'\]/.test(invJs) && /\[data-au="dark"\] #sp-app/.test(invCss) && /\[data-au="light"\] #sp-app/.test(invCss) && /window\.StockPilotInv\.open/.test(hostJs), 'RRE Inventory follows the Light / Dark choice and opens inside RRE (no separate frame)');
+    assert(/attributeFilter: \['data-au'\]/.test(invJs) && /classList\.toggle\('dark', m === 'dark'\)/.test(invJs) && /\.dark \{/.test(invCss) && /\[data-theme="aurora"\] #sp-app \{ left:/.test(invCss) && /window\.StockPilotInv\.open/.test(hostJs), 'RRE Inventory follows the Light / Dark choice (its own teal palette) and opens inside RRE next to the side rail (no separate frame)');
   }
   const rt = read('inventory-app/backend/rre_theme.css'), hostPy = read('inventory-app/backend/rre_host.py'), rtCode = rt.replace(/\/\*[\s\S]*?\*\//g, '');
   assert(/:root\s*\{/.test(rt) && /\.dark\s*\{/.test(rt) && /--brand: 79 107 255/.test(rt), 'The inventory skin defines the application colours for light and dark');

@@ -200,7 +200,7 @@
         <h1>Welcome back to <span id="au-co">your business</span></h1>
         <p class="au-lead">Your sales, spending, profit and stock in one place, straight from your books and updated as you work.</p>
         <div class="au-cta"><button type="button" class="au-btn primary" data-act="voucher"><i data-lucide="plus"></i>New voucher</button><button type="button" class="au-btn" data-act="reports"><i data-lucide="bar-chart-3"></i>Reports</button></div>
-      </div><div class="au-stage" data-speed="0.07" aria-hidden="true">
+      </div><div class="au-stage" data-speed="0.07">
         <div class="au-float f2" data-go="outstandings" role="button" tabindex="0"><small>Cash &amp; bank</small><b id="au-f-cash">—</b></div><div class="au-float f3" data-go="stock-summary" role="button" tabindex="0"><small>Inventory value</small><b id="au-f-stock">—</b></div></div></section>
       <div class="au-sec-title">Business overview</div>
       <div class="au-stats" id="au-stats"></div>
@@ -318,10 +318,11 @@
     mqReduce.addEventListener && mqReduce.addEventListener('change', () => { syncMotion(); observe(portfolioEl); });
     window.addEventListener('scroll', onScroll, { passive: true }); const mn = $('main'); if (mn) mn.addEventListener('scroll', onScroll, { passive: true });
     enable();
-    // the inventory screen is a full-screen overlay: keep the rail indicator honest
-    setInterval(() => { if (isOn()) moveInd(); }, 700);
+    // the rail highlight follows RRE Inventory opening / closing (an observer on its screen, instead of measuring every 0.7 s forever)
+    const watchInv = () => { const el = doc.getElementById('sp-app'); if (el && !el.__auWatch) { el.__auWatch = true; new MutationObserver(() => { if (isOn()) moveInd(); }).observe(el, { attributes: true, attributeFilter: ['class'] }); } };
+    doc.addEventListener('rre-inventory', () => { watchInv(); if (isOn()) moveInd(); });
     // start on the portfolio dashboard (Esc still returns to the Gateway, as always)
-    if (isOn() && typeof appState !== 'undefined' && appState.currentView === 'view-gateway') setTimeout(() => { if (appState.currentView === 'view-gateway') openDash(); }, 350);
+    if (isOn() && typeof appState !== 'undefined' && appState.currentView === 'view-gateway') { if (appState.currentView === 'view-gateway') openDash(); } // at once (a delayed switch made the page jump after it was drawn)
   }
   window.RREAurora = { enable, renderPortfolio, setMode, mode: modeNow };
   if (doc.readyState === 'complete') install(); else window.addEventListener('load', install);

@@ -23,7 +23,17 @@
   const today = () => new Date().toISOString().slice(0, 10);
   const store = { get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } } };
 
-  async function api(path, opts = {}) {
+  // a save that is already on its way is not sent again (double click / Enter twice): the same request gets the same answer
+  const inFlight = new Map();
+  function api(path, opts = {}) {
+    const method = opts.method || 'GET';
+    if (method === 'GET') return apiNow(path, opts);
+    const key = method + ' ' + path + ' ' + JSON.stringify(opts.body || null);
+    if (inFlight.has(key)) return inFlight.get(key);
+    const p = apiNow(path, opts).finally(() => inFlight.delete(key));
+    inFlight.set(key, p); return p;
+  }
+  async function apiNow(path, opts = {}) {
     const res = await fetch(base() + path, { method: opts.method || 'GET', headers: opts.body ? { 'Content-Type': 'application/json' } : {}, body: opts.body ? JSON.stringify(opts.body) : undefined });
     const j = await res.json().catch(() => ({}));
     if (!res.ok || j.success === false) { const e = new Error(j.error || `Request failed (${res.status})`); e.status = res.status; throw e; }

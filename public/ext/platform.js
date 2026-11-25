@@ -491,7 +491,8 @@
     hookOmniSearch();
     hookDataMenu();
     refreshNotifications(false);
-    setInterval(() => { if (token()) refreshNotifications(false); }, 60000);
+    setInterval(() => { if (token() && !document.hidden) refreshNotifications(false); }, 60000); // not while the tab is hidden
+    document.addEventListener('visibilitychange', () => { if (!document.hidden && token()) refreshNotifications(false); });
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
   else boot();

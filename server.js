@@ -122,6 +122,8 @@ app.use((req, res, next) => {
   }
 });
 
+// compressed responses (gzip / brotli): the pages, scripts, styles and API answers travel about 4-6 times smaller
+app.use(require('compression')({ threshold: 1024 }));
 app.use(express.json({ limit: '10mb' })); // GSTR-2B / bank statement uploads exceed the 100kb default
 app.use(express.urlencoded({ extended: true }));
 app.get('/login.html', (req, res, next) => (process.env.RRE_ENFORCE_AUTH === '1' ? next() : res.redirect('/')));

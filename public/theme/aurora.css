@@ -3087,3 +3087,27 @@ body.au-rail-open #au-rail button.item { padding: 0 14px; }
 .au-motion .au-reveal, .au-motion .au-reveal.is-in, .au-motion .au-reveal.is-in.au-depth { transform: none !important; will-change: auto !important; transition: opacity .25s ease !important; }
 .au-motion main > section[id^="view-"].au-enter { animation: auFade .2s ease both !important; }
 @keyframes auFade { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---------- no layout jumps: the dashboard keeps room for figures and charts that arrive after the first paint ---------- */
+#au-rev { min-height: 253px; } #au-mix { min-height: 264px; } #au-profit { min-height: 230px; } #au-inv { min-height: 146px; } #au-cash { min-height: 91px; } #au-growth { min-height: 130px; }
+#au-stats:empty { min-height: 342px; } @media (max-width: 899px) { #au-stats:empty { min-height: 700px; } } @media (max-width: 520px) { #au-stats:empty { min-height: 1053px; } }
+
+/* ---------- touch screens (phones, tablets): controls at least 44px tall so a finger hits them; mouse layouts are unchanged ---------- */
+@media (pointer: coarse) {
+  main button, main select, main input:not([type="checkbox"]):not([type="radio"]), main textarea, #header-ribbon button, #au-tabbar button,
+  .gateway-item, .tally-v-btn, #au-rail button { min-height: 44px; }
+}
+
+/* RRE Inventory has its own grouped menu inside its screen: the side bar keeps a single "RRE Inventory" entry (no second list) */
+#au-inv-sub, #au-rail button.item.inv .chev { display: none !important; }
+
+/* ---------- readable contrast in Light mode (4.5:1 for small text): the same colours one shade deeper ---------- */
+[data-au="light"] .au-sec-title { color: #4f46e5; }
+[data-au="light"] #top-company-badge { color: #92400e; }
+[data-au="light"] .text-emerald-600 { color: #047857; } [data-au="light"] .text-amber-600 { color: #b45309; } [data-au="light"] .text-teal-600 { color: #0f766e; }
+
+/* the header keeps the height of the buttons added after the first paint (Light / Dark switch, Companies), so the page does not jump down */
+@media (min-width: 900px) {
+  [data-theme="aurora"] #header-ribbon > div:first-child { min-height: 47px; }
+  [data-theme="aurora"] #header-ribbon > .sub-header-band { min-height: 51px; }
+}

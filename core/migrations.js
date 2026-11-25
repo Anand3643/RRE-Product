@@ -619,6 +619,14 @@ const MIGRATIONS = [
          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
        )`
     ]
+  },
+  {
+    id: '023_party_and_group_indexes',
+    description: 'Indexes for the lookups done on every party ledger, outstanding and group report: vouchers by party, ledgers by group (additive only)',
+    statements: [
+      'CREATE INDEX IF NOT EXISTS idx_vouchers_party ON vouchers(party_ledger_id, date)',
+      'CREATE INDEX IF NOT EXISTS idx_ledgers_group ON ledgers(group_id)'
+    ]
   }
 ];
 

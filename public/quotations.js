@@ -43,7 +43,16 @@ function qRound2(n) { return Math.round((parseFloat(n) || 0) * 100) / 100; }
 function companyStateCode() { return String((appState.company && appState.company.state_code) || '33'); }
 function currentUserName() { return (appState.currentUser && (appState.currentUser.full_name || appState.currentUser.username)) || ''; }
 
-async function qApi(path, method = 'GET', body) {
+// a save that is already on its way is not sent again (double click): the same request gets the same answer
+const qInFlight = new Map();
+function qApi(path, method = 'GET', body) {
+  if (method === 'GET') return qApiNow(path, method, body);
+  const key = method + ' ' + path + ' ' + JSON.stringify(body || null);
+  if (qInFlight.has(key)) return qInFlight.get(key);
+  const p = qApiNow(path, method, body).finally(() => qInFlight.delete(key));
+  qInFlight.set(key, p); return p;
+}
+async function qApiNow(path, method = 'GET', body) {
   const res = await fetchApi(path, {
     method,
     headers: body ? { 'Content-Type': 'application/json' } : undefined,

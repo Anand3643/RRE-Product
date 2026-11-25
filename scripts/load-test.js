@@ -54,7 +54,7 @@ async function main() {
   const base = `http://${srv.host}:${srv.port}`;
   const tok = require('../core/security').createSessionToken({ id: 1, username: 'admin', role: 'Owner' });
   const cash = (await db.get("SELECT id FROM ledgers WHERE name = 'Cash'")).id, rent = (await db.get("SELECT id FROM ledgers WHERE group_id = (SELECT id FROM account_groups WHERE name = 'Indirect Expenses') ORDER BY id LIMIT 1")).id;
-  const READS = ['/api/dashboard/tiles', '/api/reports/trial-balance', process.env.LOAD_DAYBOOK_PAGED ? '/api/reports/daybook?limit=100' : '/api/reports/daybook', '/api/masters/ledgers', '/api/reports/stock-summary', '/api/reports/balance-sheet'];
+  const READS = ['/api/dashboard/tiles', '/api/reports/trial-balance', process.env.LOAD_DAYBOOK_ALL ? '/api/reports/daybook' : '/api/reports/daybook?limit=200&entries=0', /* as the Day Book screen asks */ '/api/masters/ledgers', '/api/reports/stock-summary', '/api/reports/balance-sheet'];
   const one = async (i) => {
     const write = i % 10 < 3; // 30 % writes
     const t = process.hrtime.bigint();

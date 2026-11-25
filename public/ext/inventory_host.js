@@ -20,7 +20,7 @@
     return MAP[k] || k.replace(/^\//, '');
   };
   const screen = () => document.getElementById('sp-app');
-  function open(path) { if (window.StockPilotInv) window.StockPilotInv.open(route(path)); }
+  function open(path) { if (window.StockPilotInv) window.StockPilotInv.open(route(path)); document.dispatchEvent(new CustomEvent('rre-inventory')); }
   function close() { if (window.StockPilotInv) window.StockPilotInv.close(); }
   function isOpen() { const el = screen(); return !!(el && el.classList.contains('open')); }
   window.RREInventory = { open, close, reset: close, signOut: close, isOpen, route };

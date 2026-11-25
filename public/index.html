@@ -39,26 +39,17 @@
   <script src="/api/auth/mode.js"></script>
   <script>/* pre-paint settings sync from local SQLite + cache */(function(){try{var s=window.__RRE_SETTINGS||{};['tally_theme','rre_aurora_default_v1','au_mode','au_rail_open'].forEach(function(k){if(s[k]!=null)localStorage.setItem(k,String(s[k]));});var m=s.au_mode||localStorage.getItem('au_mode');if(m==='dark'||m==='light')document.documentElement.setAttribute('data-au',m);}catch(e){}})();</script>
   <script src="ext/session-guard.js"></script>
-  <script src="vendor/tailwind.min.js"></script>
-  <script src="vendor/lucide.min.js"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica Neue', 'Arial', 'sans-serif'],
-            mono: ['Consolas', 'Cascadia Code', 'JetBrains Mono', 'Monaco', 'Courier New', 'monospace']
-          }
-        }
-      }
-    };
-  </script>
+  <script src="vendor/lucide.subset.js"></script>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="theme/aurora.css">
   <script>/* avoid a flash: set the Light/Dark attribute before the page paints (only while the Aurora theme is the one in use) */try{var _t=localStorage.getItem('tally_theme');if(!localStorage.getItem('rre_aurora_default_v1')||_t==='aurora'){document.documentElement.setAttribute('data-au',localStorage.getItem('au_mode')==='dark'?'dark':'light');}}catch(e){}</script>
+  <script>/* avoid a layout jump: set the theme itself before the first paint too (same choice app.js initTheme() makes a moment later), so the side-rail spacing is there from the start */try{var _s=window.__RRE_SETTINGS||{},_th=_s.tally_theme||localStorage.getItem('tally_theme');if(!(_s.rre_aurora_default_v1||localStorage.getItem('rre_aurora_default_v1')))_th='aurora';document.documentElement.setAttribute('data-theme',_th||'aurora');}catch(e){}</script>
+  <link rel="stylesheet" href="vendor/tailwind.css"><!-- compiled ahead of time: npm run build:css (was compiled in the browser on every load) -->
 </head>
 
 <body class="bg-slate-100 text-slate-800 antialiased min-h-screen flex flex-col font-sans select-none">
+  <script src="ext/lazy-dom.js"></script><!-- rarely-opened screens and pop-ups are built on first use -->
+  <script>/* the side rail's expanded / narrow choice before the first paint (no sideways jump) */try{var _ro=(window.__RRE_SETTINGS||{}).au_rail_open||localStorage.getItem('au_rail_open');if(_ro==='1')document.body.classList.add('au-rail-open');}catch(e){}</script>
 
   <!-- ============================================== -->
   <!-- TOP TALLY STATUS & HOTKEY HEADER (TALLYPRIME)   -->
@@ -133,7 +124,7 @@
           <span id="top-user-name">Administrator</span>
           <span id="top-user-role">Owner</span>
         </div>
-        <button id="btn-top-users" class="hidden"></button>
+        <button id="btn-top-users" class="hidden" aria-label="Users and security"></button>
       </div>
     </div>
 
@@ -369,7 +360,7 @@
       <!-- ============================================== -->
       <!-- VIEW 0: AI EXECUTIVE WORKSPACE (AI ARCHITECTURE) -->
       <!-- ============================================== -->
-      <section id="view-ai-workspace"
+      <template data-lazy="view-ai-workspace"><section id="view-ai-workspace"
         class="w-full max-w-5xl bg-slate-900 text-slate-100 border border-indigo-500/30 rounded-xl shadow-2xl overflow-hidden hidden fade-in">
         <!-- AI Header -->
         <div
@@ -432,15 +423,51 @@
               </div>
             </div>
 
-        <!-- Tile 6: Stock Summary & Valuation (drilldown-stock) -->
-        <div onclick="openReport('stock-summary')" class="bg-white border border-slate-200 hover:border-purple-500 rounded-lg p-4 shadow-sm hover:shadow-md cursor-pointer transition space-y-3">
-          <div class="flex justify-between items-center border-b border-slate-100 pb-2">
-            <span class="font-bold text-xs text-slate-800 flex items-center space-x-1.5">
-              <i data-lucide="package" class="w-4 h-4 text-purple-600"></i>
-              <span>RRE Inventory Valuation</span>
-            </span>
-            <span class="text-[10px] text-purple-600 font-bold">Stock →</span>
+          <form id="form-ai-workspace-prompt" onsubmit="handleAiWorkspaceSubmit(event)" class="space-y-2.5">
+            <div class="relative">
+              <input type="text" id="ai-ws-prompt-input"
+                     placeholder="Ask ANY business question (e.g. 'What is our net profit?', 'Total purchases?', 'Stock of Compressors?') or draft a voucher (e.g. 'Paid Rent 15000'). Press Enter..."
+                     class="w-full bg-slate-900 border border-indigo-500/40 rounded-xl px-4 py-3 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent font-sans shadow-inner pr-32">
+              <button type="submit" id="btn-ai-ws-submit"
+                      class="absolute right-1.5 top-1.5 bottom-1.5 px-4 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white rounded-lg text-xs font-black shadow-md flex items-center space-x-1.5 transition">
+                <i data-lucide="sparkles" class="w-3.5 h-3.5 text-amber-300"></i>
+                <span>Run (Enter)</span>
+              </button>
+            </div>
+
+            <!-- Suggestion Chips -->
+            <div class="flex flex-wrap items-center gap-1.5 text-[11px]">
+              <span class="text-slate-500 font-bold">Ask Database:</span>
+              <button type="button" onclick="fillAndSubmitAiPrompt('What is our net profit and margins?')" class="px-2.5 py-0.5 rounded-full bg-slate-800 hover:bg-indigo-950 border border-indigo-500/40 text-indigo-300 hover:text-indigo-200 transition">
+                📊 Net Profit &amp; Margins
+              </button>
+              <button type="button" onclick="fillAndSubmitAiPrompt('Show total purchases and vendor bills')" class="px-2.5 py-0.5 rounded-full bg-slate-800 hover:bg-indigo-950 border border-indigo-500/40 text-indigo-300 hover:text-indigo-200 transition">
+                🛒 Total Purchases
+              </button>
+              <button type="button" onclick="fillAndSubmitAiPrompt('What is our total stock valuation?')" class="px-2.5 py-0.5 rounded-full bg-slate-800 hover:bg-indigo-950 border border-indigo-500/40 text-indigo-300 hover:text-indigo-200 transition">
+                📦 Stock Valuation
+              </button>
+              <button type="button" onclick="fillAndSubmitAiPrompt('What is our working capital and financial position?')" class="px-2.5 py-0.5 rounded-full bg-slate-800 hover:bg-indigo-950 border border-indigo-500/40 text-indigo-300 hover:text-indigo-200 transition">
+                ⚖️ Working Capital
+              </button>
+              <button type="button" onclick="fillAndSubmitAiPrompt('How much cash and bank balance do we have?')" class="px-2.5 py-0.5 rounded-full bg-slate-800 hover:bg-indigo-950 border border-indigo-500/40 text-indigo-300 hover:text-indigo-200 transition">
+                💰 Cash &amp; Bank
+              </button>
+              <span class="text-slate-600 font-bold ml-1">Draft:</span>
+              <button type="button" onclick="fillAndSubmitAiPrompt('Sold 5 Screw Compressors to Apex Tech at 45000 with 18% GST on credit')" class="px-2 py-0.5 rounded-full bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-300 transition">
+                ✨ Sold 5 Compressors @ 45k
+              </button>
+              <button type="button" onclick="fillAndSubmitAiPrompt('Paid Office Rent 15000 via Bank')" class="px-2 py-0.5 rounded-full bg-slate-800/80 hover:bg-slate-700 border border-slate-700 text-slate-300 transition">
+                ✨ Paid Rent ₹15k
+              </button>
+            </div>
+          </form>
+
+          <!-- Interactive Generated Voucher Card Preview (Dynamic) -->
+          <div id="ai-ws-draft-container" class="hidden mt-3 pt-3 border-t border-slate-800 space-y-2">
+            <!-- Dynamically populated via JS -->
           </div>
+        </div>
 
           <!-- 2. Live AI Financial Intelligence Metrics Grid -->
           <div>
@@ -561,7 +588,7 @@
             </button>
           </div>
         </div>
-      </section>
+      </section></template>
 
       <!-- ============================================== -->
       <!-- VIEW 1: GATEWAY OF TALLY (CANONICAL TALLYPRIME) -->
@@ -816,7 +843,7 @@
       <!-- ============================================== -->
       <!-- VIEW 1.5: DISPLAY MORE REPORTS MENU (D)         -->
       <!-- ============================================== -->
-      <section id="view-display-more"
+      <template data-lazy="view-display-more"><section id="view-display-more"
         class="w-full max-w-4xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden fade-in hidden">
         <div
           class="bg-[#1f3a52] text-white px-5 py-2.5 font-bold text-xs uppercase tracking-wider flex justify-between items-center border-b border-slate-600">
@@ -925,7 +952,7 @@
             </div>
           </div>
         </div>
-      </section>
+      </section></template>
 
       <!-- ============================================== -->
       <!-- VIEW 2: VOUCHER CREATION SCREEN (F4 TO F9)     -->
@@ -1043,22 +1070,6 @@
               <div>GSTIN: <span id="v-party-gstin" class="font-mono text-blue-700">33AABCC1234F1Z1</span></div>
               <div>GST Type: <strong id="v-party-gst-type" class="text-emerald-700">Intra-State (CGST + SGST)</strong>
               </div>
-              <div onclick="openReport('profit-loss')" class="gateway-item">
-                <span><span class="hotkey">P</span>rofit &amp; Loss A/c</span>
-                <span class="text-[10px] text-slate-400 font-mono">Gross/Net</span>
-              </div>
-              <div onclick="openReport('stock-summary')" class="gateway-item">
-                <span><span class="hotkey">S</span>tock Summary</span>
-                <span class="text-[10px] text-slate-400 font-mono">RRE Inventory</span>
-              </div>
-              <div onclick="openReport('ratio-analysis')" class="gateway-item">
-                <span><span class="hotkey">R</span>atio Analysis</span>
-                <span class="text-[10px] text-slate-400 font-mono">Ratios</span>
-              </div>
-              <div onclick="showDisplayMoreMenu()" class="gateway-item font-bold text-blue-900 bg-blue-50/50 hover:bg-blue-600">
-                <span><span class="hotkey">D</span>isplay More Reports</span>
-                <span class="text-[10px] text-blue-600 font-mono font-bold">&gt;&gt;</span>
-              </div>
             </div>
           </div>
 
@@ -1125,16 +1136,50 @@
             </div>
           </div>
 
-          <!-- INVENTORY & STATUTORY -->
-          <div>
-            <div class="text-[10px] font-black text-slate-400 uppercase tracking-widest px-3 mb-1">RRE Inventory &amp; Statutory</div>
-            <div class="space-y-0.5">
-              <div onclick="openReport('stock-summary')" class="gateway-item">
-                <span><span class="hotkey">I</span>nventory Books (Stock Summary)</span>
-                <span class="text-[10px] text-slate-400 font-mono">Valuation</span>
-              </div>
+        <!-- MODE B: ACCOUNTING VOUCHER (MANUAL DR/CR) -->
+        <div id="section-accounting-voucher" class="space-y-3 hidden">
+          <div class="flex justify-between items-center">
+            <h3 class="font-bold text-slate-800 text-xs uppercase tracking-wider flex items-center space-x-1.5">
+              <i data-lucide="scale" class="w-4 h-4 text-amber-600"></i>
+              <span>Double-Entry Ledger Lines (By/To or Dr/Cr)</span>
+            </h3>
+            <span class="text-[11px] text-slate-500">Every voucher must satisfy: $\sum Dr == \sum Cr$</span>
+          </div>
+
+          <div class="border border-slate-300 rounded-lg overflow-hidden shadow-sm">
+            <table class="w-full text-xs">
+              <thead class="bg-slate-800 text-white font-semibold">
+                <tr>
+                  <th class="p-2 w-16 text-center">Dr/Cr</th>
+                  <th class="p-2 text-left">Particulars (Ledger Name)</th>
+                  <th class="p-2 w-40 text-left">Cost Centre</th>
+                  <th class="p-2 w-36 text-right">Debit (₹)</th>
+                  <th class="p-2 w-36 text-right">Credit (₹)</th>
+                  <th class="p-2 w-10 text-center">✕</th>
+                </tr>
+              </thead>
+              <tbody id="voucher-entries-tbody" class="divide-y divide-slate-200 bg-white"></tbody>
+              <tfoot class="bg-slate-100 font-bold border-t-2 border-slate-300">
+                <tr>
+                  <td colspan="3" class="p-2.5 text-right uppercase text-slate-700">Total:</td>
+                  <td class="p-2.5 text-right font-mono text-sm text-blue-800" id="v-total-dr">₹0.00</td>
+                  <td class="p-2.5 text-right font-mono text-sm text-blue-800" id="v-total-cr">₹0.00</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <div class="flex justify-between items-center pt-1">
+            <button type="button" onclick="addDoubleEntryRow()" class="text-blue-600 hover:text-blue-800 font-bold flex items-center space-x-1">
+              <i data-lucide="plus" class="w-4 h-4"></i>
+              <span>Add Dr/Cr Entry Line</span>
+            </button>
+            <div id="v-balance-indicator" class="text-xs font-bold px-3 py-1 rounded bg-emerald-100 text-emerald-800">
+              Balanced: Difference = ₹0.00
             </div>
           </div>
+        </div>
 
           <!-- Bill-by-Bill Allocation Option -->
           <div id="bill-alloc-section" class="bg-slate-50 border border-slate-200 p-3.5 rounded-lg space-y-2">
@@ -1599,156 +1644,52 @@
       </section>
 
     <!-- ============================================== -->
-    <!-- VIEW 5: TRIAL BALANCE                          -->
+    <!-- VIEW 11: BANK RECONCILIATION STATEMENT (BRS)   -->
     <!-- ============================================== -->
-    <section id="view-trial-balance" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden hidden fade-in">
+    <section id="view-bank-recon" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden hidden fade-in">
       <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
         <div>
-          <h2 class="text-sm font-bold uppercase tracking-wider" id="tb-company-title">Trial Balance</h2>
-          <p class="text-[10px] text-slate-300">As on 31-Mar-2027 (Strict Mathematical Double-Entry Proof)</p>
+          <h2 class="text-sm font-bold uppercase tracking-wider">Bank Reconciliation Statement (BRS)</h2>
+          <p class="text-[10px] text-slate-300">Books Balance vs Bank Statement Balance</p>
         </div>
-        <div class="space-x-2">
-          <button onclick="window.print()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Print</button>
-          <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
-        </div>
+        <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
       </div>
 
-      <div class="p-6">
-        <div class="border border-slate-300 rounded-lg overflow-hidden text-xs">
-          <table class="w-full">
+      <div class="p-6 space-y-5 text-xs">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono">
+          <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+            <span class="text-slate-500 block text-[10px] font-sans">Balance as per Company Books:</span>
+            <div id="brs-book-balance" class="text-slate-900 font-bold text-sm mt-1">₹0.00</div>
+          </div>
+          <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
+            <span class="text-slate-500 block text-[10px] font-sans">Balance as per Bank:</span>
+            <div id="brs-bank-balance" class="text-emerald-700 font-bold text-sm mt-1">₹0.00</div>
+          </div>
+          <div class="bg-amber-50 p-3 rounded-lg border border-amber-200">
+            <span class="text-amber-900 block text-[10px] font-sans">Amounts not reflected in Bank:</span>
+            <div id="brs-diff" class="text-amber-800 font-bold text-sm mt-1">₹0.00</div>
+          </div>
+        </div>
+
+        <div class="border border-slate-300 rounded-lg overflow-hidden">
+          <table class="w-full text-xs">
             <thead class="bg-slate-800 text-white font-semibold">
               <tr>
-                <th class="p-2.5 text-left">Particulars (Ledger Name)</th>
-                <th class="p-2.5 text-left w-48">Parent Group</th>
-                <th class="p-2.5 text-right w-36">Debit (₹)</th>
-                <th class="p-2.5 text-right w-36">Credit (₹)</th>
+                <th class="p-2 text-center w-24">Date</th>
+                <th class="p-2 text-left">Particulars</th>
+                <th class="p-2 text-center w-24">Vch Type</th>
+                <th class="p-2 text-left w-32">Instrument No</th>
+                <th class="p-2 text-right w-28">Debit (₹)</th>
+                <th class="p-2 text-right w-28">Credit (₹)</th>
+                <th class="p-2 text-center w-36">Bank Date</th>
+                <th class="p-2 text-center w-20">Action</th>
               </tr>
             </thead>
-            <tbody id="tb-tbody" class="divide-y divide-slate-200 bg-white font-mono"></tbody>
-            <tfoot class="bg-slate-100 font-bold border-t-2 border-slate-300">
-              <tr>
-                <td colspan="2" class="p-3 text-right uppercase text-slate-700 font-sans">Total:</td>
-                <td class="p-3 text-right font-mono text-sm text-blue-700" id="tb-total-dr">₹0.00</td>
-                <td class="p-3 text-right font-mono text-sm text-blue-700" id="tb-total-cr">₹0.00</td>
-              </tr>
-            </tfoot>
-          </table>
-        </div>
-        <div id="tb-status-badge" class="mt-4 p-3 rounded-lg text-xs font-bold text-center bg-emerald-100 text-emerald-800">
-          Trial Balance In Equilibrium: Total Debit matches Total Credit exactly!
-        </div>
-      </div>
-    </section>
-
-    <!-- ============================================== -->
-    <!-- VIEW 6: STOCK SUMMARY                          -->
-    <!-- ============================================== -->
-    <section id="view-stock-summary" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden hidden fade-in">
-      <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
-        <div>
-          <h2 class="text-sm font-bold uppercase tracking-wider">Stock Summary — RRE Inventory Valuation</h2>
-          <p class="text-[10px] text-slate-300">Method: Weighted Average Rate</p>
-        </div>
-        <div class="space-x-2">
-          <button onclick="openModal('createStockModal')" class="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-900 rounded text-xs font-bold">+ New Item</button>
-          <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
-        </div>
-      </div>
-
-      <div class="p-6">
-        <div class="border border-slate-300 rounded-lg overflow-hidden text-xs">
-          <table class="w-full">
-            <thead class="bg-slate-800 text-white font-semibold">
-              <tr>
-                <th class="p-2.5 text-left">Item Name</th>
-                <th class="p-2.5 text-center w-20">HSN</th>
-                <th class="p-2.5 text-center w-24">GST %</th>
-                <th class="p-2.5 text-right w-24">Inward</th>
-                <th class="p-2.5 text-right w-24">Outward</th>
-                <th class="p-2.5 text-right w-28">Closing Qty</th>
-                <th class="p-2.5 text-right w-32">Rate (₹)</th>
-                <th class="p-2.5 text-right w-36">Closing Value (₹)</th>
-              </tr>
-            </thead>
-            <tbody id="stock-tbody" class="divide-y divide-slate-200 bg-white font-mono"></tbody>
-            <tfoot class="bg-slate-100 font-bold border-t-2 border-slate-300">
-              <tr>
-                <td colspan="7" class="p-3 text-right uppercase font-sans">Total Stock Valuation:</td>
-                <td class="p-3 text-right font-mono text-sm text-blue-700" id="stock-total-val">₹0.00</td>
-              </tr>
-            </tfoot>
+            <tbody id="brs-tbody" class="divide-y divide-slate-200 bg-white font-mono"></tbody>
           </table>
         </div>
       </div>
     </section>
-
-    <!-- ============================================== -->
-    <!-- VIEW 7: DAY BOOK                               -->
-    <!-- ============================================== -->
-    <section id="view-daybook" class="w-full max-w-5xl bg-white border border-slate-300 rounded-lg shadow-xl overflow-hidden hidden fade-in">
-      <div class="bg-[#1f3a52] text-white px-5 py-2.5 flex justify-between items-center">
-        <div>
-          <h2 class="text-sm font-bold uppercase tracking-wider">Day Book — Voucher Register</h2>
-          <p class="text-[10px] text-slate-300">Audit trail of all accounting vouchers</p>
-        </div>
-        <div class="space-x-2">
-          <button onclick="showGateway()" class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
-        </div>
-      </div>
-
-      <div class="p-6 space-y-4">
-        <div class="flex flex-wrap items-center justify-between gap-3 text-xs bg-slate-50 p-3 rounded-lg border border-slate-200">
-          <div class="flex items-center space-x-2">
-            <span class="font-bold text-slate-700">Filter Type:</span>
-            <select id="daybook-type-filter" onchange="loadDaybook()" class="border border-slate-300 rounded p-1.5 bg-white font-semibold">
-              <option value="">All Voucher Types</option>
-              <option value="Sales">Sales (F8)</option>
-              <option value="Purchase">Purchase (F9)</option>
-              <option value="Payment">Payment (F5)</option>
-              <option value="Receipt">Receipt (F6)</option>
-              <option value="Contra">Contra (F4)</option>
-              <option value="Journal">Journal (F7)</option>
-            </select>
-          </div>
-          <button onclick="showGateway()"
-            class="px-2.5 py-1 bg-slate-700 hover:bg-slate-600 rounded text-xs font-semibold">Esc</button>
-        </div>
-
-        <div class="p-6 space-y-5 text-xs">
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 font-mono">
-            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
-              <span class="text-slate-500 block text-[10px] font-sans">Balance as per Company Books:</span>
-              <div id="brs-book-balance" class="text-slate-900 font-bold text-sm mt-1">₹0.00</div>
-            </div>
-            <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
-              <span class="text-slate-500 block text-[10px] font-sans">Balance as per Bank:</span>
-              <div id="brs-bank-balance" class="text-emerald-700 font-bold text-sm mt-1">₹0.00</div>
-            </div>
-            <div class="bg-amber-50 p-3 rounded-lg border border-amber-200">
-              <span class="text-amber-900 block text-[10px] font-sans">Amounts not reflected in Bank:</span>
-              <div id="brs-diff" class="text-amber-800 font-bold text-sm mt-1">₹0.00</div>
-            </div>
-          </div>
-
-          <div class="border border-slate-300 rounded-lg overflow-hidden">
-            <table class="w-full text-xs">
-              <thead class="bg-slate-800 text-white font-semibold">
-                <tr>
-                  <th class="p-2 text-center w-24">Date</th>
-                  <th class="p-2 text-left">Particulars</th>
-                  <th class="p-2 text-center w-24">Vch Type</th>
-                  <th class="p-2 text-left w-32">Instrument No</th>
-                  <th class="p-2 text-right w-28">Debit (₹)</th>
-                  <th class="p-2 text-right w-28">Credit (₹)</th>
-                  <th class="p-2 text-center w-36">Bank Date</th>
-                  <th class="p-2 text-center w-20">Action</th>
-                </tr>
-              </thead>
-              <tbody id="brs-tbody" class="divide-y divide-slate-200 bg-white font-mono"></tbody>
-            </table>
-          </div>
-        </div>
-      </section>
 
       <!-- ============================================== -->
       <!-- VIEW 12: CHART OF ACCOUNTS (TREE)              -->
@@ -2233,7 +2174,7 @@
   <!-- ============================================== -->
   <!-- MODAL: CREATE ACCOUNT GROUP MASTER             -->
   <!-- ============================================== -->
-  <div id="createGroupModal" class="modal-backdrop hidden">
+  <template data-lazy="createGroupModal"><div id="createGroupModal" class="modal-backdrop hidden">
     <div class="bg-white rounded-lg shadow-2xl max-w-lg w-full border border-slate-300 overflow-hidden text-xs">
       <div class="bg-[#1f3a52] text-white px-4 py-2.5 font-bold flex justify-between items-center">
         <div class="flex items-center space-x-2">
@@ -2283,12 +2224,12 @@
         </div>
       </form>
     </div>
-  </div>
+  </div></template>
 
   <!-- ============================================== -->
   <!-- MODAL: CREATE LEDGER (ALT+C)                   -->
   <!-- ============================================== -->
-  <div id="createLedgerModal" class="modal-backdrop hidden">
+  <template data-lazy="createLedgerModal"><div id="createLedgerModal" class="modal-backdrop hidden">
     <div class="bg-white rounded-lg shadow-2xl max-w-lg w-full border border-slate-300 overflow-hidden text-xs">
       <div class="bg-[#1f3a52] text-white px-4 py-2.5 font-bold flex justify-between items-center">
         <span>Ledger Creation Master (Alt+C)</span>
@@ -2354,7 +2295,7 @@
         </div>
       </form>
     </div>
-  </div>
+  </div></template>
 
   <!-- ============================================== -->
   <!-- MODAL: CREATE STOCK ITEM MASTER                -->
@@ -2515,7 +2456,7 @@
   <!-- ============================================== -->
   <!-- MODAL: TALLY SECURITY CONTROL - USERS & PASSWORDS (ALT+K) -->
   <!-- ============================================== -->
-  <div id="userManagementModal" class="modal-backdrop hidden">
+  <template data-lazy="userManagementModal"><div id="userManagementModal" class="modal-backdrop hidden">
     <div
       class="bg-white rounded-lg shadow-2xl max-w-4xl w-full border border-slate-300 overflow-hidden text-xs max-h-[90vh] flex flex-col">
       <!-- Header -->
@@ -2663,7 +2604,7 @@
         </button>
       </div>
     </div>
-  </div>
+  </div></template>
 
   <!-- ============================================== -->
   <!-- MODAL: ADD / EDIT USER DIALOG                  -->
@@ -2779,7 +2720,7 @@
   <!-- ============================================== -->
   <!-- MODAL: THEME & COLOR PALETTE SELECTOR (ALT+T)  -->
   <!-- ============================================== -->
-  <div id="themeSelectorModal" class="modal-backdrop hidden">
+  <template data-lazy="themeSelectorModal"><div id="themeSelectorModal" class="modal-backdrop hidden">
     <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-300 overflow-hidden text-xs">
       <div class="bg-[#1f3a52] modal-header-themed text-white px-5 py-3 font-bold flex justify-between items-center">
         <div class="flex items-center space-x-2">
@@ -2946,7 +2887,7 @@
         </button>
       </div>
     </div>
-  </div>
+  </div></template>
 
   <!-- ============================================== -->
   <!-- MODAL: GO TO (ALT+G) UNIVERSAL SEARCH & JUMP   -->
@@ -2996,7 +2937,7 @@
   <!-- ============================================== -->
   <!-- MODAL: MASTER CREATION (C)                     -->
   <!-- ============================================== -->
-  <div id="masterCreateModal" class="modal-backdrop hidden">
+  <template data-lazy="masterCreateModal"><div id="masterCreateModal" class="modal-backdrop hidden">
     <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full border border-slate-300 overflow-hidden text-xs">
       <div class="bg-[#1f3a52] text-white px-5 py-3 font-bold flex justify-between items-center">
         <div class="flex items-center space-x-2">
@@ -3107,7 +3048,7 @@
           class="px-4 py-1.5 bg-slate-700 hover:bg-slate-800 text-white rounded font-bold">Close (Esc)</button>
       </div>
     </div>
-  </div>
+  </div></template>
 
   <!-- ============================================== -->
   <!-- MODAL: MASTER ALTERATION (A)                   -->
@@ -3157,7 +3098,7 @@
   <!-- ============================================== -->
   <!-- MODAL: F11 COMPANY FEATURES                    -->
   <!-- ============================================== -->
-  <div id="f11FeaturesModal" class="modal-backdrop hidden">
+  <template data-lazy="f11FeaturesModal"><div id="f11FeaturesModal" class="modal-backdrop hidden">
     <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-300 overflow-hidden text-xs">
       <div class="bg-[#1f3a52] text-white px-5 py-3 font-bold flex justify-between items-center">
         <div class="flex items-center space-x-2">
@@ -3247,7 +3188,7 @@
         </button>
       </div>
     </div>
-  </div>
+  </div></template>
 
   <!-- ============================================== -->
   <!-- MODAL: F12 CONFIGURATION                       -->
@@ -3458,7 +3399,7 @@
   <!-- ============================================== -->
   <!-- MODAL: DATA & DISASTER RECOVERY (ALT+Y)        -->
   <!-- ============================================== -->
-  <div id="dataMenuModal" class="modal-backdrop hidden">
+  <template data-lazy="dataMenuModal"><div id="dataMenuModal" class="modal-backdrop hidden">
     <div class="bg-white rounded-xl shadow-2xl max-w-3xl w-full border border-slate-300 overflow-hidden text-xs">
       <div class="bg-[#1f3a52] text-white px-5 py-3 font-bold flex justify-between items-center">
         <div class="flex items-center space-x-2">
@@ -3582,7 +3523,7 @@
           class="px-4 py-1.5 bg-[#1f3a52] text-white rounded font-bold hover:bg-[#162a3b]">Close (Esc)</button>
       </div>
     </div>
-  </div>
+  </div></template>
 
   <!-- ============================================== -->
   <!-- MODAL: EXCHANGE (ALT+Z)                        -->
@@ -3625,7 +3566,7 @@
   <!-- ============================================== -->
   <!-- MODAL: HELP & SHORTCUTS (F1)                   -->
   <!-- ============================================== -->
-  <div id="helpMenuModal" class="modal-backdrop hidden">
+  <template data-lazy="helpMenuModal"><div id="helpMenuModal" class="modal-backdrop hidden">
     <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-300 overflow-hidden text-xs">
       <div class="bg-[#1f3a52] text-white px-5 py-3 font-bold flex justify-between items-center">
         <div class="flex items-center space-x-2">
@@ -3762,7 +3703,7 @@
           class="px-4 py-1.5 bg-[#1f3a52] text-white rounded font-bold hover:bg-[#162a3b]">Understood (Esc)</button>
       </div>
     </div>
-  </div>
+  </div></template>
 
   <!-- ============================================== -->
   <!-- MODAL: REGISTER / CREATE ACCOUNT (EMAIL)       -->
@@ -3931,7 +3872,7 @@
   <!-- ============================================== -->
   <!-- AI COPILOT SLIDE-OUT DRAWER (AI SIDECAR)       -->
   <!-- ============================================== -->
-  <aside id="ai-copilot-drawer"
+  <template data-lazy="ai-copilot-drawer"><aside id="ai-copilot-drawer"
     class="fixed right-0 top-0 bottom-0 w-96 max-w-[90vw] z-50 bg-[#0b1329] text-slate-100 shadow-2xl border-l border-indigo-500/30 flex flex-col hidden fade-in font-sans">
     <!-- Copilot Header -->
     <div
@@ -4034,7 +3975,7 @@
         <i data-lucide="send" class="w-3.5 h-3.5"></i>
       </button>
     </form>
-  </aside>
+  </aside></template>
 
   <!-- ============================================== -->
   <!-- MODAL: AI OMNI-SEARCH COMMAND PALETTE (CTRL+K)  -->
@@ -4163,7 +4104,7 @@ TOTAL PAYABLE: Rs. 53,100.00"
   <!-- ============================================== -->
   <!-- MODAL: QUOTATION DETAIL & FOLLOW-UP TIMELINE    -->
   <!-- ============================================== -->
-  <div id="quoteDetailModal" class="modal-backdrop hidden">
+  <template data-lazy="quoteDetailModal"><div id="quoteDetailModal" class="modal-backdrop hidden">
     <div
       class="bg-white rounded-lg shadow-2xl max-w-4xl w-full border border-slate-300 overflow-hidden text-xs max-h-[92vh] flex flex-col">
       <div class="bg-[#1f3a52] text-white px-4 py-2.5 font-bold flex justify-between items-center shrink-0">
@@ -4269,7 +4210,7 @@ TOTAL PAYABLE: Rs. 53,100.00"
         </div>
       </div>
     </div>
-  </div>
+  </div></template>
 
   <script src="ext/auth-bridge.js"></script>
   <script src="ext/invoice-compose.js"></script>

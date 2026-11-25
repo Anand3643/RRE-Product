@@ -130,7 +130,7 @@ router.get('/daybook', async (req, res) => {
 
     // the lines of all these vouchers in a few queries (one query per voucher took seconds on a large book)
     const byVoucher = new Map(vouchers.map((v) => [v.id, []]));
-    const ids = vouchers.map((v) => v.id);
+    const ids = req.query.entries === '0' ? [] : vouchers.map((v) => v.id); // ?entries=0: the voucher rows only
     for (let i = 0; i < ids.length; i += 500) {
       const part = ids.slice(i, i + 500);
       const rows = await all(`

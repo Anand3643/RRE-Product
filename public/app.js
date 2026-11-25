@@ -1587,6 +1587,14 @@ async function handleVoucherAiAutoFill() {
 // ----------------------------------------------------
 async function handleSaveVoucher(e) {
   e.preventDefault();
+  // one save at a time: a double click or Enter pressed twice must not post the voucher twice
+  if (handleSaveVoucher.busy) return;
+  handleSaveVoucher.busy = true;
+  const formButtons = e && e.target && e.target.querySelectorAll ? Array.from(e.target.querySelectorAll('button[type="submit"], button:not([type])')) : [];
+  formButtons.forEach((b) => { b.disabled = true; });
+  try { return await saveVoucherNow(e); } finally { handleSaveVoucher.busy = false; formButtons.forEach((b) => { b.disabled = false; }); }
+}
+async function saveVoucherNow(e) {
 
   if (!checkPermission('canCreateVouchers', 'Accounting Voucher Entry')) {
     return;
@@ -1984,17 +1992,22 @@ async function loadStockSummary() {
 }
 
 // 4E. DAY BOOK
-async function loadDaybook() {
+// The Day Book is read 200 vouchers at a time (latest first) and without their lines, which this list does not show; "Load more" adds the next 200.
+const DAYBOOK_PAGE = 200;
+async function loadDaybook(append = false) {
   try {
     const typeFilter = document.getElementById('daybook-type-filter').value;
-    const url = typeFilter ? `${API_BASE}/reports/daybook?type=${encodeURIComponent(typeFilter)}` : `${API_BASE}/reports/daybook`;
+    const tbody = document.getElementById('daybook-tbody');
+    const offset = append ? (tbody.querySelectorAll('tr[data-vid]').length) : 0;
+    const url = `${API_BASE}/reports/daybook?limit=${DAYBOOK_PAGE}&offset=${offset}&entries=0${typeFilter ? `&type=${encodeURIComponent(typeFilter)}` : ''}`;
     const res = await fetch(url);
     const json = await res.json();
     if (!json.success) return;
+    const total = parseInt(res.headers.get('X-Total-Count'), 10);
 
-    const tbody = document.getElementById('daybook-tbody');
-    tbody.innerHTML = json.data.map(v => `
-      <tr class="hover:bg-slate-50 cursor-pointer" onclick="viewVoucherDetail(${v.id})">
+    const more = tbody.querySelector('tr.daybook-more'); if (more) more.remove();
+    const rows = json.data.map(v => `
+      <tr data-vid="${v.id}" class="hover:bg-slate-50 cursor-pointer" onclick="viewVoucherDetail(${v.id})">
         <td class="p-2.5 text-center font-mono text-slate-600">${formatDateDisplay(v.date)}</td>
         <td class="p-2.5 font-mono font-bold text-blue-700">${v.voucher_no}</td>
         <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold ${getVoucherBadgeColor(v.voucher_type)}">${v.voucher_type}</span></td>
@@ -2002,6 +2015,11 @@ async function loadDaybook() {
         <td class="p-2.5 text-right font-mono font-bold text-slate-900">${formatCurrency(v.total_amount)}</td>
       </tr>
     `).join('');
+    if (append) tbody.insertAdjacentHTML('beforeend', rows); else tbody.innerHTML = rows;
+    const shown = tbody.querySelectorAll('tr[data-vid]').length;
+    if (Number.isFinite(total) && shown < total) {
+      tbody.insertAdjacentHTML('beforeend', `<tr class="daybook-more"><td colspan="5" class="p-2.5 text-center"><button type="button" class="px-3 py-1.5 rounded border border-slate-300 font-bold text-slate-700 hover:bg-slate-50" onclick="this.disabled=true;loadDaybook(true)">Load more (${shown.toLocaleString('en-IN')} of ${total.toLocaleString('en-IN')} vouchers shown)</button></td></tr>`);
+    }
   } catch (err) {
     console.error('Failed to load Day Book:', err);
   }

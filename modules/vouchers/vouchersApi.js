@@ -31,6 +31,12 @@ router.get('/', async (req, res) => {
     }
 
     sql += ' ORDER BY v.date DESC, v.id DESC';
+    // ?limit=&offset= return one page (the dashboard asks for limit=500 and used to receive every voucher); total in X-Total-Count
+    const limit = parseInt(req.query.limit, 10), offset = Math.max(0, parseInt(req.query.offset, 10) || 0);
+    if (limit > 0) {
+      res.set('X-Total-Count', String((await get(`SELECT COUNT(*) AS n FROM (${sql}) AS t`, params)).n));
+      sql += ' LIMIT ? OFFSET ?'; params.push(Math.min(limit, 1000), offset);
+    }
     const vouchers = await all(sql, params);
     res.json({ success: true, data: vouchers });
   } catch (err) {

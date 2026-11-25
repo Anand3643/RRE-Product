@@ -16,7 +16,9 @@ SQLite files on this computer. SQLite stays the default until you switch. Read "
 
 * **One database for every company.** Every row carries `company_no` (`100000`, `100001`, ... and `U<id>` for a self-registered
   customer's own books). Primary keys are `(company_no, id)` and every foreign key is `(company_no, x_id) -> (company_no, id)`, so a
-  row can never reference another company's record. Ids keep the values they had in SQLite and are numbered per company.
+  row can never reference another company's record. Copied rows keep the ids they had in SQLite; new rows get ids from one
+  sequence per table (migration 007), so ids are unique and increasing within a company but not consecutive. Voucher NUMBERS are
+  separate and stay consecutive per voucher type.
 * **Only the RRE server talks to the database.** Its connections switch to the restricted role `rre_app` (no ownership, cannot
   bypass row level security) and tell the database which company the current request works in (`rre.company_id`).
   With no company set, every table looks empty (fail closed).
@@ -28,9 +30,19 @@ SQLite files on this computer. SQLite stays the default until you switch. Read "
   (placeholders, `INSERT OR IGNORE`, case-insensitive `LIKE`, empty values first in ascending sorts, `GROUP BY` / `HAVING` habits,
   constraint error wording) and the database has SQLite's date functions (`datetime`, `date`, `julianday`) with the same results.
   Transactions behave as on SQLite: a failing statement inside a transaction fails alone.
-* **Transactions:** postings go through one queue per company (`core/tx.js`). Only the statements of a transaction use its
-  connection; every other request keeps running on other connections and sees committed data only. A wait for a locked row ends
-  after 15 s with an error (`RRE_PG_LOCK_TIMEOUT`), never as a hang.
+* **Transactions (`core/tx.js`):** only the statements of a transaction use its connection; every other request keeps running on
+  other connections and sees committed data only. A wait for a locked row ends after 15 s with an error (`RRE_PG_LOCK_TIMEOUT`),
+  never as a hang.
+  * **Voucher postings run at the same time** (`withTransaction(fn, { concurrent: true })`, READ COMMITTED). They wait for each
+    other only where they really conflict, using transaction-scoped advisory locks taken in a fixed (sorted) order so two postings
+    cannot deadlock each other:
+    `voucher-no:<prefix>` (two postings auto-numbering the same voucher type), `stock:<item id>` (two postings selling the same
+    item while negative stock is blocked), `idem:<Idempotency-Key>` (the same request sent twice). Everything else - different
+    voucher types, different items, other companies - goes through in parallel. A database deadlock is retried (up to 5 times).
+  * **Other writes** (masters, settings, imports, year-end, inventory documents) still go through one queue per company, as on
+    SQLite. On SQLite everything uses the queue (SQLite allows one writer at a time anyway).
+  * Accounting checks are unchanged in both modes: debits = credits to the paisa, every ledger must exist, stock check per policy,
+    all lines of a voucher are written in one transaction or none.
 
 ## 2. Schema
 
@@ -64,6 +76,8 @@ Migration files (applied in order, each once, recorded with a checksum in `rre_m
 | `003_sqlite_compat.sql` | `datetime`, `date`, `julianday`, `printf`, case-insensitive collation |
 | `004_company_registry.sql` | `rre_meta.companies` |
 | `005_idempotency_keys.sql` | repeated financial requests (same Idempotency-Key) return the first result (= SQLite migration 022) |
+| `006_party_and_group_indexes.sql` | indexes for party / group look-ups used by reports and the Day Book (= SQLite migration 023) |
+| `007_id_sequences.sql` | new row ids from a sequence per table instead of a per-company counter row (the counter row made every posting wait for the previous one). Rows inserted with an explicit id (copy / restore) move the sequence past it |
 
 `001` is frozen: a schema change is a NEW numbered file here plus the matching SQLite migration in `core/migrations.js`.
 `test_pg_cloud.js` fails if any SQLite table or column is missing in PostgreSQL.
@@ -90,6 +104,23 @@ Going back to SQLite is removing `RRE_DB=postgres` from `.env` and restarting (t
 while on PostgreSQL is only in PostgreSQL).
 
 No Supabase service-role key or API key is needed or used; nothing about the database reaches the browser.
+
+**Check the security after connecting** (in Supabase -> SQL editor):
+```sql
+-- every RRE table has row level security switched on and forced: expect 0 rows
+SELECT relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+ WHERE n.nspname = 'rre' AND c.relkind = 'r' AND NOT (c.relrowsecurity AND c.relforcerowsecurity);
+-- as the application role, with no company chosen, nothing is visible: expect 0
+SET ROLE rre_app; SELECT count(*) FROM rre.vouchers; RESET ROLE;
+-- the public web API roles have no rights on the data: expect false
+SELECT has_schema_privilege('anon', 'rre', 'USAGE'), has_schema_privilege('authenticated', 'rre', 'USAGE');
+```
+Then run `node test_pg_cloud.js` with `DATABASE_URL` pointing at a **separate test project** (it creates and drops its own test
+data; never point it at the live project).
+
+**Sign-in:** RRE keeps its own sign-in (you chose this, so no user has to reset a password). Supabase Auth would mean moving every
+user account to Supabase and changing every screen's sign-in; it is not implemented. Row level security does not depend on it: the
+server tells the database which company each request works in, and the restricted role cannot see anything else.
 
 ## 4. Security
 
@@ -162,8 +193,11 @@ Results are in the commit / release notes of this phase.
   queries will be slower than on local SQLite until measured and optimised.
 * **One server process only.** Session cache, the "active company" and transaction handling live in the process; running several
   RRE servers against one database is not supported yet.
-* **Postings inside one company are serialised** (one transaction at a time per company, so numbers and stock checks are safe);
-  reads and other companies run in parallel. Under load the write queue is what grows (see the load test).
+* **Voucher postings on PostgreSQL run in parallel** (section 1); other writes inside one company still queue. On SQLite every write
+  queues. Measured locally (100 simulated users, PostgreSQL): 0 errors, 0 unbalanced vouchers; numbers over the internet to
+  Supabase are not measured yet.
+* **Multi-tenant membership model** (a user belonging to several companies with a role in each, `company_members` table, Supabase
+  Auth user ids) is not built: today each company has its own user list and the server picks the company. Planned as its own phase.
 * **RRE Inventory is part of the books:** its screens (`public/inv/inv.js`) work on the company's own tables (stock items, warehouses,
   customers / suppliers = ledgers, orders = vouchers), so on PostgreSQL inventory is in the cloud database too. The former separate
   inventory application (Python, its own `stockpilot.db`) is no longer opened; its code is still in `inventory-app/` but unused.
@@ -172,7 +206,7 @@ Results are in the commit / release notes of this phase.
 * **Posted vouchers can still be deleted** by roles allowed to (Owner; not Data Entry). A delete is never silent any more: the complete
   voucher is written to the audit log in the same transaction. The accounting-correct alternative, `POST /api/vouchers/:id/reverse`,
   exists on the server; the screens do not offer it yet. Removing delete entirely is a behaviour change still to be decided.
-* **The Day Book screen loads every voucher** (3.3 MB for 5,000 vouchers). The API can page (`?limit=&offset=`); the screen does not yet.
+* **Reports other than the Day Book are not paged** (the Day Book screen loads 200 vouchers at a time with "Load more").
 * **Table names** stay those of the application (e.g. `stock_items` for products, `vouchers` for invoices); no separate
   `products` / `sales` / `invoices` tables were created, because that would duplicate the data.
 * Supabase backups / PITR are not configured or verified (no project yet).

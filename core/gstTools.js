@@ -280,10 +280,19 @@ async function loadBooksPurchases(period) {
     SELECT v.id, v.voucher_no, v.date, v.reference_no, v.total_amount, p.name AS supplier, p.gstin
     FROM vouchers v LEFT JOIN ledgers p ON v.party_ledger_id = p.id WHERE ${where} ORDER BY v.date`, params);
   const out = [];
+  // the tax lines of all these vouchers in a few queries (one query per voucher was thousands of round trips in a busy period)
+  const taxesOf = new Map(), ids = vs.map((v) => v.id);
+  for (let i = 0; i < ids.length; i += 500) {
+    const part = ids.slice(i, i + 500);
+    for (const x of await all(`
+      SELECT e.voucher_id, l.name, e.debit_amount, e.credit_amount FROM ledger_entries e JOIN ledgers l ON e.ledger_id = l.id
+      JOIN account_groups g ON l.group_id = g.id WHERE e.voucher_id IN (${part.map(() => '?').join(', ')}) AND g.name = 'Duties & Taxes' ORDER BY e.voucher_id, e.id`, part)) {
+      if (!taxesOf.has(x.voucher_id)) taxesOf.set(x.voucher_id, []);
+      taxesOf.get(x.voucher_id).push(x);
+    }
+  }
   for (const v of vs) {
-    const taxes = await all(`
-      SELECT l.name, e.debit_amount, e.credit_amount FROM ledger_entries e JOIN ledgers l ON e.ledger_id = l.id
-      JOIN account_groups g ON l.group_id = g.id WHERE e.voucher_id = ? AND g.name = 'Duties & Taxes'`, [v.id]);
+    const taxes = taxesOf.get(v.id) || [];
     const t = { igst: 0, cgst: 0, sgst: 0, cess: 0 };
     for (const x of taxes) { const k = taxKind(x.name); if (k) t[k] += x.debit_amount - x.credit_amount; }
     const totalTax = t.igst + t.cgst + t.sgst + t.cess;

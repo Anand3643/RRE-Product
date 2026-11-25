@@ -17,14 +17,23 @@ async function calculateGSTReports() {
   let outwardSGST = 0;
   let outwardIGST = 0;
 
-  for (const v of salesVouchers) {
-    const entries = await all(`
+  // the lines of ALL these vouchers in one query (one query per voucher took thousands of database round trips on a large book)
+  const linesByVoucher = new Map();
+  for (const e of await all(`
       SELECT e.*, l.name as ledger_name, g.name as group_name
       FROM ledger_entries e
+      JOIN vouchers v ON v.id = e.voucher_id
       JOIN ledgers l ON e.ledger_id = l.id
       JOIN account_groups g ON l.group_id = g.id
-      WHERE e.voucher_id = ?
-    `, [v.id]);
+      WHERE v.voucher_type IN ('Sales', 'Credit Note')
+      ORDER BY e.voucher_id, e.id
+    `)) {
+    if (!linesByVoucher.has(e.voucher_id)) linesByVoucher.set(e.voucher_id, []);
+    linesByVoucher.get(e.voucher_id).push(e);
+  }
+
+  for (const v of salesVouchers) {
+    const entries = linesByVoucher.get(v.id) || [];
 
     let taxable = 0;
     let cgst = 0;
