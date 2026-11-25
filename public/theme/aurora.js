@@ -23,7 +23,19 @@
   const scroller = () => { const m = $('main'); return m && m.scrollHeight > m.clientHeight + 4 ? m : (doc.scrollingElement || html); };
   const scrollTopNow = () => (scroller() === (doc.scrollingElement || html) ? window.scrollY : scroller().scrollTop);
   const viewH = () => (scroller() === (doc.scrollingElement || html) ? window.innerHeight : scroller().clientHeight);
-  const store = { get: (k) => { try { return localStorage.getItem(k); } catch (e) { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch (e) { /* ignore */ } } };
+  const persistSetting = (k, v) => {
+    try {
+      fetch(base() + '/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [k]: String(v) })
+      }).catch(() => {});
+    } catch (e) { /* ignore */ }
+  };
+  const store = {
+    get: (k) => { try { return ((window.__RRE_SETTINGS && window.__RRE_SETTINGS[k] != null) ? String(window.__RRE_SETTINGS[k]) : null) || localStorage.getItem(k); } catch (e) { return null; } },
+    set: (k, v) => { try { localStorage.setItem(k, v); window.__RRE_SETTINGS = window.__RRE_SETTINGS || {}; window.__RRE_SETTINGS[k] = String(v); } catch (e) { /* ignore */ } persistSetting(k, v); }
+  };
 
   // ------------------------------------------------------------------ motion switch
   function syncMotion() { html.classList.toggle('au-motion', motionOn()); }

@@ -27,6 +27,7 @@ const PUBLIC = [
   ['POST', /^\/api\/auth\/auto\/?$/], // answers only when RRE_SKIP_LOGIN=1 and the request comes from this computer
   ['GET', /^\/api\/health\/?$/],
   ['GET', /^\/api\/gateway\/info\/?$/],
+  ['GET', /^\/api\/settings(\/storage)?\/?$/],
   ['GET', /^\/api\/system\/update-status\/?$/]
 ];
 

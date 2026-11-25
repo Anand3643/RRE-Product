@@ -245,19 +245,37 @@ function togglePasswordVisibility(inputId) {
 
 const THEMES = ['aurora', 'tally-gold', 'retro-green', 'midnight-dark', 'ruby-red', 'nordic-light', 'solar-amber'];
 
-function initTheme() {
-  let savedTheme = localStorage.getItem('tally_theme');
-  // One time only: the new Aurora look becomes the default. Anyone can pick another theme (Alt+T) and it is remembered from then on.
-  if (!localStorage.getItem('rre_aurora_default_v1')) { localStorage.setItem('rre_aurora_default_v1', '1'); savedTheme = 'aurora'; }
-  applyTheme(savedTheme || 'aurora', false);
+function persistLocalSettings(values) {
+  try {
+    if (!values || typeof values !== 'object') return;
+    fetch(`${API_BASE}/settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(values)
+    }).catch(() => {});
+  } catch (e) { /* offline cache remains in localStorage */ }
 }
 
-function applyTheme(themeId, notify = false) {
+function initTheme() {
+  const dbSettings = (typeof window !== 'undefined' && window.__RRE_SETTINGS) || {};
+  let savedTheme = dbSettings.tally_theme || localStorage.getItem('tally_theme');
+  const seeded = dbSettings.rre_aurora_default_v1 || localStorage.getItem('rre_aurora_default_v1');
+  // One time only: the new Aurora look becomes the default. Anyone can pick another theme (Alt+T) and it is remembered in SQLite from then on.
+  if (!seeded) {
+    localStorage.setItem('rre_aurora_default_v1', '1');
+    savedTheme = 'aurora';
+    persistLocalSettings({ tally_theme: 'aurora', rre_aurora_default_v1: '1' });
+  }
+  applyTheme(savedTheme || 'aurora', false, !dbSettings.tally_theme);
+}
+
+function applyTheme(themeId, notify = false, syncDb = true) {
   if (!THEMES.includes(themeId)) themeId = 'tally-gold';
 
   document.documentElement.setAttribute('data-theme', themeId);
   document.body.setAttribute('data-theme', themeId);
   localStorage.setItem('tally_theme', themeId);
+  if (syncDb) persistLocalSettings({ tally_theme: themeId, rre_aurora_default_v1: '1' });
 
   // Update theme swatch cards in modal
   THEMES.forEach(t => {

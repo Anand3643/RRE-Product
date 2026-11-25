@@ -8,6 +8,7 @@ const mailer = require('../../core/mailer');
 const db = require('../../core/db');
 const { loginRateLimiter, rateLimitLoginMiddleware } = require('../../core/security');
 const { isAuthEnforced, DEFAULT_OWNER } = require('../../core/auth');
+const settings = require('../../core/settings');
 const { getRolePermissions } = db;
 
 const router = express.Router();
@@ -20,11 +21,13 @@ const needAdmin = (req, res) => {
   return true;
 };
 
-// ---- runtime login-visibility flag (RRE_ENFORCE_AUTH=1 shows logins/users UI; otherwise hidden by default)
-router.get('/mode.js', (req, res) => {
+// ---- runtime login-visibility flag + persisted SQLite UI settings
+router.get('/mode.js', async (req, res) => {
   const on = isAuthEnforced();
+  let uiSettings = {};
+  try { uiSettings = await settings.getUiPrefs(); } catch (e) { uiSettings = {}; }
   res.type('application/javascript').set('Cache-Control', 'no-store').send(
-    `window.__RRE_AUTH_ENABLED=${on};window.__RRE_LOGINS_HIDDEN=${!on};try{document.documentElement.classList.toggle('rre-logins-hidden',${!on});}catch(e){}`
+    `window.__RRE_AUTH_ENABLED=${on};window.__RRE_LOGINS_HIDDEN=${!on};window.__RRE_SETTINGS=${JSON.stringify(uiSettings)};try{document.documentElement.classList.toggle('rre-logins-hidden',${!on});}catch(e){}`
   );
 });
 

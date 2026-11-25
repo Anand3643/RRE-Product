@@ -56,6 +56,7 @@ const { activityCaptureMiddleware, logActivity } = require('./core/auth');
 const { startScheduler } = require('./core/scheduler');
 const { xmlEsc } = require('./core/xml');
 const { routeGuard } = require('./core/routeGuard');
+const settings = require('./core/settings');
 
 // Modular Routers
 const dashboardRouter = require('./modules/dashboard/dashboardApi');
@@ -156,6 +157,31 @@ app.use(activityCaptureMiddleware); // audit trail for mutating calls (additive,
 // ========================================================
 // 1. HEALTH & SYSTEM MONITORING API (Pillars 6, 7 & 13)
 // ========================================================
+app.get('/api/settings', async (req, res) => {
+  try {
+    res.json({ success: true, data: await settings.getAll() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/api/settings', async (req, res) => {
+  try {
+    const data = await settings.setMany(req.body || {});
+    res.json({ success: true, data });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/settings/storage', async (req, res) => {
+  try {
+    res.json({ success: true, data: await settings.getStorageStatus() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 app.get('/api/health', async (req, res) => {
   try {
     const uptimeSeconds = Math.floor((Date.now() - serverStartTime) / 1000);
@@ -850,6 +876,7 @@ function startServer(preferredPort = WEB_PORT, preferredHost = '127.0.0.1') {
     try {
       await initDb();
       await runMigrations();
+      await settings.seedDefaults();
       await require('./core/identity').preload();
       startScheduler();
     } catch (err) {

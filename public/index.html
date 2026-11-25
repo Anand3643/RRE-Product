@@ -37,6 +37,7 @@
   <!-- Offline Standalone Bundled Libraries (Zero Internet Required) -->
   <style>html.rre-logins-hidden .rre-auth-only{display:none!important}html:not(.rre-logins-hidden) .rre-noauth-only{display:none!important}</style>
   <script src="/api/auth/mode.js"></script>
+  <script>/* pre-paint settings sync from local SQLite + cache */(function(){try{var s=window.__RRE_SETTINGS||{};['tally_theme','rre_aurora_default_v1','au_mode','au_rail_open'].forEach(function(k){if(s[k]!=null)localStorage.setItem(k,String(s[k]));});var m=s.au_mode||localStorage.getItem('au_mode');if(m==='dark'||m==='light')document.documentElement.setAttribute('data-au',m);}catch(e){}})();</script>
   <script src="ext/session-guard.js"></script>
   <script src="vendor/tailwind.min.js"></script>
   <script src="vendor/lucide.min.js"></script>
