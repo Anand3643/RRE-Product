@@ -8,15 +8,16 @@
  * Emergency switch: set RRE_ENFORCE_AUTH=0 to disable (logged loudly at startup).
  * /api/platform/* routes carry their own requireAuth() and are skipped here.
  */
-const { identify } = require('./auth');
+const { identify, DEFAULT_OWNER } = require('./auth');
 const { getRolePermissions } = require('./db');
 const { moduleOf } = require('./identity');
 
-// On by default: nobody reaches an API without a valid, server-side session. RRE_ENFORCE_AUTH=0 is an emergency switch only.
-const ENFORCE = process.env.RRE_ENFORCE_AUTH !== '0';
+// Login-free by default: direct Owner access without mandatory sessions. Set RRE_ENFORCE_AUTH=1 to enforce API login & role checks.
+const ENFORCE = process.env.RRE_ENFORCE_AUTH === '1';
 
 // Public: needed before login or harmless read-only status.
 const PUBLIC = [
+  ['GET', /^\/api\/auth\/mode\.js\/?$/],
   ['POST', /^\/api\/auth\/(login|register|google|forgot|reset|signup|verify-email|resend-verification)\/?$/],
   ['GET', /^\/api\/auth\/(config|reset\/validate)\/?$/],
   ['GET', /^\/api\/auth\/permissions\/?$/],
@@ -63,6 +64,7 @@ const KNOWN_VOUCHER_TYPES = ['Contra', 'Payment', 'Receipt', 'Journal', 'Sales',
 function routeGuard(req, res, next) {
   const user = identify(req);
   if (user) req.user = user;
+  else if (!ENFORCE) req.user = DEFAULT_OWNER;
   if (!ENFORCE) return next();
   const url = req.originalUrl.split('?')[0];
   if (!url.startsWith('/api/') || url.startsWith('/api/platform/')) return next();
@@ -115,6 +117,6 @@ function routeGuard(req, res, next) {
   next();
 }
 
-if (!ENFORCE) console.warn('[Security] RRE_ENFORCE_AUTH=0 — API authorisation is DISABLED.');
+if (!ENFORCE) console.log('[Access] Direct Owner access active (logins removed). Set RRE_ENFORCE_AUTH=1 to require login.');
 
 module.exports = { routeGuard, RULES, PUBLIC };

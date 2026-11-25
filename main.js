@@ -88,11 +88,11 @@ async function createWindow() {
           accelerator: 'F3',
           click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openAlterCompany ? window.openAlterCompany() : window.openModal("alterCompanyModal")')
         },
-        {
+        ...(process.env.RRE_ENFORCE_AUTH === '1' ? [{
           label: 'Users and Passwords (Alt+K)',
           accelerator: 'Alt+K',
           click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.openUserManagement && window.openUserManagement()')
-        },
+        }] : []),
         {
           label: 'Start Clean Slate (₹0 Books)',
           click: () => mainWindow && mainWindow.webContents.executeJavaScript('window.startCleanSlate && window.startCleanSlate()')

@@ -42,6 +42,7 @@
   }
 
   window.fetch = function (input, init) {
+    if (window.__RRE_AUTH_ENABLED !== true) return nativeFetch(input, init);
     const path = localApiPath(input);
     if (!path) return nativeFetch(input, init);
 

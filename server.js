@@ -123,6 +123,7 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '10mb' })); // GSTR-2B / bank statement uploads exceed the 100kb default
 app.use(express.urlencoded({ extended: true }));
+app.get('/login.html', (req, res, next) => (process.env.RRE_ENFORCE_AUTH === '1' ? next() : res.redirect('/')));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(logger.requestMiddleware);
 app.use(companies.gate); // briefly refuses /api calls while the database is swapped during a company switch

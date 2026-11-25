@@ -12,7 +12,8 @@
   const allowedModule = (m) => isAdmin() || !me || !Array.isArray(me.modules) || me.modules.includes(m);
 
   function chip() {
-    const host = document.getElementById('rre-who'); if (!host || !me) return;
+    const host = document.getElementById('rre-who'); if (!host) return;
+    if (window.__RRE_AUTH_ENABLED !== true || !me) { host.innerHTML = ''; return; }
     const type = me.role === 'Owner' || me.role === 'Administrator' ? 'Admin' : me.role === 'Customer' ? 'Customer' : me.role === 'Guest' ? 'Guest' : 'Employee';
     host.innerHTML = `<span class="rre-chip" title="${esc(me.email || me.username)}"><span class="rre-av">${esc((me.full_name || me.username || '?').trim().charAt(0).toUpperCase())}</span>`
       + `<span class="rre-nm"><b>${esc(me.full_name || me.username)}</b><i>${esc(type)} · ${esc(me.role)}</i></span></span>`
@@ -21,6 +22,16 @@
   }
 
   function limitNavigation() {
+    const hidden = window.__RRE_AUTH_ENABLED !== true;
+    if (hidden) {
+      document.querySelectorAll('#au-rail [data-act="users"]').forEach((b) => { b.style.display = 'none'; });
+      const inv = document.querySelector('#au-rail button.item.inv'), sub = document.getElementById('au-inv-sub');
+      if (inv) inv.style.display = '';
+      if (sub) sub.style.display = '';
+      document.querySelectorAll('#au-tabbar button.inv').forEach((b) => { b.style.display = ''; });
+      document.querySelectorAll('#au-inv-sub button[data-path="/team"]').forEach((b) => b.remove());
+      return;
+    }
     if (!me) return;
     const canUsers = !!(perms && perms.canManageUsers);
     document.querySelectorAll('#au-rail [data-act="users"]').forEach((b) => { b.style.display = canUsers ? '' : 'none'; });
@@ -37,7 +48,7 @@
   function css() {
     if (document.getElementById('rre-who-css')) return;
     const s = document.createElement('style'); s.id = 'rre-who-css';
-    s.textContent = 'html.rre-customer #au-rail,html.rre-customer #au-tabbar,html.rre-customer #header-ribbon,html.rre-customer aside{display:none!important}.rre-chip{display:inline-flex;align-items:center;gap:8px;padding:2px 12px 2px 3px;border-radius:999px;background:rgba(148,163,255,.14);border:1px solid rgba(148,163,255,.35);color:inherit}'
+    s.textContent = 'html.rre-logins-hidden #au-rail [data-act="users"],html.rre-logins-hidden #rre-who{display:none!important}html.rre-customer #au-rail,html.rre-customer #au-tabbar,html.rre-customer #header-ribbon,html.rre-customer aside{display:none!important}.rre-chip{display:inline-flex;align-items:center;gap:8px;padding:2px 12px 2px 3px;border-radius:999px;background:rgba(148,163,255,.14);border:1px solid rgba(148,163,255,.35);color:inherit}'
       + '.rre-av{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:800;color:#1a1305;background:linear-gradient(135deg,#f59e0b,#fcd34d)}'
       + '.rre-nm{display:flex;flex-direction:column;line-height:1.1;text-align:left;max-width:150px}.rre-nm b{font-size:11px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.rre-nm i{font-style:normal;font-size:9px;opacity:.75;text-transform:uppercase;letter-spacing:.06em}'
       + '.rre-out{padding:4px 12px;border-radius:999px;font-size:11px;font-weight:800;border:1px solid rgba(244,63,94,.5);background:rgba(244,63,94,.14);color:#fda4af;cursor:pointer}.rre-out:hover{background:rgba(244,63,94,.3);color:#fff}'

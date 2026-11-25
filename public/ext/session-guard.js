@@ -5,6 +5,11 @@
  */
 (function () {
   'use strict';
+  if (window.__RRE_AUTH_ENABLED !== true) {
+    try { document.documentElement.classList.add('rre-logins-hidden'); } catch (e) { /* ignore */ }
+    window.__RRE_REDIRECTING = false;
+    return;
+  }
   var KEY = 'tally_user_session';
   function read() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { return null; } }
   function leave(query) {

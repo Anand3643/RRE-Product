@@ -9,7 +9,7 @@ const express = require('express');
 const router = express.Router();
 const host = require('../../core/inventoryHost');
 const identity = require('../../core/identity');
-const { identify, logActivity } = require('../../core/auth');
+const { identify, logActivity, isAuthEnforced, DEFAULT_OWNER } = require('../../core/auth');
 const db = require('../../core/db');
 
 const fail = (res, status, message) => res.status(status).json({ success: false, error: message });
@@ -30,7 +30,18 @@ router.get('/status', (req, res) => res.json({ success: true, data: host.status(
 router.post('/launch', async (req, res) => {
   try {
     const user = identify(req);
-    if (!user) return fail(res, 401, 'Please sign in.');
+    if (!user) {
+      if (!isAuthEnforced()) {
+        const adminRow = await db.sys.get("SELECT id, username, full_name, email, role FROM users WHERE role IN ('Owner', 'Administrator') AND status = 'Active' ORDER BY id LIMIT 1");
+        const launchUser = adminRow ? { ...adminRow } : { ...DEFAULT_OWNER };
+        if (!launchUser.email) launchUser.email = 'admin@rre-entries.app';
+        const out = await host.launch({ user: launchUser, admin: true, path: req.body && req.body.path, wait: !(req.body && req.body.nowait) });
+        if (out.starting) return res.status(202).json({ success: true, data: { starting: true } });
+        logActivity({ user: DEFAULT_OWNER, ip: req.ip, action: 'INVENTORY_APP_OPEN', entity: 'inventory-app', details: { role: launchUser.role } });
+        return res.json({ success: true, data: { url: out.url, signed_in: true } });
+      }
+      return fail(res, 401, 'Please sign in.');
+    }
     if (user.role === 'Customer' && !user.companyId) return fail(res, 403, 'Customer accounts linked to a customer record use the customer dashboard.');
     if (Array.isArray(user.modules) && !['Owner', 'Administrator'].includes(user.role) && !user.modules.includes('inventory')) return fail(res, 403, 'Your account does not have access to Inventory. Ask your administrator.');
     const row = await db.sys.get('SELECT id, username, full_name, email, role FROM users WHERE id = ? AND status = ?', [user.userId, 'Active']);

@@ -13,7 +13,7 @@ const paths = require('./paths');
 const { runMigrations } = require('./migrations');
 const { withTransaction } = require('./tx');
 const { hashPassword } = require('./security');
-const { logActivity } = require('./auth');
+const { logActivity, isAuthEnforced } = require('./auth');
 
 let switching = false;
 const isSwitching = () => switching;
@@ -57,10 +57,12 @@ async function list() {
 function validateNew(b) {
   const name = String(b.name || '').trim();
   if (name.length < 2 || name.length > 80) throw bad('Company name must be 2–80 characters.');
-  const username = String(b.owner_username || '').trim();
+  const enforced = isAuthEnforced();
+  const username = String(b.owner_username || (enforced ? '' : 'Administrator')).trim();
   if (!/^[A-Za-z0-9_.-]{3,30}$/.test(username)) throw bad('Owner username must be 3–30 characters (letters, digits, . _ -).');
-  const password = String(b.owner_password || '');
-  const weak = require('./passwordPolicy').checkPassword(password, { username });
+  const rawPassword = String(b.owner_password || '');
+  const password = !rawPassword && !enforced ? 'RreLocal#' + require('crypto').randomBytes(12).toString('hex') : rawPassword;
+  const weak = enforced || rawPassword ? require('./passwordPolicy').checkPassword(password, { username }) : null;
   if (weak) throw bad('Owner password: ' + weak);
   const fy = b.financial_year_from ? String(b.financial_year_from) : `${new Date().getFullYear()}-04-01`;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fy) || Number.isNaN(Date.parse(fy))) throw bad('financial_year_from must be YYYY-MM-DD.');

@@ -294,30 +294,35 @@ function cycleNextTheme() {
 // 2. INITIALIZATION & SESSION LOADING
 // ========================================================
 document.addEventListener('DOMContentLoaded', async () => {
-  if (window.__RRE_REDIRECTING) return; // no valid session: session-guard.js is already sending the person to the sign-in page
+  const authOn = window.__RRE_AUTH_ENABLED === true;
+  if (authOn && window.__RRE_REDIRECTING) return; // no valid session: session-guard.js is already sending the person to the sign-in page
   try {
     initTheme();
     setupKeyboardShortcuts();
     if (window.lucide) window.lucide.createIcons();
 
-    // The person signed in on the one RRE sign-in page. The server tells us who they are and what their role allows
-    // (the browser's copy is only used to draw the screen; every API call is checked again on the server).
-    const saved = window.__RRE_SESSION || {};
-    let who = saved.user || null, perms = saved.permissions || null;
-    try {
-      const res = await fetch('/api/auth/me', { cache: 'no-store' });
-      if (res.status === 401 || res.status === 403) { window.startWithFreshLogin(); return; }
-      const j = await res.json();
-      if (j && j.success && j.data) {
-        if (j.data.must_change_password && !saved.auto) { location.replace('login.html?switch=1'); return; }
-        who = j.data.user; perms = j.data.permissions;
-        try { localStorage.setItem('tally_user_session', JSON.stringify({ ...saved, user: who, permissions: perms, modules: who.modules })); } catch (e) { /* ignore */ }
-      }
-    } catch (netErr) { /* server not reachable: keep the saved copy so the screen can still draw */ }
-    if (!who) { window.startWithFreshLogin(); return; }
-    appState.currentUser = who;
-    appState.permissions = perms || getOfflineRolePermissions(who.role === 'Administrator' ? 'Owner' : who.role);
-    window.dispatchEvent(new CustomEvent('rre:session', { detail: { user: who, permissions: appState.permissions } }));
+    if (authOn) {
+      const saved = window.__RRE_SESSION || {};
+      let who = saved.user || null, perms = saved.permissions || null;
+      try {
+        const res = await fetch('/api/auth/me', { cache: 'no-store' });
+        if (res.status === 401 || res.status === 403) { window.startWithFreshLogin(); return; }
+        const j = await res.json();
+        if (j && j.success && j.data) {
+          if (j.data.must_change_password && !saved.auto) { location.replace('login.html?switch=1'); return; }
+          who = j.data.user; perms = j.data.permissions;
+          try { localStorage.setItem('tally_user_session', JSON.stringify({ ...saved, user: who, permissions: perms, modules: who.modules })); } catch (e) { /* ignore */ }
+        }
+      } catch (netErr) { /* server not reachable: keep the saved copy so the screen can still draw */ }
+      if (!who) { window.startWithFreshLogin(); return; }
+      appState.currentUser = who;
+      appState.permissions = perms || getOfflineRolePermissions(who.role === 'Administrator' ? 'Owner' : who.role);
+      window.dispatchEvent(new CustomEvent('rre:session', { detail: { user: who, permissions: appState.permissions } }));
+    } else {
+      // Login setups hidden right now: open straight into the workspace with full Owner access
+      appState.currentUser = { id: 1, username: 'Administrator', full_name: 'Administrator', role: 'Owner' };
+      appState.permissions = getOfflineRolePermissions('Owner');
+    }
     updateUserDisplay();
     applyRolePermissions();
     showGateway();
@@ -434,9 +439,9 @@ function showLoginView() {
   showGateway();
 }
 
-/** The session ended (expired, signed out elsewhere, account deactivated): back to the one sign-in page. */
 function startWithFreshLogin() {
   try { localStorage.removeItem('tally_user_session'); sessionStorage.removeItem('rre_alive'); } catch (e) { /* ignore */ }
+  if (window.__RRE_AUTH_ENABLED !== true) { showGateway(); return; }
   window.__RRE_REDIRECTING = true;
   location.replace('login.html?expired=1');
 }
@@ -499,8 +504,8 @@ async function handleLogin(e) {
   }
 }
 
-/** Sign out: the server ends the session (so the token stops working everywhere), then the browser leaves. */
 async function handleLogout() {
+  if (window.__RRE_AUTH_ENABLED !== true) { startWithFreshLogin(); return; }
   try { await fetch('/api/auth/logout', { method: 'POST', keepalive: true }); } catch (e) { /* the server may be gone: leave anyway */ }
   try { if (window.RREInventory && window.RREInventory.signOut) window.RREInventory.signOut(); } catch (e) { /* ignore */ }
   try { localStorage.removeItem('tally_user_session'); sessionStorage.removeItem('rre_alive'); } catch (e) { /* ignore */ }
@@ -2410,7 +2415,7 @@ const GOTO_REGISTRY = [
   { title: 'Company Features (F11)', category: 'Configure', action: () => openF11FeaturesModal(), hotkey: 'F11' },
   { title: 'System Configuration (F12)', category: 'Configure', action: () => openF12ConfigModal(), hotkey: 'F12' },
   { title: 'Banking Utilities', category: 'Banking', action: () => openBankingUtilitiesModal(), hotkey: 'N' },
-  { title: 'Users & Passwords (Security)', category: 'Security', action: () => openUserManagement(), hotkey: 'Alt+K' },
+  ...(window.__RRE_AUTH_ENABLED === true ? [{ title: 'Users & Passwords (Security)', category: 'Security', action: () => openUserManagement(), hotkey: 'Alt+K' }] : []),
   { title: 'Display Color Themes', category: 'Display', action: () => openThemeSelectorModal(), hotkey: 'Alt+T' },
   { title: 'Calculator', category: 'Utilities', action: () => toggleCalculator(), hotkey: 'Ctrl+N' }
 ];
@@ -3406,7 +3411,7 @@ const OMNI_COMMANDS = [
   { title: 'AI Copilot Assistant', category: 'AI', hotkey: 'Alt+A', action: () => toggleAiCopilot(true) },
   { title: 'AI Executive Workspace', category: 'AI', hotkey: '⚡', action: () => toggleAiWorkspaceView() },
   { title: 'Parse Invoice / Bill Document', category: 'AI', hotkey: '🧾', action: () => openAiDocParserModal() },
-  { title: 'Security Control & User Management', category: 'System', hotkey: 'Alt+K', action: () => openUserManagement() },
+  ...(window.__RRE_AUTH_ENABLED === true ? [{ title: 'Security Control & User Management', category: 'System', hotkey: 'Alt+K', action: () => openUserManagement() }] : []),
   { title: 'Change Theme Palette', category: 'System', hotkey: 'Alt+T', action: () => openThemeSelectorModal() },
   { title: 'Change Current Date', category: 'System', hotkey: 'F2', action: () => openChangeDateModal() }
 ];
@@ -3633,10 +3638,12 @@ function setupKeyboardShortcuts() {
       return;
     }
 
-    // Alt+K: User Security & Passwords
+    // Alt+K: User Security & Passwords (when logins/security are visible)
     if (e.altKey && (e.key === 'k' || e.key === 'K')) {
-      e.preventDefault();
-      openUserManagement();
+      if (window.__RRE_AUTH_ENABLED === true) {
+        e.preventDefault();
+        openUserManagement();
+      }
       return;
     }
 
@@ -3801,6 +3808,7 @@ function formatDateDisplay(dStr) {
 let cachedUsers = [];
 
 async function openUserManagement() {
+  if (window.__RRE_AUTH_ENABLED !== true) { showGateway(); return; }
   if (appState.currentView === 'view-login' || !appState.currentUser) {
     selectQuickUser('admin');
     const uInput = document.getElementById('login-username');

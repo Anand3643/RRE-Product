@@ -23,12 +23,13 @@
 
   async function api(path, opts = {}) {
     const t = token();
-    if (!t) { const e = new Error('Please log in to use this feature.'); e.status = 401; throw e; }
+    const headers = { ...(opts.headers || {}), ...(opts.body ? { 'Content-Type': 'application/json' } : {}) };
+    if (t) headers.Authorization = 'Bearer ' + t;
     const res = await fetch(`${base()}/platform${path}`, {
       ...opts,
-      headers: { ...(opts.headers || {}), Authorization: 'Bearer ' + t, ...(opts.body ? { 'Content-Type': 'application/json' } : {}) }
+      headers
     });
-    if (res.status === 401) { const e = new Error('Session expired. Please log in again.'); e.status = 401; throw e; }
+    if (res.status === 401) { const e = new Error('Authorization required.'); e.status = 401; throw e; }
     return res;
   }
   async function apiJson(path, opts) {

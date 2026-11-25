@@ -64,7 +64,7 @@
   ];
   // Inventory lives in the rail only: its features open from this list (the screens themselves are the original inventory application)
   const INV_SUB = [['Dashboard', '/admin'], ['Items', '/products'], ['Stock levels', '/inventory'], ['Warehouses', '/warehouses'], ['Transfers', '/transfers'], ['Adjustments', '/adjustments'], ['Sales Orders', '/sales-orders'], ['Purchase Orders', '/purchase-orders'],
-    ['Customers', '/customers'], ['Vendors', '/vendors'], ['Packages', '/packages'], ['Shipments', '/shipments'], ['Reports', '/reports'], ['AI Insights', '/insights'], ['Users', '/team'], ['Settings', '/settings']];
+    ['Customers', '/customers'], ['Vendors', '/vendors'], ['Packages', '/packages'], ['Shipments', '/shipments'], ['Reports', '/reports'], ['AI Insights', '/insights'], ['Settings', '/settings']];
   const railItem = (it, i) => {
     if (it[0] === 'sep') return '<div class="sep"></div>';
     const inv = it[4] === 'inv';
@@ -83,7 +83,7 @@
     railEl = doc.createElement('nav'); railEl.id = 'au-rail'; railEl.setAttribute('aria-label', 'Main navigation');
     const logo = 'rre_icon.png';
     railEl.innerHTML = `<div class="brand"><img src="${logo}" alt=""><span class="lbl">RRE Entries</span></div><div class="nav"><div class="ind"></div>${ITEMS.map(railItem).join('')}</div>
-      <div class="foot"><button type="button" class="item" data-act="users" title="Users & security"><i data-lucide="users"></i><span class="lbl">Users</span></button><button type="button" class="item" data-act="theme" title="Theme (Alt+T)"><i data-lucide="palette"></i><span class="lbl">Theme</span></button><button type="button" class="item" data-act="collapse" title="Collapse / expand"><i data-lucide="panel-left"></i><span class="lbl">Collapse</span></button></div>`;
+      <div class="foot"><button type="button" class="item rre-auth-only" data-act="users" title="Users & security"><i data-lucide="users"></i><span class="lbl">Users</span></button><button type="button" class="item" data-act="theme" title="Theme (Alt+T)"><i data-lucide="palette"></i><span class="lbl">Theme</span></button><button type="button" class="item" data-act="collapse" title="Collapse / expand"><i data-lucide="panel-left"></i><span class="lbl">Collapse</span></button></div>`;
     doc.body.appendChild(railEl);
     if (store.get('au_rail_open') === '1') doc.body.classList.add('au-rail-open');
     railEl.addEventListener('click', (e) => {
@@ -91,7 +91,7 @@
       const b = e.target.closest('button.item'); if (!b) return;
       if (b.classList.contains('inv')) { const wasOpen = $('#au-inv-sub').classList.contains('open'); toggleInvMenu(); if (!wasOpen || !$('#rre-inv-host') || !$('#rre-inv-host').classList.contains('open')) { try { window.RREInventoryGo('/admin'); } catch (err) { /* ignore */ } } return; }
       if (b.dataset.act === 'collapse') { doc.body.classList.toggle('au-rail-open'); store.set('au_rail_open', doc.body.classList.contains('au-rail-open') ? '1' : '0'); setTimeout(moveInd, 380); return; }
-      if (b.dataset.act === 'users') { if (typeof openUserManagement === 'function') openUserManagement(); return; }
+      if (b.dataset.act === 'users') { if (window.__RRE_AUTH_ENABLED === true && typeof openUserManagement === 'function') openUserManagement(); return; }
       if (b.dataset.act === 'theme') { if (typeof openThemeSelectorModal === 'function') openThemeSelectorModal(); return; }
       const it = ITEMS[+b.dataset.i]; if (window.RREInventory) window.RREInventory.close(); try { it[2](); } catch (err) { console.warn('[Aurora] navigation:', err.message); }
     });

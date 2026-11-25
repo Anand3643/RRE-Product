@@ -35,6 +35,8 @@
     }
   </style>
   <!-- Offline Standalone Bundled Libraries (Zero Internet Required) -->
+  <style>html.rre-logins-hidden .rre-auth-only{display:none!important}html:not(.rre-logins-hidden) .rre-noauth-only{display:none!important}</style>
+  <script src="/api/auth/mode.js"></script>
   <script src="ext/session-guard.js"></script>
   <script src="vendor/tailwind.min.js"></script>
   <script src="vendor/lucide.min.js"></script>
@@ -112,9 +114,14 @@
         </button>
       </div>
 
-      <!-- Right: User Access & Theme -->
+      <!-- Right: User Access / Full Direct Access & Theme -->
       <div class="flex items-center space-x-2">
-        <span id="rre-who" class="inline-flex items-center space-x-2"></span>
+        <span id="rre-who" class="rre-auth-only inline-flex items-center space-x-2"></span>
+        <span id="rre-full-access-badge"
+          class="rre-noauth-only hidden sm:inline-flex items-center space-x-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-800/90 text-emerald-300 border border-slate-700 shadow-inner">
+          <i data-lucide="shield-check" class="w-3 h-3 text-emerald-400"></i>
+          <span>Full Access (No Login)</span>
+        </span>
         <button onclick="openThemeSelectorModal()" id="btn-top-theme" title="Change Theme Palette (Alt+T)" class="px-2 py-0.5 bg-slate-700 hover:bg-slate-600 text-amber-300 border border-slate-600 rounded text-[11px] font-bold flex items-center space-x-1 transition shadow-sm">
           <i data-lucide="palette" class="w-3 h-3 text-amber-400"></i>
           <span>Alt+T</span>
@@ -3132,7 +3139,7 @@
             <span class="text-[11px] text-emerald-600 font-bold">Company Alter &gt;</span>
           </button>
           <button onclick="closeModal('masterAlterModal'); openUserManagement();"
-            class="w-full p-2.5 bg-slate-50 hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded text-left transition flex items-center justify-between">
+            class="rre-auth-only w-full p-2.5 bg-slate-50 hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded text-left transition flex items-center justify-between">
             <span class="font-bold text-slate-800">Users &amp; Security Roles</span>
             <span class="text-[11px] text-amber-600 font-bold">Security Control &gt;</span>
           </button>
@@ -3689,7 +3696,7 @@
             <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>F3: Company</span><span
                 class="font-sans text-slate-500">Alter loaded company</span></div>
             <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>Ctrl+F3: Shut Co</span><span
-                class="font-sans text-slate-500">Logout to company list</span></div>
+                class="font-sans text-slate-500">Switch / shut company</span></div>
             <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>F4: Contra</span><span
                 class="font-sans text-slate-500">Bank / Cash deposit/withdrawal</span></div>
             <div class="p-2 bg-slate-50 border rounded flex justify-between"><span>F5: Payment</span><span

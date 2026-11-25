@@ -7,6 +7,7 @@ const identity = require('../../core/identity');
 const mailer = require('../../core/mailer');
 const db = require('../../core/db');
 const { loginRateLimiter, rateLimitLoginMiddleware } = require('../../core/security');
+const { isAuthEnforced, DEFAULT_OWNER } = require('../../core/auth');
 const { getRolePermissions } = db;
 
 const router = express.Router();
@@ -18,6 +19,14 @@ const needAdmin = (req, res) => {
   if (!getRolePermissions(req.user.role).canManageUsers) { res.status(403).json({ success: false, error: 'Only an administrator can manage users.', code: 'FORBIDDEN' }); return false; }
   return true;
 };
+
+// ---- runtime login-visibility flag (RRE_ENFORCE_AUTH=1 shows logins/users UI; otherwise hidden by default)
+router.get('/mode.js', (req, res) => {
+  const on = isAuthEnforced();
+  res.type('application/javascript').set('Cache-Control', 'no-store').send(
+    `window.__RRE_AUTH_ENABLED=${on};window.__RRE_LOGINS_HIDDEN=${!on};try{document.documentElement.classList.toggle('rre-logins-hidden',${!on});}catch(e){}`
+  );
+});
 
 // ---- public
 router.get('/config', async (req, res) => {
@@ -75,7 +84,13 @@ router.post('/reset', rateLimitLoginMiddleware, async (req, res) => {
 });
 
 // ---- any signed-in person (customers included)
-router.get('/me', async (req, res) => { if (!needUser(req, res)) return; try { res.json({ success: true, data: await identity.me(req.user.userId) }); } catch (e) { fail(res, e); } });
+router.get('/me', async (req, res) => {
+  if (!isAuthEnforced() && !req.headers.authorization) {
+    return res.json({ success: true, data: { user: DEFAULT_OWNER, permissions: getRolePermissions('Owner'), must_change_password: false, auth_enabled: false } });
+  }
+  if (!needUser(req, res)) return;
+  try { res.json({ success: true, data: await identity.me(req.user.userId) }); } catch (e) { fail(res, e); }
+});
 router.put('/me', async (req, res) => { if (!needUser(req, res)) return; try { res.json({ success: true, data: await identity.updateOwnProfile(req.user.userId, req.body || {}) }); } catch (e) { fail(res, e); } });
 router.post('/logout', async (req, res) => { try { res.json(await identity.logout(req.user, meta(req))); } catch (e) { fail(res, e, 500); } });
 

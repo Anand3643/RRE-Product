@@ -31,8 +31,13 @@
     } catch (e) { box.innerHTML = `<div class="text-red-700">${esc(e.message)}</div>`; }
   }
 
+  const authOn = () => window.__RRE_AUTH_ENABLED === true;
+
   async function doSwitch(number, name) {
-    if (!confirm(`Open "${name}"?\n\nEveryone using RRE Tally on this computer is signed out and must sign in to that company. Your data in the current company is not changed.`)) return;
+    const warn = authOn()
+      ? `Open "${name}"?\n\nEveryone using RRE Tally on this computer is signed out and must sign in to that company. Your data in the current company is not changed.`
+      : `Open "${name}"?\n\nYour data in the current company is not changed.`;
+    if (!confirm(warn)) return;
     msg('Switching…');
     try {
       await call('/switch', { method: 'POST', body: JSON.stringify({ number }) });
@@ -42,13 +47,17 @@
   }
 
   async function create() {
-    const g = (id) => $(id).value;
+    const g = (id) => ($(id) ? $(id).value : '');
     msg('Creating the company…');
     try {
-      const r = await call('', { method: 'POST', body: JSON.stringify({ name: g('co-name'), financial_year_from: g('co-fy') || undefined, state: g('co-state') || undefined, state_code: g('co-state-code') || undefined,
-        gstin: g('co-gstin') || undefined, owner_username: g('co-user'), owner_full_name: g('co-fullname') || undefined, owner_password: g('co-pass') }) });
-      ['co-name', 'co-gstin', 'co-user', 'co-fullname', 'co-pass'].forEach((id) => { $(id).value = ''; });
-      msg(`Created "${esc(r.name)}" (No. ${esc(r.number)}). Use "Switch to this company" to open it, then sign in with the owner account you just set.`, 'text-emerald-700');
+      const payload = { name: g('co-name'), financial_year_from: g('co-fy') || undefined, state: g('co-state') || undefined, state_code: g('co-state-code') || undefined,
+        gstin: g('co-gstin') || undefined };
+      if (authOn()) Object.assign(payload, { owner_username: g('co-user'), owner_full_name: g('co-fullname') || undefined, owner_password: g('co-pass') });
+      const r = await call('', { method: 'POST', body: JSON.stringify(payload) });
+      ['co-name', 'co-gstin', 'co-user', 'co-fullname', 'co-pass'].forEach((id) => { if ($(id)) $(id).value = ''; });
+      msg(authOn()
+        ? `Created "${esc(r.name)}" (No. ${esc(r.number)}). Use "Switch to this company" to open it, then sign in with the owner account you just set.`
+        : `Created "${esc(r.name)}" (No. ${esc(r.number)}). Use "Switch to this company" to open it.`, 'text-emerald-700');
       render();
     } catch (e) { msg(esc(e.message), 'text-red-700'); }
   }
@@ -62,7 +71,7 @@
         <div class="bg-white rounded-xl shadow-2xl max-w-2xl w-full border border-slate-300 overflow-hidden text-xs">
           <div class="bg-[#1f3a52] text-white px-5 py-3 font-bold flex justify-between items-center"><span>Companies</span><button type="button" id="co-close" class="text-slate-300 hover:text-white">✕</button></div>
           <div class="p-5 space-y-3 max-h-[75vh] overflow-y-auto">
-            <div class="text-slate-600">Each company keeps its own books, users, backups and settings. Only the Owner can create or switch companies.</div>
+            <div class="text-slate-600">Each company keeps its own books, backups and settings.</div>
             <div id="co-list" class="space-y-1.5"></div>
             <div id="co-create-card" class="border border-slate-200 rounded-lg p-3 bg-slate-50 space-y-2">
               <div class="font-bold text-slate-800">Create a new company</div>
@@ -71,11 +80,11 @@
                 <label class="text-[10px] text-slate-500">Financial year starts<input id="co-fy" type="date" class="w-full border border-slate-300 rounded p-1.5 bg-white"></label>
                 <input id="co-gstin" maxlength="15" placeholder="GSTIN (optional)" class="border border-slate-300 rounded p-1.5 bg-white font-mono self-end">
                 <input id="co-state" placeholder="State (default Tamil Nadu)" class="border border-slate-300 rounded p-1.5 bg-white"><input id="co-state-code" maxlength="2" placeholder="State code (33)" class="border border-slate-300 rounded p-1.5 bg-white">
-                <input id="co-user" maxlength="30" placeholder="Owner username" class="border border-slate-300 rounded p-1.5 bg-white"><input id="co-fullname" maxlength="80" placeholder="Owner full name" class="border border-slate-300 rounded p-1.5 bg-white">
-                <input id="co-pass" type="password" maxlength="100" placeholder="Owner password (8+ characters)" class="border border-slate-300 rounded p-1.5 bg-white col-span-2">
+                <input id="co-user" maxlength="30" placeholder="Owner username" class="rre-auth-only border border-slate-300 rounded p-1.5 bg-white"><input id="co-fullname" maxlength="80" placeholder="Owner full name" class="rre-auth-only border border-slate-300 rounded p-1.5 bg-white">
+                <input id="co-pass" type="password" maxlength="100" placeholder="Owner password (8+ characters)" class="rre-auth-only border border-slate-300 rounded p-1.5 bg-white col-span-2">
               </div>
               <button type="button" id="co-create" class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold">Create company</button>
-              <div class="text-[10px] text-slate-500">The new company starts with clean books and only this owner account. Creating it does not change the company you are in.</div>
+              <div class="text-[10px] text-slate-500">The new company starts with clean books. Creating it does not change the company you are in.</div>
             </div>
             <div id="co-msg" class="text-[11px]"></div>
           </div>

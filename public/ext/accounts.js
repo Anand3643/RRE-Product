@@ -107,6 +107,7 @@
   }
 
   async function boot() {
+    if (window.__RRE_AUTH_ENABLED !== true) return;
     try {
       const res = await fetch(`${base()}/auth/setup-status`);
       const j = await res.json();
