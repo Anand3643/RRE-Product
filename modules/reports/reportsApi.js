@@ -104,6 +104,16 @@ router.get('/daybook', async (req, res) => {
       sql += ' AND v.voucher_type = ?';
       params.push(type);
     }
+    // ?ledger_id=: the vouchers that touch this ledger;  ?q=: voucher no, reference, narration, party or any ledger on the voucher
+    const ledgerId = parseInt(req.query.ledger_id, 10) || null;
+    if (ledgerId) { sql += ' AND EXISTS (SELECT 1 FROM ledger_entries le WHERE le.voucher_id = v.id AND le.ledger_id = ?)'; params.push(ledgerId); }
+    const q = String(req.query.q || '').trim().slice(0, 80);
+    if (q) {
+      const like = '%' + q.replace(/[\\%_]/g, (c) => '\\' + c) + '%';
+      sql += " AND (v.voucher_no LIKE ? ESCAPE '\\' OR v.reference_no LIKE ? ESCAPE '\\' OR v.narration LIKE ? ESCAPE '\\' OR p.name LIKE ? ESCAPE '\\'"
+        + " OR EXISTS (SELECT 1 FROM ledger_entries le2 JOIN ledgers l2 ON l2.id = le2.ledger_id WHERE le2.voucher_id = v.id AND l2.name LIKE ? ESCAPE '\\'))";
+      params.push(like, like, like, like, like);
+    }
     if (date) {
       sql += ' AND v.date = ?';
       params.push(date);
@@ -144,7 +154,25 @@ router.get('/daybook', async (req, res) => {
     }
     const detailed = vouchers.map((v) => ({ ...v, entries: byVoucher.get(v.id) }));
 
-    res.json({ success: true, data: detailed });
+    // ?summary=1: totals for the WHOLE filter (not only this page); with a ledger, its opening balance (before the period) and closing
+    // balance. Amounts are signed: Dr positive, Cr negative.
+    let summary;
+    if (req.query.summary === '1') {
+      const base = sql.replace(/ ORDER BY[\s\S]*$/, '').replace(/^\s*SELECT v\.\*, p\.name as party_name/, 'SELECT v.id');
+      const baseParams = limit > 0 ? params.slice(0, -2) : params;
+      const t = await get(`SELECT COALESCE(SUM(e.debit_amount), 0) AS dr, COALESCE(SUM(e.credit_amount), 0) AS cr, COUNT(DISTINCT e.voucher_id) AS vouchers
+        FROM ledger_entries e WHERE e.voucher_id IN (${base})${ledgerId ? ' AND e.ledger_id = ?' : ''}`, [...baseParams, ...(ledgerId ? [ledgerId] : [])]);
+      summary = { total_debit: Math.round(Number(t.dr) * 100) / 100, total_credit: Math.round(Number(t.cr) * 100) / 100, vouchers: Number(t.vouchers) };
+      if (ledgerId) {
+        const l = await get('SELECT name, opening_balance, opening_balance_type FROM ledgers WHERE id = ?', [ledgerId]);
+        const start = date || from_date || null;
+        const before = start ? await get('SELECT COALESCE(SUM(e.debit_amount - e.credit_amount), 0) AS m FROM ledger_entries e JOIN vouchers v ON v.id = e.voucher_id WHERE e.ledger_id = ? AND v.date < ?', [ledgerId, start]) : { m: 0 };
+        const ob = l ? (l.opening_balance_type === 'Cr' ? -1 : 1) * (Number(l.opening_balance) || 0) : 0;
+        const opening = Math.round((ob + Number(before.m)) * 100) / 100;
+        summary.ledger = { id: ledgerId, name: l ? l.name : null, opening, closing: Math.round((opening + summary.total_debit - summary.total_credit) * 100) / 100 };
+      }
+    }
+    res.json({ success: true, data: detailed, ...(summary ? { summary } : {}) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

@@ -43,19 +43,9 @@ async function setNegativeStockPolicy(value) {
  * When `options.inTransaction` is true, the caller owns the transaction (withTransaction).
  * `options.idempotencyKey` (the Idempotency-Key header, per user): the same key always returns the first result and never posts twice.
  */
-async function postVoucher(payload, options = {}) {
-  const {
-    voucher_type,
-    voucher_no,
-    date,
-    reference_no,
-    narration,
-    party_ledger_id,
-    entries,
-    inventory,
-    bill_allocations
-  } = payload;
-
+/** The double-entry checks every voucher passes, new or altered: at least 2 lines, a ledger on each, Dr or Cr (not both), Dr = Cr to the paisa. */
+function validateLines(payload) {
+  const { voucher_type, date, entries } = payload;
   if (!voucher_type || !entries || !Array.isArray(entries) || entries.length < 2) {
     throw new VoucherValidationError('Voucher type and at least 2 double-entry lines are required');
   }
@@ -89,47 +79,40 @@ async function postVoucher(payload, options = {}) {
       `Tally Invariant Violation: Total Debits (₹${(drPaise / 100).toFixed(2)}) != Total Credits (₹${(crPaise / 100).toFixed(2)}). Diff: ₹${(Math.abs(drPaise - crPaise) / 100).toFixed(2)}`
     );
   }
-  const totalDebit = drPaise / 100;
-  const vDate = date || new Date().toISOString().split('T')[0];
-  const idemKey = options.idempotencyKey ? `voucher:${options.userId == null ? '-' : options.userId}:${String(options.idempotencyKey).slice(0, 120)}` : null;
+  return { validatedEntries, totalDebit: drPaise / 100 };
+}
 
-  const work = async () => {
-    // the same request again (double click, network retry): the first result, nothing posted twice
-    const { lockKeys } = require('./tx');
-    if (idemKey) {
-      await lockKeys(['idem:' + idemKey]); // the same request sent twice at once: the second waits here and then finds the first's result
-      const prev = await get('SELECT result FROM idempotency_keys WHERE scope_key = ?', [idemKey]);
-      if (prev) return { ...JSON.parse(prev.result), replayed: true };
-    }
-    const ids = [...new Set(validatedEntries.map((e) => e.ledger_id))];
-    const found = await get(`SELECT COUNT(*) AS n FROM ledgers WHERE id IN (${ids.map(() => '?').join(', ')})`, ids);
-    if (Number(found.n) !== ids.length) throw new VoucherValidationError('One or more ledgers on this voucher do not exist.');
+/** Every ledger on the voucher exists. */
+async function checkLedgers(validatedEntries) {
+  const ids = [...new Set(validatedEntries.map((e) => e.ledger_id))];
+  const found = await get(`SELECT COUNT(*) AS n FROM ledgers WHERE id IN (${ids.map(() => '?').join(', ')})`, ids);
+  if (Number(found.n) !== ids.length) throw new VoucherValidationError('One or more ledgers on this voucher do not exist.');
+}
 
-    // Company setting "negative stock": 'allow' (default, as Tally) or 'block'. Checked inside the posting transaction, which runs one
-    // at a time per company, so two sales at the same moment can never both take the last unit.
-    const outward = ['Sales', 'Debit Note'].includes(voucher_type) && Array.isArray(inventory) ? inventory.filter((i) => i.stock_item_id && (parseFloat(i.quantity) || 0) > 0) : [];
-    if (outward.length && (await negativeStockPolicy()) === 'block') {
-      const want = new Map();
-      for (const i of outward) want.set(parseInt(i.stock_item_id, 10), (want.get(parseInt(i.stock_item_id, 10)) || 0) + parseFloat(i.quantity));
-      await lockKeys([...want.keys()].map((id) => 'stock:' + id)); // sales of the same item take turns for its last units; other items do not wait
-      for (const [itemId, qty] of want) {
-        const s = await get(`SELECT s.name, s.opening_qty + COALESCE((SELECT SUM(CASE WHEN e.direction = 'IN' THEN e.quantity ELSE -e.quantity END) FROM inventory_entries e WHERE e.stock_item_id = s.id), 0) AS on_hand FROM stock_items s WHERE s.id = ?`, [itemId]);
-        if (!s) throw new VoucherValidationError(`Stock item #${itemId} does not exist.`);
-        if (Number(s.on_hand) - qty < -1e-9) throw Object.assign(new VoucherValidationError(`Not enough stock of ${s.name}: ${Number(s.on_hand)} on hand, ${qty} requested. (Negative stock is blocked for this company.)`), { status: 409 });
-      }
-    }
+/**
+ * Company setting "negative stock": 'allow' (default, as Tally) or 'block'. Checked inside the posting transaction, with a lock per item,
+ * so two sales at the same moment can never both take the last unit. (For an alteration it runs after the voucher's own old stock lines
+ * were removed, so the voucher's previous quantity is available again.)
+ */
+async function checkStock(voucher_type, inventory) {
+  const { lockKeys } = require('./tx');
+  const outward = ['Sales', 'Debit Note'].includes(voucher_type) && Array.isArray(inventory) ? inventory.filter((i) => i.stock_item_id && (parseFloat(i.quantity) || 0) > 0) : [];
+  if (!outward.length || (await negativeStockPolicy()) !== 'block') return;
+  const want = new Map();
+  for (const i of outward) want.set(parseInt(i.stock_item_id, 10), (want.get(parseInt(i.stock_item_id, 10)) || 0) + parseFloat(i.quantity));
+  await lockKeys([...want.keys()].map((id) => 'stock:' + id)); // sales of the same item take turns for its last units; other items do not wait
+  for (const [itemId, qty] of want) {
+    const s = await get(`SELECT s.name, s.opening_qty + COALESCE((SELECT SUM(CASE WHEN e.direction = 'IN' THEN e.quantity ELSE -e.quantity END) FROM inventory_entries e WHERE e.stock_item_id = s.id), 0) AS on_hand FROM stock_items s WHERE s.id = ?`, [itemId]);
+    if (!s) throw new VoucherValidationError(`Stock item #${itemId} does not exist.`);
+    if (Number(s.on_hand) - qty < -1e-9) throw Object.assign(new VoucherValidationError(`Not enough stock of ${s.name}: ${Number(s.on_hand)} on hand, ${qty} requested. (Negative stock is blocked for this company.)`), { status: 409 });
+  }
+}
 
-    if (!voucher_no) await lockKeys(['voucher-no:' + voucherPrefix(voucher_type)]); // one number series at a time; other series do not wait
-    const vNo = voucher_no || await nextVoucherNo(voucher_type);
-    if (await get('SELECT id FROM vouchers WHERE voucher_no = ?', [vNo])) throw new VoucherConflictError(`Voucher number ${vNo} is already used. Choose another number.`);
-
-    const vResult = await run(
-      `INSERT INTO vouchers (voucher_type, voucher_no, date, reference_no, narration, party_ledger_id, total_amount)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [voucher_type, vNo, vDate, reference_no || '', narration || '', party_ledger_id || null, totalDebit]
-    );
-    const voucherId = vResult.lastID;
-
+/**
+ * Writes a voucher's lines: ledger lines (+ bank reconciliation queue), stock lines, bill allocations. The ONE place this happens, for
+ * new and for altered vouchers. `inventory` / `bill_allocations` undefined = not written (an alteration that keeps the existing ones).
+ */
+async function writeLines(voucherId, { voucher_type, voucher_no: vNo, reference_no, validatedEntries, inventory, bill_allocations }) {
     // 1. Double-Entry Ledger Lines
     for (const en of validatedEntries) {
       const enResult = await run(
@@ -182,6 +165,36 @@ async function postVoucher(payload, options = {}) {
         }
       }
     }
+}
+
+async function postVoucher(payload, options = {}) {
+  const { voucher_type, voucher_no, date, reference_no, narration, party_ledger_id, inventory, bill_allocations } = payload;
+  const { validatedEntries, totalDebit } = validateLines(payload);
+  const vDate = date || new Date().toISOString().split('T')[0];
+  const idemKey = options.idempotencyKey ? `voucher:${options.userId == null ? '-' : options.userId}:${String(options.idempotencyKey).slice(0, 120)}` : null;
+
+  const work = async () => {
+    // the same request again (double click, network retry): the first result, nothing posted twice
+    const { lockKeys } = require('./tx');
+    if (idemKey) {
+      await lockKeys(['idem:' + idemKey]); // the same request sent twice at once: the second waits here and then finds the first's result
+      const prev = await get('SELECT result FROM idempotency_keys WHERE scope_key = ?', [idemKey]);
+      if (prev) return { ...JSON.parse(prev.result), replayed: true };
+    }
+    await checkLedgers(validatedEntries);
+    await checkStock(voucher_type, inventory);
+
+    if (!voucher_no) await lockKeys(['voucher-no:' + voucherPrefix(voucher_type)]); // one number series at a time; other series do not wait
+    const vNo = voucher_no || await nextVoucherNo(voucher_type);
+    if (await get('SELECT id FROM vouchers WHERE voucher_no = ?', [vNo])) throw new VoucherConflictError(`Voucher number ${vNo} is already used. Choose another number.`);
+
+    const vResult = await run(
+      `INSERT INTO vouchers (voucher_type, voucher_no, date, reference_no, narration, party_ledger_id, total_amount)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [voucher_type, vNo, vDate, reference_no || '', narration || '', party_ledger_id || null, totalDebit]
+    );
+    const voucherId = vResult.lastID;
+    await writeLines(voucherId, { voucher_type, voucher_no: vNo, reference_no, validatedEntries, inventory, bill_allocations });
 
     const result = { id: voucherId, voucher_no: vNo, voucher_type, total_amount: totalDebit };
     if (idemKey) await run('INSERT INTO idempotency_keys (scope_key, result) VALUES (?, ?)', [idemKey, JSON.stringify(result)]);
@@ -191,6 +204,92 @@ async function postVoucher(payload, options = {}) {
   // the company's transaction queue: postings never overlap (a second BEGIN on the same connection used to fail under load)
   if (options.inTransaction) return work();
   return require('./tx').withTransaction(work, { concurrent: true }); // PostgreSQL: runs alongside other postings (locks above where they compete)
+}
+
+/** A voucher's complete content, as kept in the audit log (before / after an alteration, before a delete). */
+async function snapshotOf(id) {
+  return {
+    voucher: await get('SELECT * FROM vouchers WHERE id = ?', [id]),
+    entries: await all('SELECT ledger_id, entry_type, debit_amount, credit_amount, particulars, cost_centre_id FROM ledger_entries WHERE voucher_id = ? ORDER BY id', [id]),
+    inventory: await all('SELECT stock_item_id, direction, quantity, rate, amount, discount_pct, godown_id FROM inventory_entries WHERE voucher_id = ? ORDER BY id', [id]),
+    bill_allocations: await all('SELECT ledger_id, bill_type, bill_ref, amount, due_date FROM bill_allocations WHERE voucher_id = ? ORDER BY id', [id])
+  };
+}
+
+/** Why an existing voucher may not be altered (null = it may). Each case keeps other records consistent. */
+async function alterationBlocker(v, newPartyAmount) {
+  if (String(v.reference_no || '').startsWith('Reversal of ')) return `${v.voucher_no} is a cancellation (reversal) entry. Reversal entries are not altered.`;
+  const rev = await get('SELECT voucher_no FROM vouchers WHERE reference_no = ?', [`Reversal of ${v.voucher_no}`]);
+  if (rev) return `${v.voucher_no} was cancelled by ${rev.voucher_no}, so it cannot be altered any more.`;
+  const order = await get('SELECT o.number AS order_no FROM inv_order_docs d JOIN inv_orders o ON o.id = d.order_id WHERE d.voucher_id = ?', [v.id]).catch(() => null);
+  if (order) return `${v.voucher_no} was created from order ${order.order_no}. Change it through the order (or cancel it with a ${v.voucher_type === 'Purchase' ? 'Debit' : 'Credit'} Note).`;
+  const cleared = await get("SELECT COUNT(*) AS n FROM bank_reconciliation b JOIN ledger_entries e ON e.id = b.ledger_entry_id WHERE e.voucher_id = ? AND (b.bank_clearing_date IS NOT NULL OR b.status <> 'Pending')", [v.id]);
+  if (Number(cleared.n)) return `A bank line of ${v.voucher_no} is already reconciled with the bank statement. Undo the reconciliation first, or cancel the voucher with a reversal.`;
+  for (const t of ['batch_allocations', 'serial_numbers']) {
+    const n = await get(`SELECT COUNT(*) AS n FROM ${t} WHERE inventory_entry_id IN (SELECT id FROM inventory_entries WHERE voucher_id = ?)`, [v.id]).catch(() => ({ n: 0 }));
+    if (Number(n.n)) return `${v.voucher_no} has batch or serial numbers recorded. Cancel it with a reversal and enter it again.`;
+  }
+  // a bill of this voucher that a receipt / payment has already settled: its amount must stay
+  const own = await all("SELECT ledger_id, bill_ref, amount FROM bill_allocations WHERE voucher_id = ? AND bill_type = 'New Ref'", [v.id]);
+  for (const b of own) {
+    const settled = await get("SELECT v.voucher_no FROM bill_allocations a JOIN vouchers v ON v.id = a.voucher_id WHERE a.bill_type = 'Agst Ref' AND a.ledger_id = ? AND a.bill_ref = ? AND a.voucher_id <> ? LIMIT 1", [b.ledger_id, b.bill_ref, v.id]);
+    if (settled && newPartyAmount != null && Math.abs(Number(b.amount) - newPartyAmount) > 0.004) return `Bill ${b.bill_ref} of ${v.voucher_no} is already settled by ${settled.voucher_no}, so its amount cannot change. Cancel it with a reversal instead.`;
+  }
+  return null;
+}
+
+/**
+ * Alters a posted voucher (Tally "Alter"): the voucher keeps its id and type; its date, number, reference, narration, party and lines are
+ * replaced, in ONE transaction, through exactly the same checks and the same line-writing code as a new voucher. The Day Book, ledgers,
+ * stock, GST and every report read these same rows, so they all show the change at once. The complete voucher before AND after goes to
+ * the audit log in the same transaction (no audit record = no change).
+ *   payload.inventory / payload.bill_allocations undefined = keep the voucher's existing stock lines / bills.
+ */
+async function alterVoucher(id, payload, { user = null, ip = null } = {}) {
+  const { validatedEntries, totalDebit } = validateLines(payload);
+  return require('./tx').withTransaction(async () => {
+    const { lockKeys } = require('./tx');
+    await lockKeys(['voucher:' + id]);
+    const v = await get('SELECT * FROM vouchers WHERE id = ?', [id]);
+    if (!v) throw Object.assign(new VoucherValidationError('Voucher not found.'), { status: 404 });
+    if (payload.voucher_type !== v.voucher_type) throw new VoucherValidationError(`A ${v.voucher_type} voucher cannot be turned into a ${payload.voucher_type}. Cancel it (reversal) and enter a new voucher.`);
+    const partyId = payload.party_ledger_id ? parseInt(payload.party_ledger_id, 10) : null;
+    const partyAmount = partyId ? validatedEntries.filter((e) => e.ledger_id === partyId).reduce((s, e) => s + e.debit_amount + e.credit_amount, 0) : null;
+    const blocked = await alterationBlocker(v, partyAmount);
+    if (blocked) throw new VoucherConflictError(blocked);
+    await checkLedgers(validatedEntries);
+
+    const vNo = payload.voucher_no ? String(payload.voucher_no).trim() : v.voucher_no;
+    if (vNo !== v.voucher_no && await get('SELECT id FROM vouchers WHERE voucher_no = ? AND id <> ?', [vNo, id])) throw new VoucherConflictError(`Voucher number ${vNo} is already used. Choose another number.`);
+    const before = await snapshotOf(id);
+
+    // out with the old lines (and their pending bank-reconciliation items) ...
+    await run('DELETE FROM bank_reconciliation WHERE ledger_entry_id IN (SELECT id FROM ledger_entries WHERE voucher_id = ?)', [id]);
+    await run('DELETE FROM ledger_entries WHERE voucher_id = ?', [id]);
+    const inventory = payload.inventory === undefined ? undefined : (Array.isArray(payload.inventory) ? payload.inventory : []);
+    if (inventory !== undefined) await run('DELETE FROM inventory_entries WHERE voucher_id = ?', [id]);
+    const bills = payload.bill_allocations === undefined ? undefined : (Array.isArray(payload.bill_allocations) ? payload.bill_allocations : []);
+    if (bills !== undefined) await run('DELETE FROM bill_allocations WHERE voucher_id = ?', [id]);
+    await checkStock(v.voucher_type, inventory); // the voucher's own previous quantity counts as available again
+
+    // ... in with the new ones, through the same code as a new voucher
+    const date = payload.date || v.date;
+    await run('UPDATE vouchers SET voucher_no = ?, date = ?, reference_no = ?, narration = ?, party_ledger_id = ?, total_amount = ? WHERE id = ?',
+      [vNo, date, payload.reference_no != null ? payload.reference_no : v.reference_no, payload.narration != null ? payload.narration : v.narration, partyId || v.party_ledger_id, totalDebit, id]);
+    await writeLines(id, { voucher_type: v.voucher_type, voucher_no: vNo, reference_no: payload.reference_no != null ? payload.reference_no : v.reference_no, validatedEntries, inventory, bill_allocations: bills });
+    // bills kept: the voucher's own single bill follows the new party amount
+    if (bills === undefined && partyAmount != null) {
+      const own = await all("SELECT id FROM bill_allocations WHERE voucher_id = ? AND bill_type = 'New Ref' AND ledger_id = ?", [id, partyId]);
+      if (own.length === 1) await run('UPDATE bill_allocations SET amount = ? WHERE id = ?', [Math.round(partyAmount * 100) / 100, own[0].id]);
+    }
+    await run("UPDATE quotations SET updated_at = CURRENT_TIMESTAMP WHERE converted_voucher_id = ?", [id]).catch(() => {});
+
+    const after = await snapshotOf(id);
+    const u = user || {};
+    await run('INSERT INTO activity_log (user_id, username, role, action, entity, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [u.userId || null, u.username || 'system', u.role || null, 'VOUCHER_ALTER', 'voucher', String(id), JSON.stringify({ before, after }), ip || null]);
+    return { id, voucher_no: vNo, voucher_type: v.voucher_type, total_amount: totalDebit, row_version: Number(after.voucher.row_version), altered: true };
+  }, { concurrent: true });
 }
 
 /**
@@ -220,4 +319,4 @@ async function reverseVoucher(id, { date, narration, userId } = {}) {
   });
 }
 
-module.exports = { postVoucher, reverseVoucher, nextVoucherNo, negativeStockPolicy, setNegativeStockPolicy, VoucherValidationError, VoucherConflictError, round2 };
+module.exports = { postVoucher, alterVoucher, snapshotOf, reverseVoucher, nextVoucherNo, negativeStockPolicy, setNegativeStockPolicy, VoucherValidationError, VoucherConflictError, round2 };

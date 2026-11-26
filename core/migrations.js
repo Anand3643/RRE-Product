@@ -637,6 +637,16 @@ const MIGRATIONS = [
       `CREATE TRIGGER IF NOT EXISTS trg_${t}_row_version AFTER UPDATE ON ${t} FOR EACH ROW WHEN NEW.row_version = OLD.row_version
        BEGIN UPDATE ${t} SET row_version = OLD.row_version + 1 WHERE id = NEW.id; END`
     ])
+  },
+  {
+    id: '025_voucher_row_version',
+    description: 'Vouchers can be altered (PUT /api/vouchers/:id): the same version number as other edited records, so an alteration made from an older copy is refused instead of overwriting a newer one',
+    sqliteOnly: true, // PostgreSQL: db/postgres/migrations/009_voucher_row_version.sql
+    statements: [
+      'ALTER TABLE vouchers ADD COLUMN row_version INTEGER NOT NULL DEFAULT 1',
+      `CREATE TRIGGER IF NOT EXISTS trg_vouchers_row_version AFTER UPDATE ON vouchers FOR EACH ROW WHEN NEW.row_version = OLD.row_version
+       BEGIN UPDATE vouchers SET row_version = OLD.row_version + 1 WHERE id = NEW.id; END`
+    ]
   }
 ];
 

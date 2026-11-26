@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { all, get, run } = require('../../core/db');
-const { postVoucher, reverseVoucher, negativeStockPolicy, setNegativeStockPolicy, VoucherValidationError, VoucherConflictError } = require('../../core/voucherService');
+const { postVoucher, alterVoucher, snapshotOf, reverseVoucher, negativeStockPolicy, setNegativeStockPolicy, VoucherValidationError, VoucherConflictError } = require('../../core/voucherService');
 const { withTransaction } = require('../../core/tx');
 const { logActivity } = require('../../core/auth');
 
@@ -102,6 +102,26 @@ router.post('/', async (req, res) => {
   } catch (err) {
     const status = err instanceof VoucherValidationError ? (err.status || 400) : err instanceof VoucherConflictError ? 409 : /UNIQUE/.test(String(err.message)) ? 409 : 500;
     res.status(status).json({ success: false, error: status === 409 && !(err instanceof VoucherConflictError) && !(err instanceof VoucherValidationError) ? 'That voucher number is already used. Choose another number.' : err.message });
+  }
+});
+
+// Alter a posted voucher (Tally "Alter"). Same checks as posting; the Day Book, ledgers, stock and reports change with it in one transaction;
+// the voucher before and after is kept in the audit log. A save made from an older copy is refused (409, X-Row-Version: core/rowVersion.js).
+router.put('/:id', async (req, res, next) => {
+  if (!/^\d+$/.test(req.params.id)) return next(); // e.g. /settings/... is another route
+  try {
+    const id = parseInt(req.params.id, 10);
+    const body = req.body || {};
+    // an alteration is not a way around the approval rules: if the altered voucher would need approval, it is refused here
+    const needs = await require('../../core/approvals').evaluate(body, req.user || {}).catch(() => []);
+    if (needs && needs.length) {
+      return res.status(409).json({ success: false, code: 'NEEDS_APPROVAL', error: `This change would need approval (${needs.map((m) => m.reason).join('; ')}). Cancel the voucher (reversal) and enter it again: the new voucher goes for approval.` });
+    }
+    const r = await alterVoucher(id, body, { user: req.user, ip: req.ip });
+    res.json({ success: true, ...r, message: `${r.voucher_type} Voucher ${r.voucher_no} altered` });
+  } catch (err) {
+    const status = err instanceof VoucherValidationError ? (err.status || 400) : err instanceof VoucherConflictError ? 409 : /UNIQUE/.test(String(err.message)) ? 409 : 500;
+    res.status(status).json({ success: false, error: err.message });
   }
 });
 

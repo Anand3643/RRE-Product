@@ -78,6 +78,7 @@ Migration files (applied in order, each once, recorded with a checksum in `rre_m
 | `005_idempotency_keys.sql` | repeated financial requests (same Idempotency-Key) return the first result (= SQLite migration 022) |
 | `006_party_and_group_indexes.sql` | indexes for party / group look-ups used by reports and the Day Book (= SQLite migration 023) |
 | `008_row_versions.sql` | a version number (`row_version`) on items, categories, units, warehouses, ledgers (customers / suppliers), orders and quotations, raised by a trigger on every change; a save made from an older copy is refused with 409 instead of overwriting (`core/rowVersion.js`; = SQLite migration 024) |
+| `009_voucher_row_version.sql` | the same version number on `vouchers`: a posted voucher can be altered (`PUT /api/vouchers/:id`, same checks and same line-writing code as posting, complete before/after in the audit log); an alteration made from an older copy is refused (= SQLite migration 025) |
 | `007_id_sequences.sql` | new row ids from a sequence per table instead of a per-company counter row (the counter row made every posting wait for the previous one). Rows inserted with an explicit id (copy / restore) move the sequence past it |
 
 `001` is frozen: a schema change is a NEW numbered file here plus the matching SQLite migration in `core/migrations.js`.

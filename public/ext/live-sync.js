@@ -32,7 +32,8 @@
   const FAM = [
     [/^\/api\/inv\/items(?:\/(\d+))?\/?$/, 'items'], [/^\/api\/inv\/categories(?:\/(\d+))?\/?$/, 'categories'], [/^\/api\/inv\/units(?:\/(\d+))?\/?$/, 'units'],
     [/^\/api\/inv\/warehouses(?:\/(\d+))?\/?$/, 'warehouses'], [/^\/api\/inv\/(?:customers|suppliers)(?:\/(\d+))?\/?$/, 'parties'],
-    [/^\/api\/inv\/orders\/(\d+)\/?$/, 'orders'], [/^\/api\/inv\/(?:sales-orders|purchase-orders)\/?$/, 'orders'], [/^\/api\/quotations(?:\/(\d+))?\/?$/, 'quotations']
+    [/^\/api\/inv\/orders\/(\d+)\/?$/, 'orders'], [/^\/api\/inv\/(?:sales-orders|purchase-orders)\/?$/, 'orders'], [/^\/api\/quotations(?:\/(\d+))?\/?$/, 'quotations'],
+    [/^\/api\/vouchers(?:\/(\d+))?\/?$/, 'vouchers']
   ];
   const famOf = (p) => { for (const [re, key] of FAM) { const m = re.exec(p); if (m) return { key, id: m[1] ? Number(m[1]) : null }; } return null; };
   // writes that save business data (shown in the save status); previews / look-ups sent as POST are not "saves"

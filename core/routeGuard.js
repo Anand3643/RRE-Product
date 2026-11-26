@@ -46,6 +46,7 @@ const RULES = [
   { re: /^\/api\/reports\/(trial-balance|profit-loss|balance-sheet|ratio-analysis)/, perm: 'canViewFinancials' },
   { m: 'DELETE', re: /^\/api\/vouchers\/\d+/, perm: 'canDeleteVouchers' },
   { m: 'POST', re: /^\/api\/vouchers\/\d+\/reverse\/?$/, perm: 'canEditVouchers' }, // correcting posted books
+  { m: 'PUT', re: /^\/api\/vouchers\/\d+\/?$/, perm: 'canEditVouchers', checkVoucherType: true }, // altering a posted voucher
   { m: 'PUT', re: /^\/api\/vouchers\/settings\//, perm: 'canManageUsers' },          // company accounting settings: administrators
   { m: 'POST', re: /^\/api\/vouchers\/?$/, perm: 'canCreateVouchers', checkVoucherType: true },
   { m: 'POST', re: /^\/api\/masters\//, perm: 'canCreateVouchers' },

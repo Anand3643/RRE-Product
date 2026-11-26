@@ -1152,6 +1152,8 @@ function openReport(reportType) {
 // ========================================================
 function openVoucherScreen(type = 'Sales') {
   appState.currentVoucherType = type;
+  appState.editingVoucher = null; // a fresh voucher (Alter sets this again after the form is drawn)
+  const typeSel = document.getElementById('v-select-type'); if (typeSel) typeSel.disabled = false;
   showView('view-voucher');
   if (!appState.ledgers || !appState.ledgers.length) {
     loadMasters().then(() => {
@@ -1187,6 +1189,57 @@ function openVoucherScreen(type = 'Sales') {
 
 function switchVoucherType(type) {
   openVoucherScreen(type);
+}
+
+// Alter (from the Day Book): the saved voucher is loaded into this same voucher form; saving replaces it (PUT /api/vouchers/:id) instead
+// of posting a new one. Item invoices open with their items; other vouchers with their Dr / Cr lines.
+async function openVoucherForAlter(id) {
+  try {
+    if (!appState.ledgers || !appState.ledgers.length) await loadMasters();
+    const res = await fetch(`${API_BASE}/vouchers/${id}`); // also remembers the version this alteration is made from (live-sync.js)
+    const j = await res.json();
+    if (!j.success) { alert(`Cannot open the voucher: ${j.error}`); return; }
+    const v = j.data;
+    openVoucherScreen(v.voucher_type);
+    const set = (elId, val) => { const el = document.getElementById(elId); if (el) el.value = val == null ? '' : val; };
+    set('v-no', v.voucher_no); set('v-date', v.date); set('v-ref', v.reference_no); set('v-narration', v.narration);
+    const party = document.getElementById('v-party-ledger');
+    if (party && v.party_ledger_id) {
+      if (![...party.options].some((o) => o.value === String(v.party_ledger_id))) {
+        const l = appState.ledgers.find((x) => x.id === v.party_ledger_id);
+        party.insertAdjacentHTML('beforeend', `<option value="${v.party_ledger_id}">${escapeHtml(l ? l.name : v.party_name || 'Party')}</option>`);
+      }
+      party.value = String(v.party_ledger_id); handlePartyChange();
+    }
+    const inv = v.inventory || [];
+    if (inv.length && ['Sales', 'Purchase', 'Credit Note', 'Debit Note'].includes(v.voucher_type)) {
+      setVoucherMode('invoice');
+      document.getElementById('invoice-items-tbody').innerHTML = '';
+      for (const it of inv) {
+        addInvoiceItemRow();
+        const tr = document.querySelector('#invoice-items-tbody tr:last-child');
+        tr.querySelector('.item-select').value = String(it.stock_item_id);
+        if (it.godown_id) tr.querySelector('.item-godown').value = String(it.godown_id);
+        tr.querySelector('.item-qty').value = it.quantity; tr.querySelector('.item-rate').value = it.rate; tr.querySelector('.item-disc').value = it.discount_pct || 0;
+      }
+      recalculateInvoiceTaxes();
+      const bill = (v.bill_allocations || [])[0];
+      if (bill) { set('bill-ref-type', bill.bill_type); set('bill-ref-name', bill.bill_ref); if (bill.due_date) set('bill-due-date', bill.due_date); }
+    } else {
+      setVoucherMode('manual');
+      document.getElementById('voucher-entries-tbody').innerHTML = '';
+      for (const e of v.entries || []) {
+        const isDr = Number(e.debit_amount) > 0;
+        addDoubleEntryRow(isDr ? 'Dr' : 'Cr', e.ledger_id, isDr ? e.debit_amount : e.credit_amount);
+        const tr = document.querySelector('#voucher-entries-tbody tr:last-child');
+        if (e.cost_centre_id) tr.querySelector('.entry-cc').value = String(e.cost_centre_id);
+      }
+      recalculateAccountingTotals();
+    }
+    appState.editingVoucher = { id: v.id, voucher_no: v.voucher_no, voucher_type: v.voucher_type, keep_stock: !!inv.length && appState.voucherMode !== 'invoice' };
+    const typeSel = document.getElementById('v-select-type'); if (typeSel) typeSel.disabled = true; // an alteration keeps the type
+    const title = document.getElementById('v-title'); if (title) title.textContent = `Alter ${v.voucher_type} Voucher ${v.voucher_no}`;
+  } catch (err) { alert(`Cannot open the voucher: ${err.message}`); }
 }
 
 function setVoucherMode(mode) {
@@ -1831,6 +1884,23 @@ async function saveVoucherNow(e) {
       bill_allocations: billAllocations
     };
 
+    const editing = appState.editingVoucher;
+    if (editing) {
+      payload.voucher_type = editing.voucher_type;
+      // Dr / Cr lines only: the voucher's existing stock lines and bills are kept (not wiped)
+      if (appState.voucherMode !== 'invoice') { delete payload.inventory; delete payload.bill_allocations; }
+      const res = await fetch(`${API_BASE}/vouchers/${editing.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const json = await res.json();
+      if (json.success) {
+        appState.editingVoucher = null;
+        alert(`✔ ${json.voucher_type} Voucher ${json.voucher_no} ALTERED.\nTotal Amount: ${formatCurrency(json.total_amount)}\nThe Day Book, ledgers and reports now show the change; the previous version is kept in the audit log.`);
+        openReport('daybook');
+      } else {
+        alert(`Not altered: ${json.error}`);
+      }
+      return;
+    }
+
     const res = await fetch(`${API_BASE}/vouchers`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -2057,38 +2127,143 @@ async function loadStockSummary() {
 }
 
 // 4E. DAY BOOK
-// The Day Book is read 200 vouchers at a time (latest first) and without their lines, which this list does not show; "Load more" adds the next 200.
+// The Day Book is the vouchers themselves (there is no separate copy): every saved voucher of every type is in it at once, with its
+// ledger lines. Read 200 vouchers at a time (latest first); "Load more" adds the next 200. Filters: type, dates, ledger, search.
+// Shown per day with the day's debit / credit totals; with a ledger chosen, its opening and closing balance.
 const DAYBOOK_PAGE = 200;
+const daybookState = { rows: [], total: 0, summary: null };
+function daybookQuery(offset, limit) {
+  const v = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
+  const p = new URLSearchParams({ limit: String(limit), offset: String(offset), summary: offset === 0 ? '1' : '0' });
+  if (v('daybook-type-filter')) p.set('type', v('daybook-type-filter'));
+  if (v('daybook-from')) p.set('from_date', v('daybook-from'));
+  if (v('daybook-to')) p.set('to_date', v('daybook-to'));
+  if (v('daybook-ledger-filter')) p.set('ledger_id', v('daybook-ledger-filter'));
+  if (v('daybook-search').trim()) p.set('q', v('daybook-search').trim());
+  return `${API_BASE}/reports/daybook?${p.toString()}`;
+}
+let daybookSearchTimer = null;
+function daybookSearchChanged() { clearTimeout(daybookSearchTimer); daybookSearchTimer = setTimeout(() => loadDaybook(), 300); }
+function fillDaybookLedgers() {
+  const sel = document.getElementById('daybook-ledger-filter');
+  if (!sel || !appState.ledgers || !appState.ledgers.length) return;
+  const keep = sel.value;
+  sel.innerHTML = '<option value="">All ledgers</option>' + [...appState.ledgers].sort((x, y) => x.name.localeCompare(y.name)).map((l) => `<option value="${l.id}">${escapeHtml(l.name)}</option>`).join('');
+  sel.value = keep;
+}
 async function loadDaybook(append = false) {
   try {
-    const typeFilter = document.getElementById('daybook-type-filter').value;
-    const tbody = document.getElementById('daybook-tbody');
-    const offset = append ? (tbody.querySelectorAll('tr[data-vid]').length) : 0;
-    const url = `${API_BASE}/reports/daybook?limit=${DAYBOOK_PAGE}&offset=${offset}&entries=0${typeFilter ? `&type=${encodeURIComponent(typeFilter)}` : ''}`;
-    const res = await fetch(url);
+    if (!append) fillDaybookLedgers();
+    const offset = append ? daybookState.rows.length : 0;
+    const res = await fetch(daybookQuery(offset, DAYBOOK_PAGE));
     const json = await res.json();
     if (!json.success) return;
-    const total = parseInt(res.headers.get('X-Total-Count'), 10);
-
-    const more = tbody.querySelector('tr.daybook-more'); if (more) more.remove();
-    const rows = json.data.map(v => `
-      <tr data-vid="${v.id}" class="hover:bg-slate-50 cursor-pointer" onclick="viewVoucherDetail(${v.id})">
-        <td class="p-2.5 text-center font-mono text-slate-600">${formatDateDisplay(v.date)}</td>
-        <td class="p-2.5 font-mono font-bold text-blue-700">${v.voucher_no}</td>
-        <td class="p-2.5 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold ${getVoucherBadgeColor(v.voucher_type)}">${v.voucher_type}</span></td>
-        <td class="p-2.5 text-slate-800 font-medium">${v.party_name || v.narration || '-'}</td>
-        <td class="p-2.5 text-right font-mono font-bold text-slate-900">${formatCurrency(v.total_amount)}</td>
-      </tr>
-    `).join('');
-    if (append) tbody.insertAdjacentHTML('beforeend', rows); else tbody.innerHTML = rows;
-    const shown = tbody.querySelectorAll('tr[data-vid]').length;
-    if (Number.isFinite(total) && shown < total) {
-      tbody.insertAdjacentHTML('beforeend', `<tr class="daybook-more"><td colspan="5" class="p-2.5 text-center"><button type="button" class="px-3 py-1.5 rounded border border-slate-300 font-bold text-slate-700 hover:bg-slate-50" onclick="this.disabled=true;loadDaybook(true)">Load more (${shown.toLocaleString('en-IN')} of ${total.toLocaleString('en-IN')} vouchers shown)</button></td></tr>`);
-    }
+    daybookState.total = parseInt(res.headers.get('X-Total-Count'), 10) || json.data.length;
+    daybookState.rows = append ? daybookState.rows.concat(json.data) : json.data;
+    if (!append) daybookState.summary = json.summary || null;
+    renderDaybook();
   } catch (err) {
     console.error('Failed to load Day Book:', err);
   }
 }
+const dbSigned = (n) => `${formatCurrency(Math.abs(n))} ${n < 0 ? 'Cr' : 'Dr'}`;
+function daybookCanEdit() {
+  try { const p = window.RRESession && window.RRESession.permissions && window.RRESession.permissions(); return !p || p.canEditVouchers !== false; } catch (e) { return true; }
+}
+function renderDaybook() {
+  const tbody = document.getElementById('daybook-tbody');
+  if (!tbody) return;
+  const detailed = !(document.getElementById('daybook-detailed') && !document.getElementById('daybook-detailed').checked);
+  const s = daybookState.summary, rows = daybookState.rows, canEdit = daybookCanEdit();
+  const sumEl = document.getElementById('daybook-summary');
+  if (sumEl) sumEl.innerHTML = s ? `<span><b>${s.vouchers}</b> voucher(s)</span><span>Total Dr <b class="font-mono">${formatCurrency(s.total_debit)}</b></span><span>Total Cr <b class="font-mono">${formatCurrency(s.total_credit)}</b></span>`
+    + (s.ledger ? `<span>${escapeHtml(s.ledger.name)}: opening <b class="font-mono">${dbSigned(s.ledger.opening)}</b>, closing <b class="font-mono">${dbSigned(s.ledger.closing)}</b></span>` : '') : '';
+  const ledgerOnly = s && s.ledger ? s.ledger.id : null;
+  let html = '';
+  if (s && s.ledger) html += `<tr class="bg-amber-50 font-bold"><td colspan="5" class="p-2 text-right text-slate-700">Opening balance of ${escapeHtml(s.ledger.name)}</td><td class="p-2 text-right font-mono">${s.ledger.opening > 0 ? formatCurrency(s.ledger.opening) : ''}</td><td class="p-2 text-right font-mono">${s.ledger.opening < 0 ? formatCurrency(-s.ledger.opening) : ''}</td><td colspan="2"></td></tr>`;
+  let day = null, dayDr = 0, dayCr = 0;
+  const dayTotal = () => (day === null ? '' : `<tr class="bg-slate-50 text-slate-700 font-bold db-daytotal"><td colspan="5" class="p-2 text-right">Total for ${formatDateDisplay(day)}</td><td class="p-2 text-right font-mono">${formatCurrency(dayDr)}</td><td class="p-2 text-right font-mono">${formatCurrency(dayCr)}</td><td colspan="2"></td></tr>`);
+  for (const v of rows) {
+    if (v.date !== day) { html += dayTotal(); day = v.date; dayDr = 0; dayCr = 0; }
+    const lines = (v.entries || []).filter((e) => !ledgerOnly || e.ledger_id === ledgerOnly);
+    const dr = lines.reduce((t, e) => t + Number(e.debit_amount || 0), 0), cr = lines.reduce((t, e) => t + Number(e.credit_amount || 0), 0);
+    dayDr += dr; dayCr += cr;
+    const isRev = /^Reversal of /.test(v.reference_no || '');
+    const actions = canEdit && !isRev ? `<button type="button" class="px-1.5 py-0.5 rounded border border-slate-300 text-[10px] font-bold text-blue-700 hover:bg-blue-50" onclick="event.stopPropagation(); openVoucherForAlter(${v.id})">Alter</button>
+      <button type="button" class="px-1.5 py-0.5 rounded border border-slate-300 text-[10px] font-bold text-red-700 hover:bg-red-50" onclick="event.stopPropagation(); cancelVoucher(${v.id}, '${escapeHtml(v.voucher_no).replace(/'/g, '&#39;')}')">Cancel</button>` : (isRev ? '<span class="text-[10px] text-slate-400">reversal</span>' : '');
+    html += `<tr data-vid="${v.id}" class="hover:bg-slate-50 cursor-pointer" onclick="viewVoucherDetail(${v.id})">
+        <td class="p-2 text-center font-mono text-slate-600">${formatDateDisplay(v.date)}</td>
+        <td class="p-2 font-mono font-bold text-blue-700">${escapeHtml(v.voucher_no)}</td>
+        <td class="p-2 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold ${getVoucherBadgeColor(v.voucher_type)}">${escapeHtml(v.voucher_type)}</span></td>
+        <td class="p-2 text-slate-800 font-medium">${escapeHtml(v.party_name || (lines[0] && lines[0].ledger_name) || '-')}</td>
+        <td class="p-2 text-slate-500">${detailed ? '' : lines.map((e) => escapeHtml(e.ledger_name)).join(', ')}</td>
+        <td class="p-2 text-right font-mono font-bold text-slate-900">${formatCurrency(dr)}</td>
+        <td class="p-2 text-right font-mono font-bold text-slate-900">${formatCurrency(cr)}</td>
+        <td class="p-2 text-slate-600">${escapeHtml(v.narration || '')}</td>
+        <td class="p-2 text-center whitespace-nowrap">${actions}</td>
+      </tr>`;
+    if (detailed) {
+      for (const e of lines) html += `<tr class="db-line text-slate-600"><td colspan="4"></td><td class="px-2 py-1 pl-6">${Number(e.debit_amount) > 0 ? 'Dr' : 'Cr'} &nbsp;${escapeHtml(e.ledger_name)}</td>
+        <td class="px-2 py-1 text-right font-mono">${Number(e.debit_amount) > 0 ? formatCurrency(e.debit_amount) : ''}</td><td class="px-2 py-1 text-right font-mono">${Number(e.credit_amount) > 0 ? formatCurrency(e.credit_amount) : ''}</td><td colspan="2"></td></tr>`;
+    }
+  }
+  html += dayTotal();
+  if (!rows.length) html += '<tr><td colspan="9" class="p-4 text-center text-slate-400">No vouchers for these filters.</td></tr>';
+  if (s && s.ledger && rows.length >= daybookState.total) html += `<tr class="bg-amber-50 font-bold"><td colspan="5" class="p-2 text-right text-slate-700">Closing balance of ${escapeHtml(s.ledger.name)}</td><td class="p-2 text-right font-mono">${s.ledger.closing > 0 ? formatCurrency(s.ledger.closing) : ''}</td><td class="p-2 text-right font-mono">${s.ledger.closing < 0 ? formatCurrency(-s.ledger.closing) : ''}</td><td colspan="2"></td></tr>`;
+  if (rows.length < daybookState.total) html += `<tr class="daybook-more"><td colspan="9" class="p-2.5 text-center"><button type="button" class="px-3 py-1.5 rounded border border-slate-300 font-bold text-slate-700 hover:bg-slate-100" onclick="loadDaybook(true)">Load more (${daybookState.total - rows.length} older)</button></td></tr>`;
+  tbody.innerHTML = html;
+}
+// every voucher of the current filter (not only the loaded page), for export / print
+async function daybookAll() {
+  const out = []; let offset = 0, total = Infinity;
+  while (offset < total && offset < 20000) {
+    const res = await fetch(daybookQuery(offset, 1000)); const j = await res.json(); if (!j.success) break;
+    total = parseInt(res.headers.get('X-Total-Count'), 10) || j.data.length; out.push(...j.data); offset += 1000; if (!j.data.length) break;
+  }
+  return out;
+}
+async function exportDaybookCsv() {
+  const rows = await daybookAll(); const ledgerOnly = daybookState.summary && daybookState.summary.ledger ? daybookState.summary.ledger.id : null;
+  const q = (x) => `"${String(x == null ? '' : x).replace(/"/g, '""')}"`;
+  const lines = [['Date', 'Voucher No', 'Type', 'Particulars', 'Ledger', 'Debit', 'Credit', 'Narration'].map(q).join(',')];
+  for (const v of rows) for (const e of (v.entries || []).filter((x) => !ledgerOnly || x.ledger_id === ledgerOnly)) {
+    lines.push([v.date, v.voucher_no, v.voucher_type, v.party_name || '', e.ledger_name, Number(e.debit_amount) || '', Number(e.credit_amount) || '', v.narration || ''].map(q).join(','));
+  }
+  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `day-book-${new Date().toISOString().slice(0, 10)}.csv`; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+async function printDaybook() {
+  const rows = await daybookAll(); const s = daybookState.summary; const ledgerOnly = s && s.ledger ? s.ledger.id : null;
+  const company = (appState.company && appState.company.name) || 'RRE Entries';
+  let body = '', day = null, dDr = 0, dCr = 0;
+  const tot = () => (day === null ? '' : `<tr class="t"><td colspan="5">Total for ${formatDateDisplay(day)}</td><td>${formatCurrency(dDr)}</td><td>${formatCurrency(dCr)}</td><td></td></tr>`);
+  for (const v of rows) {
+    if (v.date !== day) { body += tot(); day = v.date; dDr = 0; dCr = 0; }
+    (v.entries || []).filter((e) => !ledgerOnly || e.ledger_id === ledgerOnly).forEach((e, i) => {
+      dDr += Number(e.debit_amount) || 0; dCr += Number(e.credit_amount) || 0;
+      body += `<tr><td>${i ? '' : formatDateDisplay(v.date)}</td><td>${i ? '' : escapeHtml(v.voucher_no)}</td><td>${i ? '' : escapeHtml(v.voucher_type)}</td><td>${i ? '' : escapeHtml(v.party_name || '')}</td><td>${escapeHtml(e.ledger_name)}</td><td class="n">${Number(e.debit_amount) > 0 ? formatCurrency(e.debit_amount) : ''}</td><td class="n">${Number(e.credit_amount) > 0 ? formatCurrency(e.credit_amount) : ''}</td><td>${i ? '' : escapeHtml(v.narration || '')}</td></tr>`;
+    });
+  }
+  body += tot();
+  const w = window.open('', '_blank'); if (!w) { alert('Allow pop-ups for this site to print the Day Book.'); return; }
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Day Book</title><style>body{font:12px Arial,sans-serif;margin:24px;color:#111}h1{font-size:16px;margin:0}p{margin:2px 0 12px;color:#444}table{width:100%;border-collapse:collapse}th,td{border:1px solid #bbb;padding:4px 6px;text-align:left}th{background:#eee}.n,td:nth-child(6),td:nth-child(7){text-align:right;font-family:Consolas,monospace}.t td{font-weight:bold;background:#f5f5f5}</style></head><body>
+    <h1>${escapeHtml(company)} — Day Book</h1><p>${s ? `${s.vouchers} voucher(s) · Dr ${formatCurrency(s.total_debit)} · Cr ${formatCurrency(s.total_credit)}${s.ledger ? ` · ${escapeHtml(s.ledger.name)}: opening ${dbSigned(s.ledger.opening)}, closing ${dbSigned(s.ledger.closing)}` : ''}` : ''}</p>
+    <table><thead><tr><th>Date</th><th>Voucher No</th><th>Type</th><th>Particulars</th><th>Ledger</th><th>Debit (₹)</th><th>Credit (₹)</th><th>Narration</th></tr></thead><tbody>${body}</tbody></table></body></html>`);
+  w.document.close(); w.focus(); setTimeout(() => w.print(), 300);
+}
+// Cancel = a reversal entry (the original stays on record, the books show both): never a silent delete
+async function cancelVoucher(id, no) {
+  if (!confirm(`Cancel voucher ${no}?\n\nA reversal entry with the opposite debits and credits is posted today, so ${no} stays on record and its effect on the books is undone.`)) return;
+  try {
+    const res = await fetch(`${API_BASE}/vouchers/${id}/reverse`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ narration: `Cancellation of ${no}` }) });
+    const j = await res.json();
+    if (!j.success) { alert(`Not cancelled: ${j.error}`); return; }
+    alert(`${no} cancelled by ${j.voucher_type} ${j.voucher_no}.`);
+    loadDaybook(); if (typeof loadMasters === 'function') loadMasters();
+  } catch (err) { alert(`Not cancelled: ${err.message}`); }
+}
+
 
 function getVoucherBadgeColor(type) {
   const map = {
@@ -2097,7 +2272,9 @@ function getVoucherBadgeColor(type) {
     Payment: 'bg-red-100 text-red-800',
     Receipt: 'bg-purple-100 text-purple-800',
     Contra: 'bg-amber-100 text-amber-800',
-    Journal: 'bg-slate-200 text-slate-800'
+    Journal: 'bg-slate-200 text-slate-800',
+    'Credit Note': 'bg-orange-100 text-orange-800',
+    'Debit Note': 'bg-cyan-100 text-cyan-800'
   };
   return map[type] || 'bg-slate-100 text-slate-700';
 }
@@ -4224,6 +4401,12 @@ window.loadAuditTrail = loadAuditTrail;
 window.openThemeSelectorModal = openThemeSelectorModal;
 window.applyTheme = applyTheme;
 window.cycleNextTheme = cycleNextTheme;
+window.openVoucherForAlter = openVoucherForAlter;
+window.cancelVoucher = cancelVoucher;
+window.exportDaybookCsv = exportDaybookCsv;
+window.printDaybook = printDaybook;
+window.renderDaybook = renderDaybook;
+window.daybookSearchChanged = daybookSearchChanged;
 window.chooseMode = chooseMode;
 window.showGateway = showGateway;
 window.toggleDashboard = toggleDashboard;
