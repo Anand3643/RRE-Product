@@ -31,6 +31,7 @@
     "test:invapp": "node test_invapp.js",
     "test:invorders": "node test_invorders.js",
     "test:asr": "node test_asr.js",
+    "prebuild:win": "node scripts/prebuild-info.js",
     "build:win": "electron-builder --win nsis",
     "build:portable": "electron-builder --win portable",
     "install:desktop": "powershell -ExecutionPolicy Bypass -File create-shortcuts.ps1",

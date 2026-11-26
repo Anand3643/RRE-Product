@@ -830,8 +830,8 @@ app.post('/api/system/perform-update', async (req, res) => {
 
   if (isGitRepo) {
     try {
-      const { stdout: pullOut } = await execPromise('git pull origin main && npm install --no-audit --no-fund', { timeout: 120000 });
-      console.log('[System Update] git pull + npm install result:', pullOut);
+      const { stdout: pullOut } = await execPromise('git pull --ff-only origin main && npm install --no-audit --no-fund && node scripts/init-local-db.js', { timeout: 120000 });
+      console.log('[System Update] git pull + npm install + db:init result:', pullOut);
 
       // Trigger silent rebuild and installation in background
       exec('npm run build:win && powershell -Command "Start-Process dist\\\"RRE Entries Setup 1.0.0.exe\\\" -ArgumentList \\\"/S\\\" -Wait"', (err) => {
@@ -841,7 +841,7 @@ app.post('/api/system/perform-update', async (req, res) => {
 
       return res.json({
         success: true,
-        message: 'Successfully updated application files from GitHub! The PC installation is being refreshed.',
+        message: 'Successfully updated application files, dependencies, and local database schema from GitHub! The PC installation is being refreshed.',
         details: pullOut
       });
     } catch (err) {
@@ -853,7 +853,22 @@ app.post('/api/system/perform-update', async (req, res) => {
   }
 
   // Packaged / Installed Mode (No .git folder)
-  // Check if setup installer exists locally or provide direct installer download
+  const runSilentInstaller = (installerPath) => {
+    const updCmd = path.join(require('os').tmpdir(), 'rre-apply-update.cmd');
+    const exeName = path.basename(process.execPath || 'RRE Entries.exe');
+    const installedExe = path.join(process.env.LOCALAPPDATA || '', 'Programs', 'RRE Entries', 'RRE Entries.exe');
+    const script = [
+      '@echo off',
+      'timeout /t 2 /nobreak >nul',
+      `taskkill /F /IM "${exeName}" >nul 2>&1`,
+      `"${installerPath}" /S`,
+      `if exist "${installedExe}" start "" "${installedExe}"`
+    ].join('\r\n');
+    fs.writeFileSync(updCmd, script, 'utf8');
+    require('child_process').spawn('cmd.exe', ['/c', updCmd], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+  };
+
+  // Check local installer first
   const possibleSetupPaths = [
     path.join(__dirname, 'dist', 'RRE Entries Setup 1.0.0.exe'),
     path.join(__dirname, '..', 'dist', 'RRE Entries Setup 1.0.0.exe'),
@@ -862,23 +877,49 @@ app.post('/api/system/perform-update', async (req, res) => {
   ];
 
   const foundInstaller = possibleSetupPaths.find(p => fs.existsSync(p));
-
   if (foundInstaller) {
-    exec(`powershell -Command "Start-Process '${foundInstaller}' -ArgumentList '/S' -Wait"`, (err) => {
-      if (err) console.warn('[System Update] Installer launch notice:', err.message);
-    });
-
+    runSilentInstaller(foundInstaller);
     return res.json({
       success: true,
-      message: 'Latest RRE Entries Setup installer found and launched. Your installation is being updated in the background without affecting your accounting data.'
+      message: 'Latest RRE Entries Setup installer found and launched. Your installation is updating cleanly without affecting your accounting data.'
     });
   }
 
-  // For remote client PCs without a local installer
+  // Remote client PC: download latest setup installer from GitHub Releases and apply silently
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8000);
+    const relRes = await fetch('https://api.github.com/repos/Anand3643/RRE-Product/releases/latest', {
+      headers: { 'User-Agent': 'RRE-Entries-Desktop' },
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    if (relRes.ok) {
+      const rel = await relRes.json();
+      const asset = (rel.assets || []).find(a => /setup.*\.exe$/i.test(a.name) && a.browser_download_url);
+      if (asset) {
+        const dlDir = path.join(require('os').tmpdir(), 'rre-update');
+        fs.mkdirSync(dlDir, { recursive: true });
+        const dlPath = path.join(dlDir, asset.name);
+        const binRes = await fetch(asset.browser_download_url, { headers: { 'User-Agent': 'RRE-Entries-Desktop' } });
+        if (!binRes.ok) throw new Error(`Download failed (${binRes.status})`);
+        const buf = Buffer.from(await binRes.arrayBuffer());
+        fs.writeFileSync(dlPath, buf);
+        runSilentInstaller(dlPath);
+        return res.json({
+          success: true,
+          message: `Downloaded ${asset.name} (${rel.tag_name || 'latest'}). Installing update and restarting RRE Entries cleanly — your company data remains intact.`
+        });
+      }
+    }
+  } catch (relErr) {
+    console.warn('[System Update] Release download notice:', relErr.message);
+  }
+
   return res.json({
     success: true,
     requires_download: true,
-    download_url: 'https://github.com/Anand3643/RRE-Product',
+    download_url: 'https://github.com/Anand3643/RRE-Product/releases/latest',
     message: 'To install the latest release on this PC, please run the setup installer RRE Entries Setup 1.0.0.exe. All your company accounting data in company.db remains 100% intact.'
   });
 });

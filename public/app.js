@@ -885,10 +885,11 @@ async function loadMasters() {
   };
 
   try {
-    const [ledgersRes, itemsRes, groupsRes, godownsRes, uomRes, centresRes] = await Promise.all([
+    const [ledgersRes, itemsRes, groupsRes, stockGroupsRes, godownsRes, uomRes, centresRes] = await Promise.all([
       safeFetchJson(`${API_BASE}/masters/ledgers`),
       safeFetchJson(`${API_BASE}/masters/stock-items`),
       safeFetchJson(`${API_BASE}/masters/groups`),
+      safeFetchJson(`${API_BASE}/masters/stock-groups`),
       safeFetchJson(`${API_BASE}/masters/godowns`),
       safeFetchJson(`${API_BASE}/masters/uom`),
       safeFetchJson(`${API_BASE}/masters/cost-centres`)
@@ -897,6 +898,7 @@ async function loadMasters() {
     if (ledgersRes?.success && Array.isArray(ledgersRes.data)) appState.ledgers = ledgersRes.data;
     if (itemsRes?.success && Array.isArray(itemsRes.data)) appState.stockItems = itemsRes.data;
     if (groupsRes?.success && Array.isArray(groupsRes.data)) appState.groups = groupsRes.data;
+    if (stockGroupsRes?.success && Array.isArray(stockGroupsRes.data)) appState.stockGroups = stockGroupsRes.data;
     if (godownsRes?.success && Array.isArray(godownsRes.data)) appState.godowns = godownsRes.data;
     if (uomRes?.success && Array.isArray(uomRes.data)) appState.uoms = uomRes.data;
     if (centresRes?.success && Array.isArray(centresRes.data)) appState.costCentres = centresRes.data;
@@ -1133,6 +1135,12 @@ function openReport(reportType) {
 function openVoucherScreen(type = 'Sales') {
   appState.currentVoucherType = type;
   showView('view-voucher');
+  if (!appState.ledgers || !appState.ledgers.length) {
+    loadMasters().then(() => {
+      populatePartyDropdown();
+      if (appState.voucherMode === 'manual') initAccountingVoucherEntries(appState.currentVoucherType);
+    });
+  }
 
   const select = document.getElementById('v-select-type');
   if (select) select.value = type;
@@ -1387,18 +1395,26 @@ function initAccountingVoucherEntries(type) {
   const tbody = document.getElementById('voucher-entries-tbody');
   tbody.innerHTML = '';
 
+  const pick = (name, pred) => {
+    const exact = appState.ledgers.find(l => l.name === name);
+    if (exact) return exact.name;
+    const alt = pred ? appState.ledgers.find(pred) : null;
+    return alt ? alt.name : '';
+  };
+  const bankPick = () => pick('HDFC Bank Current A/c', l => /bank/i.test(l.group_name || '') || /bank/i.test(l.name || ''));
+
   if (type === 'Contra') {
-    addDoubleEntryRow('Dr', 'Cash', 0);
-    addDoubleEntryRow('Cr', 'HDFC Bank Current A/c', 0);
+    addDoubleEntryRow('Dr', pick('Cash', l => l.group_name === 'Cash-in-hand'), 0);
+    addDoubleEntryRow('Cr', bankPick(), 0);
   } else if (type === 'Payment') {
-    addDoubleEntryRow('Dr', 'Office Rent', 0);
-    addDoubleEntryRow('Cr', 'HDFC Bank Current A/c', 0);
+    addDoubleEntryRow('Dr', pick('Office Rent', l => l.group_nature === 'Expenses' || l.group_name === 'Sundry Creditors'), 0);
+    addDoubleEntryRow('Cr', bankPick() || 'Cash', 0);
   } else if (type === 'Receipt') {
-    addDoubleEntryRow('Dr', 'HDFC Bank Current A/c', 0);
-    addDoubleEntryRow('Cr', 'Chennai Auto Components Pvt Ltd', 0);
+    addDoubleEntryRow('Dr', bankPick() || 'Cash', 0);
+    addDoubleEntryRow('Cr', pick('Chennai Auto Components Pvt Ltd', l => l.group_name === 'Sundry Debtors' || l.group_nature === 'Income'), 0);
   } else if (type === 'Journal') {
-    addDoubleEntryRow('Dr', 'Depreciation on Assets', 0);
-    addDoubleEntryRow('Cr', 'Plant & Machinery', 0);
+    addDoubleEntryRow('Dr', pick('Depreciation on Assets', l => l.group_nature === 'Expenses'), 0);
+    addDoubleEntryRow('Cr', pick('Plant & Machinery', l => l.group_name === 'Fixed Assets' || l.group_nature === 'Assets'), 0);
   } else {
     addDoubleEntryRow('Dr', '', 0);
     addDoubleEntryRow('Cr', '', 0);
@@ -1667,13 +1683,19 @@ async function saveVoucherNow(e) {
 
     const isSales = ['Sales', 'Credit Note'].includes(voucherType);
 
-    // Ledger lookups
+    // Ledger lookups (works on both clean-slate and pre-seeded company databases)
+    const findTax = (isOut, part) => {
+      const prefix = isOut ? 'output' : 'input';
+      const re = new RegExp(`^${prefix}\\s+${part}(?:\\s+\\d+%?)?$`, 'i');
+      return appState.ledgers.find(l => re.test(String(l.name || '').trim()))
+        || appState.ledgers.find(l => { const n = String(l.name || '').toLowerCase(); return n.includes(prefix) && n.includes(part.toLowerCase()); });
+    };
     const salesLedger = appState.ledgers.find(l => l.name.includes('Sales Account') || l.group_name === 'Sales Accounts');
     const purchaseLedger = appState.ledgers.find(l => l.name.includes('Purchase Account') || l.group_name === 'Purchase Accounts');
-    const cgstLedger = appState.ledgers.find(l => l.name === (isSales ? 'Output CGST 9%' : 'Input CGST 9%'));
-    const sgstLedger = appState.ledgers.find(l => l.name === (isSales ? 'Output SGST 9%' : 'Input SGST 9%'));
-    const igstLedger = appState.ledgers.find(l => l.name === (isSales ? 'Output IGST 18%' : 'Input IGST 18%'));
-    const roundLedger = appState.ledgers.find(l => l.name === 'Round Off A/c');
+    const cgstLedger = findTax(isSales, 'CGST');
+    const sgstLedger = findTax(isSales, 'SGST');
+    const igstLedger = findTax(isSales, 'IGST');
+    const roundLedger = appState.ledgers.find(l => l.name === 'Round Off A/c' || /round\s*off/i.test(l.name || ''));
 
     const isReturn = ['Credit Note', 'Debit Note'].includes(voucherType);
     if (isReturn) {
@@ -1685,33 +1707,48 @@ async function saveVoucherNow(e) {
         }).forEach(e => entries.push(e));
       } catch (composeErr) { alert(composeErr.message); return; }
     } else if (isSales) {
+      if (!salesLedger) { alert('No Sales Account ledger found. Please create one first.'); return; }
       // Dr. Party (Grand Total)
       entries.push({ ledger_id: partyLedgerId, debit_amount: grandTotal, credit_amount: 0, particulars: party.name });
       // Cr. Sales (Subtotal)
-      entries.push({ ledger_id: salesLedger ? salesLedger.id : 14, debit_amount: 0, credit_amount: subtotal, particulars: salesLedger ? salesLedger.name : 'Sales Account' });
+      entries.push({ ledger_id: salesLedger.id, debit_amount: 0, credit_amount: subtotal, particulars: salesLedger.name });
       // Cr. Taxes
       if (isInterState) {
-        entries.push({ ledger_id: igstLedger ? igstLedger.id : 12, debit_amount: 0, credit_amount: igst, particulars: 'Output IGST 18%' });
+        if (!igstLedger) { alert('Output IGST ledger not found.'); return; }
+        entries.push({ ledger_id: igstLedger.id, debit_amount: 0, credit_amount: igst, particulars: igstLedger.name });
       } else {
-        entries.push({ ledger_id: cgstLedger ? cgstLedger.id : 10, debit_amount: 0, credit_amount: cgst, particulars: 'Output CGST 9%' });
-        entries.push({ ledger_id: sgstLedger ? sgstLedger.id : 11, debit_amount: 0, credit_amount: sgst, particulars: 'Output SGST 9%' });
+        if (!cgstLedger || !sgstLedger) { alert('Output CGST / SGST ledgers not found.'); return; }
+        entries.push({ ledger_id: cgstLedger.id, debit_amount: 0, credit_amount: cgst, particulars: cgstLedger.name });
+        entries.push({ ledger_id: sgstLedger.id, debit_amount: 0, credit_amount: sgst, particulars: sgstLedger.name });
       }
       // Round off
       if (Math.abs(roundOff) > 0.001) {
+        if (!roundLedger) { alert('Round Off A/c ledger not found.'); return; }
         if (roundOff > 0) {
-          entries.push({ ledger_id: roundLedger ? roundLedger.id : 13, debit_amount: 0, credit_amount: roundOff, particulars: 'Round Off A/c' });
+          entries.push({ ledger_id: roundLedger.id, debit_amount: 0, credit_amount: roundOff, particulars: roundLedger.name });
         } else {
-          entries.push({ ledger_id: roundLedger ? roundLedger.id : 13, debit_amount: Math.abs(roundOff), credit_amount: 0, particulars: 'Round Off A/c' });
+          entries.push({ ledger_id: roundLedger.id, debit_amount: Math.abs(roundOff), credit_amount: 0, particulars: roundLedger.name });
         }
       }
     } else {
+      if (!purchaseLedger) { alert('No Purchase Account ledger found. Please create one first.'); return; }
       // Purchase: Dr. Purchase + Taxes, Cr. Party
-      entries.push({ ledger_id: purchaseLedger ? purchaseLedger.id : 15, debit_amount: subtotal, credit_amount: 0, particulars: 'Purchase Account' });
+      entries.push({ ledger_id: purchaseLedger.id, debit_amount: subtotal, credit_amount: 0, particulars: purchaseLedger.name });
       if (isInterState) {
-        entries.push({ ledger_id: igstLedger ? igstLedger.id : 9, debit_amount: igst, credit_amount: 0, particulars: 'Input IGST 18%' });
+        if (!igstLedger) { alert('Input IGST ledger not found.'); return; }
+        entries.push({ ledger_id: igstLedger.id, debit_amount: igst, credit_amount: 0, particulars: igstLedger.name });
       } else {
-        entries.push({ ledger_id: cgstLedger ? cgstLedger.id : 7, debit_amount: cgst, credit_amount: 0, particulars: 'Input CGST 9%' });
-        entries.push({ ledger_id: sgstLedger ? sgstLedger.id : 8, debit_amount: sgst, credit_amount: 0, particulars: 'Input SGST 9%' });
+        if (!cgstLedger || !sgstLedger) { alert('Input CGST / SGST ledgers not found.'); return; }
+        entries.push({ ledger_id: cgstLedger.id, debit_amount: cgst, credit_amount: 0, particulars: cgstLedger.name });
+        entries.push({ ledger_id: sgstLedger.id, debit_amount: sgst, credit_amount: 0, particulars: sgstLedger.name });
+      }
+      if (Math.abs(roundOff) > 0.001) {
+        if (!roundLedger) { alert('Round Off A/c ledger not found.'); return; }
+        if (roundOff > 0) {
+          entries.push({ ledger_id: roundLedger.id, debit_amount: roundOff, credit_amount: 0, particulars: roundLedger.name });
+        } else {
+          entries.push({ ledger_id: roundLedger.id, debit_amount: 0, credit_amount: Math.abs(roundOff), particulars: roundLedger.name });
+        }
       }
       entries.push({ ledger_id: partyLedgerId, debit_amount: 0, credit_amount: grandTotal, particulars: party.name });
     }
