@@ -44,8 +44,15 @@ The fix is not in the browser: **every device must talk to the same server, and 
    ```
    npm run db:migrate        # creates the schema, security rules and functions in Supabase
    npm run db:copy           # copies every company; each one in one transaction, verified (counts, Dr = Cr) before it is kept
+   npm run db:verify         # independent comparison, writes data/migration-report-<date>.md (see below)
    ```
    Your SQLite files are only read. They stay on this PC, untouched, as the backup until you decide otherwise.
+   `db:verify` compares, per company: the row count of **every** table, missing / extra record ids (vouchers, ledger lines, ledgers,
+   groups, items, stock movements, warehouses, users, quotations, orders, bill allocations), total debits and credits, the balance of
+   every ledger, number and total per voucher type (sales, purchases, receipts, payments, journals ...), every GST ledger, quantity
+   per item and warehouse, opening stock, sign-in accounts per role, duplicate voucher numbers and unbalanced vouchers. It reads the
+   central database the way the application does (restricted role, one company at a time), so it also proves row level security
+   lets each company see its own data. **Switch over only when it ends with "every ... matches".**
    (Rehearsed on a private PostgreSQL with your real data: 4 companies, 57 vouchers, Dr ₹14,21,160 = Cr ₹14,21,160, every count identical.)
 4. **Check in Supabase** (SQL editor) - see "Check the security after connecting" in `docs/CLOUD_DATABASE.md`.
 5. **Host the server** (any host that runs a Docker container and gives an https address; a `render.yaml` blueprint is included):
@@ -59,6 +66,20 @@ The fix is not in the browser: **every device must talk to the same server, and 
    RRE on this PC, open the https address like every other device - or set `RRE_DB=postgres` in this PC's `.env` so the local
    server also uses the central database.
 
+## Who sees what (the same in the cloud)
+
+| Login | Sees | Enforced by |
+|---|---|---|
+| **Admin** (Owner / Administrator) | everything in the company: books, inventory, settings, employees and customers, sign-up and sign-in activity | server role checks |
+| **Employee** (Accountant, Data Entry, Auditor, Viewer) | the modules and actions their role and module list allow (e.g. Data Entry posts vouchers but sees no financial statements) | server role and module checks |
+| **Customer** (portal login linked to one customer) | only their own orders, invoices, quotations, purchase history and packages | server: the customer is taken from the database, never from the browser |
+| **Customer with own books** (self-registered) | the full application, inside their own company only | database row level security + server |
+
+Between companies the separation is done by the database itself: every table has row level security switched on and forced, and
+the server's restricted database role (`rre_app`) can only see the company the request belongs to. Supabase's public API roles
+(`anon`, `authenticated`) have no access at all, so no Supabase key in a browser could read anything. Sign-in stays RRE's own
+(Argon2id passwords, server-side sessions); no service-role key is used anywhere.
+
 ## Settings for the hosted server
 
 | Variable | Value |
@@ -70,6 +91,10 @@ The fix is not in the browser: **every device must talk to the same server, and 
 | `RRE_PUBLIC_URL` | the https address (used in password-reset e-mails) |
 | `RRE_TRUST_PROXY` | `1` behind the host's https proxy (set in the Dockerfile) so sign-in lock-out sees real addresses |
 | `RRE_SMTP_USER`, `RRE_SMTP_PASS` | optional, for password-reset e-mails |
+| `RRE_PG_POOL_MAX` | optional, database connections (default 10; Supabase's session pooler limits them per plan) |
+
+On this PC (`.env`) only `DATABASE_URL` and `RRE_PG_CA_FILE` are needed for `db:migrate` / `db:copy` / `db:verify`; add
+`RRE_DB=postgres` only to make this PC's own server use the central database too.
 
 ## Limits to know
 

@@ -58,7 +58,8 @@
     "build:css": "tailwindcss -i build/tailwind.input.css -o public/vendor/tailwind.css --minify",
     "build:icons": "node scripts/build-icons.js",
     "build:ui": "npm run build:css && npm run build:icons",
-    "test:crossdevice": "node test_crossdevice.js"
+    "test:crossdevice": "node test_crossdevice.js",
+    "db:verify": "node scripts/pg-verify.js"
   },
   "repository": {
     "type": "git",
