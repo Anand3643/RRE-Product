@@ -3045,8 +3045,10 @@ body.au-rail-open #au-rail button.item { padding: 0 14px; }
 }
 [data-au="dark"] body, [data-au="dark"] html { background: #000; }
 [data-au="dark"] #aurora-bg { background: #000; }
-[data-au="dark"] #aurora-bg .blob, [data-au="dark"] .au-stage, [data-au="dark"] .au-orb { display: none !important; }
-[data-au="dark"] .au-hero { grid-template-columns: 1fr; }
+[data-au="dark"] #aurora-bg .blob, [data-au="dark"] .au-orb { display: none !important; }
+/* the live Cash & bank / Inventory value cards stay visible in dark mode (only the decorative shapes are hidden) */
+[data-au="dark"] .au-float { background: linear-gradient(145deg, #1c1c1c, #0d0d0d); border-color: rgba(255, 255, 255, .16); box-shadow: 0 22px 44px -20px rgba(0, 0, 0, .9), 0 0 0 1px rgba(245, 166, 35, .12); }
+[data-au="dark"] .au-float small { color: #fbbf24; } [data-au="dark"] .au-float b { color: #fff; }
 [data-au="dark"] #header-ribbon { background: rgba(0, 0, 0, .86); box-shadow: 0 10px 40px -24px rgba(0, 0, 0, .9); }
 [data-au="dark"] #tally-status-bar { background: rgba(0, 0, 0, .8); color: #a3a3a3; }
 [data-au="dark"] #au-rail { background: #000; border-color: rgba(255, 255, 255, .12); }
