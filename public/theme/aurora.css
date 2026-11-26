@@ -3113,3 +3113,15 @@ body.au-rail-open #au-rail button.item { padding: 0 14px; }
   [data-theme="aurora"] #header-ribbon > div:first-child { min-height: 47px; }
   [data-theme="aurora"] #header-ribbon > .sub-header-band { min-height: 51px; }
 }
+
+/* ---- Voice Assistant in the normal (Aurora) theme ------------------------------------------------------------------------
+   Its button sat at the bottom-left, under the side menu (desktop) and the bottom tab bar (phone), so it could not be seen or
+   pressed. It now sits on the right, just above the AI Assistant button, and its panel opens on the right as well. On phones
+   both buttons sit above the bottom tab bar (the AI Assistant button was half hidden behind it too). */
+[data-theme="aurora"] #vx-btn { left: auto !important; right: 24px; bottom: 88px; z-index: 62; width: 44px; height: 44px; }
+[data-theme="aurora"] #vx-panel { left: auto !important; right: 24px; bottom: 142px; z-index: 62; }
+@media (max-width: 899px) {
+  [data-theme="aurora"] #floating-ai-assistant-btn { bottom: 80px !important; z-index: 62; }
+  [data-theme="aurora"] #vx-btn { right: 16px; bottom: 128px; }
+  [data-theme="aurora"] #vx-panel { right: 8px; left: 8px !important; width: auto; bottom: 180px; max-height: calc(100vh - 240px); }
+}

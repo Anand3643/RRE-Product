@@ -30,8 +30,9 @@ async function main() {
   let syntaxOk = true; try { new vm.Script(js, { filename: 'aurora.js' }); } catch (e) { syntaxOk = false; }
   assert(syntaxOk, 'aurora.js is valid JavaScript');
   assert(/href="theme\/aurora\.css"/.test(html) && /src="theme\/aurora\.js"/.test(html), 'index.html loads both files');
-  assert(/id="theme-card-aurora"/.test(html) && /applyTheme\('aurora'\)/.test(html), 'Aurora has a card in the theme chooser (Alt+T)');
-  assert(/const THEMES = \['aurora',/.test(app), 'Aurora is a registered theme');
+  assert(/id="theme-mode-light"[^>]*chooseMode\('light'\)/.test(html) && /id="theme-mode-dark"[^>]*chooseMode\('dark'\)/.test(html) && !/id="theme-card-/.test(html),
+    'The theme chooser (Alt+T) offers exactly Light and Dark (no colour-theme cards)');
+  assert(/const THEMES = \['aurora'\];/.test(app) && /if \(!THEMES\.includes\(themeId\)\) themeId = 'aurora';/.test(app), 'The normal theme is the only theme; any removed theme falls back to it');
   assert(/rre_aurora_default_v1/.test(app) && /applyTheme\(savedTheme \|\| 'aurora'/.test(app), 'Aurora is the default once; later choices are remembered');
 
   console.log('\n--- 2. Offline, scoped, accessible ---');

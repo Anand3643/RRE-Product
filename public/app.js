@@ -249,7 +249,9 @@ function togglePasswordVisibility(inputId) {
 // THEME & COLOR PALETTE ENGINE
 // ========================================================
 
-const THEMES = ['aurora', 'tally-gold', 'retro-green', 'midnight-dark', 'ruby-red', 'nordic-light', 'solar-amber'];
+// One theme only (the normal RRE look), in Light or Dark. The older colour themes (Tally Gold, Retro Green, Midnight, Ruby Red,
+// Nordic, Solar Amber) were removed: anyone still on one of them is moved to the normal theme automatically.
+const THEMES = ['aurora'];
 
 function persistLocalSettings(values) {
   try {
@@ -272,11 +274,12 @@ function initTheme() {
     savedTheme = 'aurora';
     persistLocalSettings({ tally_theme: 'aurora', rre_aurora_default_v1: '1' });
   }
-  applyTheme(savedTheme || 'aurora', false, !dbSettings.tally_theme);
+  // a removed colour theme saved earlier: switch to the normal theme and remember that
+  applyTheme(savedTheme || 'aurora', false, !dbSettings.tally_theme || !THEMES.includes(savedTheme));
 }
 
 function applyTheme(themeId, notify = false, syncDb = true) {
-  if (!THEMES.includes(themeId)) themeId = 'tally-gold';
+  if (!THEMES.includes(themeId)) themeId = 'aurora';
 
   document.documentElement.setAttribute('data-theme', themeId);
   document.body.setAttribute('data-theme', themeId);
@@ -301,17 +304,32 @@ function applyTheme(themeId, notify = false, syncDb = true) {
   if (window.lucide) window.lucide.createIcons();
 }
 
+// The Theme window (side menu "Theme", top bar, Alt+T): Light or Dark
+function currentMode() { return window.RREAurora && window.RREAurora.mode ? window.RREAurora.mode() : 'light'; }
+function markModeCards() {
+  const m = currentMode();
+  ['light', 'dark'].forEach((k) => {
+    const card = document.getElementById(`theme-mode-${k}`);
+    if (!card) return;
+    card.classList.toggle('active', k === m);
+    card.setAttribute('aria-pressed', k === m ? 'true' : 'false');
+    const tag = card.querySelector('.theme-active-tag');
+    if (tag) tag.classList.toggle('hidden', k !== m);
+  });
+}
+function chooseMode(m) {
+  if (window.RREAurora && window.RREAurora.setMode) window.RREAurora.setMode(m === 'dark' ? 'dark' : 'light');
+  markModeCards();
+}
 function openThemeSelectorModal() {
-  const currentTheme = localStorage.getItem('tally_theme') || 'aurora';
-  applyTheme(currentTheme, false);
+  applyTheme('aurora', false, false);
   openModal('themeSelectorModal');
+  markModeCards();
 }
 
+// Alt+T style quick switch: Light <-> Dark
 function cycleNextTheme() {
-  const current = localStorage.getItem('tally_theme') || 'tally-gold';
-  const currentIndex = THEMES.indexOf(current);
-  const nextTheme = THEMES[(currentIndex + 1) % THEMES.length];
-  applyTheme(nextTheme, true);
+  chooseMode(currentMode() === 'dark' ? 'light' : 'dark');
 }
 
 // ========================================================
@@ -4206,6 +4224,7 @@ window.loadAuditTrail = loadAuditTrail;
 window.openThemeSelectorModal = openThemeSelectorModal;
 window.applyTheme = applyTheme;
 window.cycleNextTheme = cycleNextTheme;
+window.chooseMode = chooseMode;
 window.showGateway = showGateway;
 window.toggleDashboard = toggleDashboard;
 window.openModal = openModal;
