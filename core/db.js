@@ -34,8 +34,9 @@ try {
 dbPath = path.resolve(dataDir, 'company.db');
 
 // If the original company's database is missing or empty, copy a pre-seeded one from candidate resources
-// (not with the central database: there, no SQLite file is ever used, so none is made on the server's disk)
-const needsSeed = process.env.RRE_DB !== 'postgres' && activeCompany === paths.DEFAULT_COMPANY && (!fs.existsSync(dbPath) || (fs.existsSync(dbPath) && fs.statSync(dbPath).size < 1000));
+// (not with the central database: there, no SQLite file is ever used, so none is made on the server's disk - except in the
+// PostgreSQL TEST mode RRE_PG_IMPORT_SQLITE=1, which loads this prepared copy into the test database)
+const needsSeed = (process.env.RRE_DB !== 'postgres' || process.env.RRE_PG_IMPORT_SQLITE === '1') && activeCompany === paths.DEFAULT_COMPANY && (!fs.existsSync(dbPath) || (fs.existsSync(dbPath) && fs.statSync(dbPath).size < 1000));
 if (needsSeed) {
   const candidateSeeds = [
     process.resourcesPath ? path.join(process.resourcesPath, 'data', '100000', 'company.db') : null,

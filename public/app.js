@@ -10,6 +10,12 @@ window.addEventListener('unhandledrejection', (event) => {
   console.warn('[RRE Entries Async Rejection Caught]', event.reason);
 });
 
+// Text from the database or the user, shown inside HTML: & < > " ' become plain characters, never markup.
+// (Used by the Chart of Accounts, the backup list and the AI assistant chat; it had gone missing, which left those screens empty.)
+function escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 let currentApiOrigin = (function() {
   if (typeof window !== 'undefined' && window.location && window.location.protocol.startsWith('http')) {
     return window.location.origin;
