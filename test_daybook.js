@@ -53,6 +53,15 @@ async function main() {
   assert(mk.status === 200 && cust && (await req('GET', '/api/masters/ledgers')).json.data.some((l) => l.id === cust), 'a new ledger (with an opening balance of ₹5,000) appears in the ledger list');
   assert(await voucherCount() === before && (await daybook()).summary.vouchers === dbBefore, 'creating the ledger master alone adds no voucher and no Day Book transaction');
   assert(await balance(cust) === 5000, 'its opening balance is the ledger\'s balance (₹5,000 Dr), without a fake voucher');
+  const ob = await daybook();
+  const obRow = (ob.openings || []).find((o) => o.ledger_id === cust);
+  assert(obRow && obRow.debit_amount === 5000 && obRow.credit_amount === 0 && obRow.ledger_name === 'DB Test Customer' && /^\d{4}-\d{2}-\d{2}$/.test(obRow.date),
+    'the Day Book shows it as an "Opening Balance" entry: DB Test Customer, Dr ₹5,000, dated the day it was entered', JSON.stringify(obRow));
+  const zero = (await req('POST', '/api/masters/ledgers', { body: { name: 'DB No Opening', group_id: await grp('Sundry Debtors') } })).json.id;
+  assert(!(await daybook()).openings.some((o) => o.ledger_id === zero), 'a ledger with no opening balance adds nothing to the Day Book');
+  assert(ob.summary.openings && ob.summary.openings.total_debit >= 5000 && typeof ob.summary.openings.difference === 'number', 'the Day Book summary carries the opening-balance totals and their difference');
+  assert((await daybook('type=Opening%20Balance')).data.length === 0 && (await daybook('type=Opening%20Balance')).openings.some((o) => o.ledger_id === cust), 'type filter "Opening Balance" shows only opening balances');
+  assert(!(await daybook('type=Sales')).openings, 'other type filters do not include opening balances');
   const sales = (await req('POST', '/api/masters/ledgers', { body: { name: 'DB Sales', group_id: await grp('Sales Accounts') } })).json.id;
   const rent = (await req('POST', '/api/masters/ledgers', { body: { name: 'DB Rent', group_id: await grp('Indirect Expenses') } })).json.id;
   const supp = (await req('POST', '/api/masters/ledgers', { body: { name: 'DB Supplier', group_id: await grp('Sundry Creditors') } })).json.id;

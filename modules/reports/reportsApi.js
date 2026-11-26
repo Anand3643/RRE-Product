@@ -172,7 +172,27 @@ router.get('/daybook', async (req, res) => {
         summary.ledger = { id: ledgerId, name: l ? l.name : null, opening, closing: Math.round((opening + summary.total_debit - summary.total_credit) * 100) / 100 };
       }
     }
-    res.json({ success: true, data: detailed, ...(summary ? { summary } : {}) });
+    // Opening balances entered on ledgers: shown in the Day Book as "Opening Balance" entries, read from the ledger itself (no voucher is
+    // created, so nothing is counted twice: ledger balances and reports already include them). Dated the day they were entered; changing
+    // a ledger's opening balance changes this entry. Not part of a single-ledger view (that view has its own opening-balance row).
+    let openings;
+    if (!ledgerId && (!type || type === 'Opening Balance') && (offset === 0 || !(limit > 0))) {
+      const where = ['l.opening_balance <> 0'], op = [];
+      const day = "substr(COALESCE(l.created_at, ''), 1, 10)";
+      if (date) { where.push(`${day} = ?`); op.push(date); } else { if (from_date) { where.push(`${day} >= ?`); op.push(from_date); } if (to_date) { where.push(`${day} <= ?`); op.push(to_date); } }
+      if (q) { where.push("(l.name LIKE ? ESCAPE '\\' OR g.name LIKE ? ESCAPE '\\')"); const like = '%' + q.replace(/[\\%_]/g, (c) => '\\' + c) + '%'; op.push(like, like); }
+      const rows = await all(`SELECT l.id AS ledger_id, l.name AS ledger_name, g.name AS group_name, l.opening_balance, l.opening_balance_type, l.created_at
+        FROM ledgers l JOIN account_groups g ON g.id = l.group_id WHERE ${where.join(' AND ')} ORDER BY l.created_at DESC, l.id DESC`, op);
+      const co = await get('SELECT books_beginning_from FROM company_info LIMIT 1').catch(() => null);
+      openings = rows.map((r) => ({ ledger_id: r.ledger_id, ledger_name: r.ledger_name, group_name: r.group_name, date: String(r.created_at || '').slice(0, 10) || (co && co.books_beginning_from) || null,
+        debit_amount: r.opening_balance_type === 'Cr' ? 0 : Math.round(Number(r.opening_balance) * 100) / 100, credit_amount: r.opening_balance_type === 'Cr' ? Math.round(Number(r.opening_balance) * 100) / 100 : 0,
+        as_on: co ? co.books_beginning_from : null }));
+      if (summary) {
+        const all0 = await get("SELECT ROUND(COALESCE(SUM(CASE WHEN opening_balance_type = 'Cr' THEN 0 ELSE opening_balance END), 0), 2) AS dr, ROUND(COALESCE(SUM(CASE WHEN opening_balance_type = 'Cr' THEN opening_balance ELSE 0 END), 0), 2) AS cr FROM ledgers WHERE opening_balance <> 0");
+        summary.openings = { shown: openings.length, total_debit: Number(all0.dr), total_credit: Number(all0.cr), difference: Math.round((Number(all0.dr) - Number(all0.cr)) * 100) / 100 };
+      }
+    }
+    res.json({ success: true, data: detailed, ...(openings ? { openings } : {}), ...(summary ? { summary } : {}) });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

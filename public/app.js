@@ -2131,7 +2131,18 @@ async function loadStockSummary() {
 // ledger lines. Read 200 vouchers at a time (latest first); "Load more" adds the next 200. Filters: type, dates, ledger, search.
 // Shown per day with the day's debit / credit totals; with a ledger chosen, its opening and closing balance.
 const DAYBOOK_PAGE = 200;
-const daybookState = { rows: [], total: 0, summary: null };
+const daybookState = { rows: [], total: 0, summary: null, openings: [] };
+// Opening balances entered on ledgers appear in the Day Book as "Opening Balance" entries (read from the ledger: no voucher, nothing
+// counted twice). They are merged in by date with the loaded vouchers; older ones appear as older vouchers are loaded.
+function daybookMerged(vouchers, openings, allLoaded) {
+  const oldest = vouchers.length ? vouchers[vouchers.length - 1].date : null;
+  const pseudo = (openings || []).filter((o) => allLoaded || !oldest || String(o.date) >= String(oldest)).map((o) => ({
+    kind: 'opening', id: 'ob' + o.ledger_id, date: o.date, voucher_no: 'Opening Bal.', voucher_type: 'Opening Balance', party_name: o.ledger_name,
+    narration: `Opening balance of ${o.ledger_name} (${o.group_name})${o.as_on ? ' as on ' + formatDateDisplay(o.as_on) : ''}`,
+    entries: [{ ledger_id: o.ledger_id, ledger_name: o.ledger_name, debit_amount: o.debit_amount, credit_amount: o.credit_amount }]
+  }));
+  return [...vouchers, ...pseudo].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+}
 function daybookQuery(offset, limit) {
   const v = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
   const p = new URLSearchParams({ limit: String(limit), offset: String(offset), summary: offset === 0 ? '1' : '0' });
@@ -2160,7 +2171,7 @@ async function loadDaybook(append = false) {
     if (!json.success) return;
     daybookState.total = parseInt(res.headers.get('X-Total-Count'), 10) || json.data.length;
     daybookState.rows = append ? daybookState.rows.concat(json.data) : json.data;
-    if (!append) daybookState.summary = json.summary || null;
+    if (!append) { daybookState.summary = json.summary || null; daybookState.openings = json.openings || []; }
     renderDaybook();
   } catch (err) {
     console.error('Failed to load Day Book:', err);
@@ -2174,9 +2185,13 @@ function renderDaybook() {
   const tbody = document.getElementById('daybook-tbody');
   if (!tbody) return;
   const detailed = !(document.getElementById('daybook-detailed') && !document.getElementById('daybook-detailed').checked);
-  const s = daybookState.summary, rows = daybookState.rows, canEdit = daybookCanEdit();
+  const s = daybookState.summary, vrows = daybookState.rows, canEdit = daybookCanEdit();
+  const rows = daybookMerged(vrows, daybookState.openings, vrows.length >= daybookState.total);
+  const ob = s && s.openings;
   const sumEl = document.getElementById('daybook-summary');
   if (sumEl) sumEl.innerHTML = s ? `<span><b>${s.vouchers}</b> voucher(s)</span><span>Total Dr <b class="font-mono">${formatCurrency(s.total_debit)}</b></span><span>Total Cr <b class="font-mono">${formatCurrency(s.total_credit)}</b></span>`
+    + (ob && ob.shown ? `<span><b>${ob.shown}</b> opening balance(s) shown</span>` : '')
+    + (ob && Math.abs(ob.difference) >= 0.01 ? `<span class="text-amber-700 font-semibold">All opening balances: Dr ${formatCurrency(ob.total_debit)} · Cr ${formatCurrency(ob.total_credit)} · difference ${dbSigned(ob.difference)} (opening debits and credits should be equal)</span>` : '')
     + (s.ledger ? `<span>${escapeHtml(s.ledger.name)}: opening <b class="font-mono">${dbSigned(s.ledger.opening)}</b>, closing <b class="font-mono">${dbSigned(s.ledger.closing)}</b></span>` : '') : '';
   const ledgerOnly = s && s.ledger ? s.ledger.id : null;
   let html = '';
@@ -2188,6 +2203,21 @@ function renderDaybook() {
     const lines = (v.entries || []).filter((e) => !ledgerOnly || e.ledger_id === ledgerOnly);
     const dr = lines.reduce((t, e) => t + Number(e.debit_amount || 0), 0), cr = lines.reduce((t, e) => t + Number(e.credit_amount || 0), 0);
     dayDr += dr; dayCr += cr;
+    if (v.kind === 'opening') {
+      const e = lines[0] || {};
+      html += `<tr data-ob="${e.ledger_id}" class="bg-amber-50/40">
+        <td class="p-2 text-center font-mono text-slate-600">${formatDateDisplay(v.date)}</td>
+        <td class="p-2 font-mono font-bold text-amber-700">${escapeHtml(v.voucher_no)}</td>
+        <td class="p-2 text-center"><span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">Opening Balance</span></td>
+        <td class="p-2 text-slate-800 font-medium">${escapeHtml(v.party_name)}</td>
+        <td class="p-2 text-slate-600">${Number(e.debit_amount) > 0 ? 'Dr' : 'Cr'} &nbsp;${escapeHtml(e.ledger_name)}</td>
+        <td class="p-2 text-right font-mono font-bold text-slate-900">${Number(e.debit_amount) > 0 ? formatCurrency(e.debit_amount) : ''}</td>
+        <td class="p-2 text-right font-mono font-bold text-slate-900">${Number(e.credit_amount) > 0 ? formatCurrency(e.credit_amount) : ''}</td>
+        <td class="p-2 text-slate-600">${escapeHtml(v.narration)}</td>
+        <td class="p-2 text-center text-[10px] text-slate-400">change it in the ledger</td>
+      </tr>`;
+      continue;
+    }
     const isRev = /^Reversal of /.test(v.reference_no || '');
     const actions = canEdit && !isRev ? `<button type="button" class="px-1.5 py-0.5 rounded border border-slate-300 text-[10px] font-bold text-blue-700 hover:bg-blue-50" onclick="event.stopPropagation(); openVoucherForAlter(${v.id})">Alter</button>
       <button type="button" class="px-1.5 py-0.5 rounded border border-slate-300 text-[10px] font-bold text-red-700 hover:bg-red-50" onclick="event.stopPropagation(); cancelVoucher(${v.id}, '${escapeHtml(v.voucher_no).replace(/'/g, '&#39;')}')">Cancel</button>` : (isRev ? '<span class="text-[10px] text-slate-400">reversal</span>' : '');
@@ -2209,18 +2239,19 @@ function renderDaybook() {
   }
   html += dayTotal();
   if (!rows.length) html += '<tr><td colspan="9" class="p-4 text-center text-slate-400">No vouchers for these filters.</td></tr>';
-  if (s && s.ledger && rows.length >= daybookState.total) html += `<tr class="bg-amber-50 font-bold"><td colspan="5" class="p-2 text-right text-slate-700">Closing balance of ${escapeHtml(s.ledger.name)}</td><td class="p-2 text-right font-mono">${s.ledger.closing > 0 ? formatCurrency(s.ledger.closing) : ''}</td><td class="p-2 text-right font-mono">${s.ledger.closing < 0 ? formatCurrency(-s.ledger.closing) : ''}</td><td colspan="2"></td></tr>`;
-  if (rows.length < daybookState.total) html += `<tr class="daybook-more"><td colspan="9" class="p-2.5 text-center"><button type="button" class="px-3 py-1.5 rounded border border-slate-300 font-bold text-slate-700 hover:bg-slate-100" onclick="loadDaybook(true)">Load more (${daybookState.total - rows.length} older)</button></td></tr>`;
+  if (s && s.ledger && vrows.length >= daybookState.total) html +=`<tr class="bg-amber-50 font-bold"><td colspan="5" class="p-2 text-right text-slate-700">Closing balance of ${escapeHtml(s.ledger.name)}</td><td class="p-2 text-right font-mono">${s.ledger.closing > 0 ? formatCurrency(s.ledger.closing) : ''}</td><td class="p-2 text-right font-mono">${s.ledger.closing < 0 ? formatCurrency(-s.ledger.closing) : ''}</td><td colspan="2"></td></tr>`;
+  if (vrows.length < daybookState.total) html += `<tr class="daybook-more"><td colspan="9" class="p-2.5 text-center"><button type="button" class="px-3 py-1.5 rounded border border-slate-300 font-bold text-slate-700 hover:bg-slate-100" onclick="loadDaybook(true)">Load more (${daybookState.total - vrows.length} older)</button></td></tr>`;
   tbody.innerHTML = html;
 }
 // every voucher of the current filter (not only the loaded page), for export / print
 async function daybookAll() {
-  const out = []; let offset = 0, total = Infinity;
+  const out = []; let offset = 0, total = Infinity, openings = [];
   while (offset < total && offset < 20000) {
     const res = await fetch(daybookQuery(offset, 1000)); const j = await res.json(); if (!j.success) break;
+    if (offset === 0) openings = j.openings || [];
     total = parseInt(res.headers.get('X-Total-Count'), 10) || j.data.length; out.push(...j.data); offset += 1000; if (!j.data.length) break;
   }
-  return out;
+  return daybookMerged(out, openings, true); // opening balances included (as in the screen)
 }
 async function exportDaybookCsv() {
   const rows = await daybookAll(); const ledgerOnly = daybookState.summary && daybookState.summary.ledger ? daybookState.summary.ledger.id : null;
