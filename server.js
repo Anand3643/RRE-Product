@@ -830,8 +830,8 @@ app.post('/api/system/perform-update', async (req, res) => {
 
   if (isGitRepo) {
     try {
-      const { stdout: pullOut } = await execPromise('git pull origin main', { timeout: 45000 });
-      console.log('[System Update] git pull result:', pullOut);
+      const { stdout: pullOut } = await execPromise('git pull origin main && npm install --no-audit --no-fund', { timeout: 120000 });
+      console.log('[System Update] git pull + npm install result:', pullOut);
 
       // Trigger silent rebuild and installation in background
       exec('npm run build:win && powershell -Command "Start-Process dist\\\"RRE Entries Setup 1.0.0.exe\\\" -ArgumentList \\\"/S\\\" -Wait"', (err) => {

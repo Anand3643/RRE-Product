@@ -1119,7 +1119,11 @@ function openReport(reportType) {
     loadBankReconciliation();
   } else if (reportType === 'chart-accounts') {
     showView('view-chart-accounts');
-    loadChartOfAccountsTree();
+    if (!appState.groups || !appState.groups.length || !appState.ledgers || !appState.ledgers.length) {
+      loadMasters().then(() => loadChartOfAccountsTree());
+    } else {
+      loadChartOfAccountsTree();
+    }
   }
 }
 
@@ -2333,9 +2337,15 @@ async function handleSaveGroup(e) {
 
 function openCreateLedgerForGroup(groupId) {
   openModal('createLedgerModal');
+  const setVal = () => {
+    const groupSelect = document.getElementById('m-ledger-group');
+    if (groupSelect && groupId) groupSelect.value = groupId;
+  };
   const groupSelect = document.getElementById('m-ledger-group');
-  if (groupSelect && groupId) {
-    groupSelect.value = groupId;
+  if (!groupSelect || groupSelect.options.length === 0 || !appState.groups || !appState.groups.length) {
+    loadMasters().then(setVal);
+  } else {
+    setVal();
   }
 }
 
@@ -2345,6 +2355,21 @@ function openCreateLedgerForGroup(groupId) {
 function openModal(id) {
   const m = document.getElementById(id);
   if (m) m.classList.remove('hidden');
+  if (id === 'createLedgerModal' || id === 'createGroupModal') {
+    const sel = document.getElementById(id === 'createLedgerModal' ? 'm-ledger-group' : 'm-group-parent');
+    if (!appState.groups || !appState.groups.length) {
+      loadMasters();
+    } else if (sel && sel.options.length <= (id === 'createGroupModal' ? 1 : 0)) {
+      populateLedgerDropdowns();
+    }
+  } else if (id === 'createStockModal') {
+    const sel = document.getElementById('m-item-uom');
+    if (!appState.uoms || !appState.uoms.length) {
+      loadMasters();
+    } else if (sel && sel.options.length === 0) {
+      populateStockDropdowns();
+    }
+  }
 }
 
 function closeModal(id) {
