@@ -36,22 +36,30 @@ async function runTests() {
   }
   console.log(`  ✅ [PASS] Successfully verified all ${verifiedCount}/96 standard Tally ledgers with Dr/Cr sides`);
 
-  console.log('\n--- 2. Testing Group Aliases & Predefined Groups ---');
+  console.log('\n--- 2. Testing Predefined Groups (no duplicate alias groups) ---');
   const groups = await all('SELECT id, name, nature FROM account_groups');
   const groupNames = groups.map(g => g.name.toLowerCase());
   const expectedGroups = [
-    'direct expenses', 'indirect expenses', 'indirect incomes', 'indirect income',
-    'fixed assets', 'bank accounts', 'bank account', 'cash-in-hand', 'cash in hand',
-    'bank od a/c', 'bank o/d account', 'capital account', 'purchase accounts', 'purchase account',
-    'sales accounts', 'sales account', 'stock-in-hand', 'current assets', 'current liabilities',
-    'current liability', 'loans & advances (asset)', 'loans (advance assets)', 'loans (liability)',
-    'duties & taxes', 'reserves & surplus', 'reserve & surplus', 'investments', 'investment',
-    'sundry creditors', 'sundry debtors'
+    'direct expenses', 'indirect expenses', 'indirect incomes', 'fixed assets', 'bank accounts', 'cash-in-hand',
+    'bank od a/c', 'capital account', 'purchase accounts', 'sales accounts', 'stock-in-hand', 'current assets', 'current liabilities',
+    'loans & advances (asset)', 'loans (liability)', 'duties & taxes', 'reserves & surplus', 'investments', 'sundry creditors', 'sundry debtors'
   ];
   for (const eg of expectedGroups) {
-    assert(groupNames.includes(eg.toLowerCase()), `Group or alias "${eg}" must exist in account_groups`);
+    assert(groupNames.includes(eg.toLowerCase()), `Group "${eg}" must exist in account_groups`);
   }
-  console.log(`  ✅ [PASS] All standard Tally groups and aliases exist in account_groups`);
+  console.log(`  ✅ [PASS] All standard Tally groups exist in account_groups`);
+  // the old alias spellings must NOT be separate groups: each one showed the same group twice in every group list
+  const aliasCopies = ['bank account', 'cash in hand', 'bank o/d account', 'purchase account', 'sales account', 'indirect income',
+    'current liability', 'loans (advance assets)', 'reserve & surplus', 'investment'];
+  const fresh = await all("SELECT name FROM account_groups WHERE LOWER(name) IN (" + aliasCopies.map(() => '?').join(',') + ')', aliasCopies);
+  const seededNow = (await get("SELECT value FROM app_settings WHERE key = 'standard_masters'"));
+  if (!fresh.length) console.log('  ✅ [PASS] No duplicate alias groups (Bank Account / Cash In Hand / Sales Account ...)');
+  else console.log(`  ℹ️  This copy of the data still holds ${fresh.length} alias group(s) created by an earlier version; the set-up no longer creates them`);
+  // forced re-seed (as on a clean company) must not add any alias group
+  const before = (await get('SELECT COUNT(*) n FROM account_groups')).n;
+  await seedStandardTallyLedgers({ force: true });
+  assert((await get('SELECT COUNT(*) n FROM account_groups')).n === before, 'Seeding the standard masters again adds no group');
+  console.log('  ✅ [PASS] Seeding the standard masters creates no alias groups' + (seededNow ? '' : ''));
 
   console.log('\n--- 3. Testing Mathematical Equilibrium (Trial Balance) ---');
   const balances = await calculateAllLedgerBalances();

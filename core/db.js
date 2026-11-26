@@ -737,32 +737,9 @@ async function seedStandardTallyLedgers(opts = {}) {
   if (mark && !opts.force) return { total: STANDARD_TALLY_LEDGERS.length, newlySeeded: 0, skipped: mark.value };
   let seeded = 0;
   await require('./tx').withTransaction(async () => { // all or nothing
-  // Ensure common Tally group aliases exist
-  const groupAliases = [
-    { name: 'Bank Account', parentName: 'Bank Accounts', nature: 'Assets', aff: 0 },
-    { name: 'Cash In Hand', parentName: 'Cash-in-hand', nature: 'Assets', aff: 0 },
-    { name: 'Bank O/D Account', parentName: 'Bank OD A/c', nature: 'Liabilities', aff: 0 },
-    { name: 'Purchase Account', parentName: 'Purchase Accounts', nature: 'Expenses', aff: 1 },
-    { name: 'Sales Account', parentName: 'Sales Accounts', nature: 'Income', aff: 1 },
-    { name: 'Indirect Income', parentName: 'Indirect Incomes', nature: 'Income', aff: 0 },
-    { name: 'Stock-In-Hand', parentName: 'Stock-in-hand', nature: 'Assets', aff: 0 },
-    { name: 'Current Liability', parentName: 'Current Liabilities', nature: 'Liabilities', aff: 0 },
-    { name: 'Loans (Advance Assets)', parentName: 'Loans & Advances (Asset)', nature: 'Assets', aff: 0 },
-    { name: 'Reserve & Surplus', parentName: 'Reserves & Surplus', nature: 'Liabilities', aff: 0 },
-    { name: 'Investment', parentName: 'Investments', nature: 'Assets', aff: 0 }
-  ];
-
-  for (const ga of groupAliases) {
-    const ex = await get('SELECT id FROM account_groups WHERE LOWER(name) = LOWER(?)', [ga.name]);
-    if (!ex) {
-      const parent = await get('SELECT id FROM account_groups WHERE LOWER(name) = LOWER(?)', [ga.parentName]);
-      await run(
-        'INSERT INTO account_groups (name, nature, parent_id, affects_gross_profit, is_primary) VALUES (?, ?, ?, ?, 0)',
-        [ga.name, ga.nature, parent ? parent.id : null, ga.aff]
-      );
-    }
-  }
-
+  // No alias groups: "Bank Account", "Cash In Hand", "Sales Account" ... used to be created as extra EMPTY groups inside the real
+  // ones (Bank Accounts, Cash-in-hand, Sales Accounts ...), so every group list showed them twice. resolveGroupId() below already
+  // maps those spellings to the real groups.
   const grps = await all('SELECT id, name FROM account_groups');
   const gMap = {};
   grps.forEach(g => {
