@@ -2241,7 +2241,7 @@
   <template data-lazy="createLedgerModal"><div id="createLedgerModal" class="modal-backdrop hidden">
     <div class="bg-white rounded-lg shadow-2xl max-w-lg w-full border border-slate-300 overflow-hidden text-xs">
       <div class="bg-[#1f3a52] text-white px-4 py-2.5 font-bold flex justify-between items-center">
-        <span>Ledger Creation Master (Alt+C)</span>
+        <span id="m-ledger-title">Ledger Creation Master (Alt+C)</span>
         <button onclick="closeModal('createLedgerModal')" class="text-slate-300 hover:text-white">✕</button>
       </div>
       <form onsubmit="handleSaveLedger(event)" class="p-5 space-y-3">
@@ -2299,7 +2299,7 @@
         <div class="pt-3 border-t border-slate-200 flex justify-end space-x-2">
           <button type="button" onclick="closeModal('createLedgerModal')"
             class="px-3 py-1.5 border border-slate-300 rounded font-semibold text-slate-600">Cancel</button>
-          <button type="submit" class="px-4 py-1.5 bg-[#1f3a52] text-white rounded font-bold hover:bg-[#162a3b]">Save
+          <button type="submit" id="m-ledger-submit" class="px-4 py-1.5 bg-[#1f3a52] text-white rounded font-bold hover:bg-[#162a3b]">Save
             Ledger</button>
         </div>
       </form>

@@ -176,6 +176,27 @@ async function main() {
   const keep = await alter(si.json.id, { voucher_type: 'Sales', date: '2026-07-06', narration: 'Dr/Cr only', party_ledger_id: cust, entries: saleItems(5).entries }, (await req('GET', `/api/vouchers/${si.json.id}`)).json.data.row_version);
   assert(keep.status === 200 && await onHand() === 5, 'an alteration that sends only the Dr / Cr lines keeps the existing stock lines');
 
+  console.log('\n--- Ledger Alteration: change the group (and other details) ---');
+  const fuel = (await req('POST', '/api/masters/ledgers', { body: { name: 'DB Diesel', group_id: await grp('Sales Accounts'), opening_balance: 10000, opening_balance_type: 'Dr' } })).json.id;
+  const lv = (await req('GET', `/api/masters/ledgers/${fuel}`)).json.data;
+  assert(lv && lv.group_name === 'Sales Accounts' && Number.isInteger(lv.row_version), 'a ledger opens for alteration with its group and version');
+  const altL = (b, ver, token = owner) => req('PUT', `/api/masters/ledgers/${fuel}`, { token, body: b, headers: ver != null ? { 'X-Row-Version': String(ver) } : {} });
+  const mv = await altL({ name: 'DB Diesel', group_id: await grp('Direct Expenses'), opening_balance: 10000, opening_balance_type: 'Dr' }, lv.row_version);
+  assert(mv.status === 200 && mv.json.data.group_name === 'Direct Expenses' && /moved from Sales Accounts to Direct Expenses/.test(mv.json.message), 'Change group: Sales Accounts -> Direct Expenses', mv.raw.slice(0, 160));
+  assert(((await daybook()).openings || []).find((o) => o.ledger_id === fuel).group_name === 'Direct Expenses', 'the Day Book opening-balance entry shows the new group');
+  const la = await get("SELECT details FROM activity_log WHERE action = 'LEDGER_ALTER' AND entity_id = ? ORDER BY id DESC LIMIT 1", [String(fuel)]);
+  assert(la && JSON.parse(la.details).changed.includes('group_name') && JSON.parse(la.details).before.group_name === 'Sales Accounts', 'the audit log records the change (group before and after)');
+  const lv2 = (await req('GET', `/api/masters/ledgers/${fuel}`)).json.data.row_version;
+  assert((await altL({ opening_balance: 12500, opening_balance_type: 'Dr' }, lv2)).status === 200 && await balance(fuel) === 12500
+    && ((await daybook()).openings || []).find((o) => o.ledger_id === fuel).debit_amount === 12500, 'changing the opening balance (₹12,500) changes the ledger balance and its Day Book entry, with no voucher');
+  assert((await altL({ name: 'DB Diesel', group_id: await grp('Indirect Expenses') }, lv.row_version)).status === 409, 'an alteration made from an older copy is refused (409)');
+  assert((await altL({ name: 'DB Sales' })).status === 409, 'renaming to an existing ledger name is refused');
+  assert((await req('PUT', `/api/masters/ledgers/${cash}`, { body: { name: 'Cash Box' } })).status === 409 && (await req('PUT', `/api/masters/ledgers/${outC}`, { body: { name: 'CGST out' } })).status === 409, 'Cash and the GST ledgers keep their names (the invoice calculations use them)');
+  assert((await req('PUT', `/api/masters/ledgers/${cash}`, { body: { opening_balance: 0, opening_balance_type: 'Dr' } })).status === 200, '... but their other details can change');
+  assert((await altL({ group_id: 999999 })).status === 400 && (await altL({ opening_balance: -5 })).status === 400, 'an unknown group or a negative opening balance is refused');
+  assert((await altL({ group_id: await grp('Indirect Expenses') }, null, clerk)).status === 403 && (await altL({ group_id: await grp('Indirect Expenses') }, null, viewer)).status === 403, 'Data Entry and Viewer may not alter ledgers (403)');
+  assert(await unbalanced() === 0 && await voucherCount() > 0, 'no voucher was created or unbalanced by ledger alterations');
+
   console.log('\n--- other devices are told; data survives a restart ---');
   const events = []; const stream = http.request(base + '/api/events', { headers: { Authorization: 'Bearer ' + acc, 'X-RRE-Client': 'other-device' } }, (res) => res.on('data', (c) => events.push(String(c))));
   stream.end(); await sleep(300);

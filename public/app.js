@@ -2214,7 +2214,7 @@ function renderDaybook() {
         <td class="p-2 text-right font-mono font-bold text-slate-900">${Number(e.debit_amount) > 0 ? formatCurrency(e.debit_amount) : ''}</td>
         <td class="p-2 text-right font-mono font-bold text-slate-900">${Number(e.credit_amount) > 0 ? formatCurrency(e.credit_amount) : ''}</td>
         <td class="p-2 text-slate-600">${escapeHtml(v.narration)}</td>
-        <td class="p-2 text-center text-[10px] text-slate-400">change it in the ledger</td>
+        <td class="p-2 text-center whitespace-nowrap">${canEdit ? `<button type="button" class="px-1.5 py-0.5 rounded border border-slate-300 text-[10px] font-bold text-blue-700 hover:bg-blue-50" onclick="openLedgerForAlter(${e.ledger_id})">Alter ledger</button>` : ''}</td>
       </tr>`;
       continue;
     }
@@ -2509,7 +2509,7 @@ async function loadChartOfAccountsTree() {
 
           <!-- Ledgers in Primary Group -->
           <div class="ml-5 mt-1 space-y-0.5">
-            ${pgLedgers.map(l => `<div class="text-slate-700 text-xs flex justify-between py-0.5 border-b border-slate-100"><span>• ${escapeHtml(l.name)}</span><span class="font-mono text-slate-500">${formatCurrency(l.opening_balance)} ${l.opening_balance_type}</span></div>`).join('')}
+            ${pgLedgers.map(l => `<div class="text-slate-700 text-xs flex justify-between py-0.5 border-b border-slate-100"><span>• ${escapeHtml(l.name)}</span><span class="font-mono text-slate-500">${formatCurrency(l.opening_balance)} ${l.opening_balance_type}<button type="button" onclick="openLedgerForAlter(${l.id})" class="ml-2 text-[10px] text-blue-600 hover:text-blue-800 hover:underline font-sans">Alter</button></span></div>`).join('')}
           </div>
 
           <!-- Sub Groups -->
@@ -2523,7 +2523,7 @@ async function loadChartOfAccountsTree() {
                     <button type="button" onclick="openCreateLedgerForGroup(${sg.id})" class="text-[10px] text-blue-600 hover:text-blue-800 font-normal hover:underline">+ Add Ledger</button>
                   </div>
                   <div class="ml-4 mt-1 space-y-0.5">
-                    ${sgLedgers.map(l => `<div class="text-slate-600 text-[11px] flex justify-between py-0.5"><span>- ${escapeHtml(l.name)}</span><span class="font-mono">${formatCurrency(l.opening_balance)} ${l.opening_balance_type}</span></div>`).join('')}
+                    ${sgLedgers.map(l => `<div class="text-slate-600 text-[11px] flex justify-between py-0.5"><span>- ${escapeHtml(l.name)}</span><span class="font-mono">${formatCurrency(l.opening_balance)} ${l.opening_balance_type}<button type="button" onclick="openLedgerForAlter(${l.id})" class="ml-2 text-[10px] text-blue-600 hover:text-blue-800 hover:underline font-sans">Alter</button></span></div>`).join('')}
                   </div>
                 </div>
               `;
@@ -2638,7 +2638,35 @@ function openModal(id) {
 function closeModal(id) {
   const m = document.getElementById(id);
   if (m) m.classList.add('hidden');
+  if (id === 'createLedgerModal' && appState.editingLedger) setLedgerFormMode(null); // back to "create" for the next time
 }
+
+// ---- Ledger Alteration (Chart of Accounts "Alter", Day Book opening-balance entries): the ledger form, filled in, saved with PUT
+function setLedgerFormMode(ledger) {
+  appState.editingLedger = ledger ? { id: ledger.id } : null;
+  const t = document.getElementById('m-ledger-title'), b = document.getElementById('m-ledger-submit');
+  if (t) t.textContent = ledger ? `Ledger Alteration — ${ledger.name}` : 'Ledger Creation Master (Alt+C)';
+  if (b) b.textContent = ledger ? 'Save Changes' : 'Save Ledger';
+  if (!ledger) ['m-ledger-name', 'm-ledger-opbal', 'm-ledger-gstin', 'm-ledger-desc'].forEach((i) => { const el = document.getElementById(i); if (el) el.value = i === 'm-ledger-opbal' ? 0 : ''; });
+}
+async function openLedgerForAlter(id) {
+  try {
+    const res = await fetch(`${API_BASE}/masters/ledgers/${id}`); // also remembers the version this alteration is made from (live-sync.js)
+    const j = await res.json();
+    if (!j.success) { alert(`Cannot open the ledger: ${j.error}`); return; }
+    const l = j.data;
+    openModal('createLedgerModal');
+    if (!appState.groups || !appState.groups.length) await loadMasters();
+    populateLedgerDropdowns();
+    const set = (i, v) => { const el = document.getElementById(i); if (el) el.value = v == null ? '' : v; };
+    set('m-ledger-name', l.name); set('m-ledger-group', String(l.group_id)); set('m-ledger-desc', l.description || '');
+    set('m-ledger-opbal', Number(l.opening_balance) || 0); set('m-ledger-optype', l.opening_balance_type || 'Dr'); set('m-ledger-gstin', l.gstin || '');
+    const st = document.getElementById('m-ledger-state');
+    if (st && l.state_code) { const o = [...st.options].find((x) => x.value.split('|')[1] === String(l.state_code)); if (o) st.value = o.value; }
+    setLedgerFormMode(l);
+  } catch (err) { alert(`Cannot open the ledger: ${err.message}`); }
+}
+window.openLedgerForAlter = openLedgerForAlter;
 
 async function handleSaveLedger(e) {
   e.preventDefault();
@@ -2651,6 +2679,24 @@ async function handleSaveLedger(e) {
   const stateVal = document.getElementById('m-ledger-state').value.split('|');
   const state = stateVal[0];
   const stateCode = stateVal[1];
+
+  const editing = appState.editingLedger;
+  if (editing) {
+    try {
+      const res = await fetch(`${API_BASE}/masters/ledgers/${editing.id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, group_id: groupId, description: desc, opening_balance: opBal, opening_balance_type: opType, gstin, state, state_code: stateCode })
+      });
+      const json = await res.json();
+      if (!json.success) { alert(`Not saved: ${json.error}`); return; }
+      alert(`✔ ${json.message}`);
+      closeModal('createLedgerModal');
+      await loadMasters();
+      if (appState.currentView === 'view-chart-accounts') loadChartOfAccountsTree();
+      if (appState.currentView === 'view-daybook') loadDaybook();
+    } catch (err) { alert(`Failed to save ledger: ${err.message}`); }
+    return;
+  }
 
   try {
     const res = await fetch(`${API_BASE}/masters/ledgers`, {

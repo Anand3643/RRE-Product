@@ -50,6 +50,7 @@ const RULES = [
   { m: 'PUT', re: /^\/api\/vouchers\/settings\//, perm: 'canManageUsers' },          // company accounting settings: administrators
   { m: 'POST', re: /^\/api\/vouchers\/?$/, perm: 'canCreateVouchers', checkVoucherType: true },
   { m: 'POST', re: /^\/api\/masters\//, perm: 'canCreateVouchers' },
+  { m: 'PUT', re: /^\/api\/masters\/ledgers\/\d+\/?$/, perm: 'canEditVouchers' }, // ledger alteration (group, opening balance ...) changes the books
   // Quotations can be converted into Sales invoices (a posting), so changing them needs the same permission as posting
   { re: /^\/api\/quotations(\/|$)/, m: 'POST', perm: 'canCreateVouchers' },
   { re: /^\/api\/quotations(\/|$)/, m: 'PUT', perm: 'canCreateVouchers' },

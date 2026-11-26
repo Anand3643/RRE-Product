@@ -67,6 +67,60 @@ router.get('/ledgers', async (req, res) => {
   }
 });
 
+// ---- Ledger Alteration: name, group ("Under"), opening balance, GSTIN, state, description
+// The ledgers the application finds by NAME (invoice tax lines, cash, round off) keep their names; everything else may change.
+const FIXED_NAME = /^(cash|round off a\/c|(input|output) (cgst|sgst|igst)\b.*)$/i;
+const ledgerSelect = `SELECT l.*, g.name AS group_name, g.nature AS group_nature FROM ledgers l JOIN account_groups g ON l.group_id = g.id WHERE l.id = ?`;
+
+router.get('/ledgers/:id', async (req, res) => {
+  try {
+    const l = await get(ledgerSelect, [parseInt(req.params.id, 10) || 0]);
+    if (!l) return res.status(404).json({ success: false, error: 'Ledger not found' });
+    res.json({ success: true, data: l });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+router.put('/ledgers/:id', async (req, res) => {
+  const id = parseInt(req.params.id, 10) || 0;
+  const b = req.body || {};
+  const bad = (status, error) => res.status(status).json({ success: false, error });
+  try {
+    const cur = await get(ledgerSelect, [id]);
+    if (!cur) return bad(404, 'Ledger not found');
+    const name = b.name != null ? String(b.name).trim() : cur.name;
+    if (!name) return bad(400, 'Ledger name is required');
+    const groupId = b.group_id != null ? parseInt(b.group_id, 10) : cur.group_id;
+    const group = await get('SELECT id, name, nature FROM account_groups WHERE id = ?', [groupId]);
+    if (!group) return bad(400, 'Choose a valid group (Under).');
+    if (name.toLowerCase() !== String(cur.name).toLowerCase() && FIXED_NAME.test(cur.name)) {
+      return bad(409, `"${cur.name}" is used by the invoice and tax calculations, so its name cannot change. Its group, opening balance and other details can.`);
+    }
+    if (await get('SELECT id FROM ledgers WHERE LOWER(name) = LOWER(?) AND id <> ?', [name, id])) return bad(409, `A ledger named "${name}" already exists.`);
+    const ob = b.opening_balance != null && b.opening_balance !== '' ? parseFloat(b.opening_balance) : Number(cur.opening_balance) || 0;
+    if (!Number.isFinite(ob) || ob < 0) return bad(400, 'Opening balance must be zero or more (choose Dr or Cr for its side).');
+    const obType = b.opening_balance_type ? String(b.opening_balance_type) : cur.opening_balance_type || 'Dr';
+    if (!['Dr', 'Cr'].includes(obType)) return bad(400, 'Opening balance side must be Dr or Cr.');
+    const pick = (k) => (b[k] !== undefined ? (b[k] === '' ? null : String(b[k]).trim()) : cur[k]);
+    await require('../../core/tx').withTransaction(async () => {
+      await run(`UPDATE ledgers SET name = ?, group_id = ?, opening_balance = ?, opening_balance_type = ?, gstin = ?, pan = ?, state = ?, state_code = ?, address = ?, description = ? WHERE id = ?`,
+        [name, groupId, Math.round(ob * 100) / 100, obType, pick('gstin'), pick('pan'), pick('state'), pick('state_code'), pick('address'), pick('description'), id]);
+      const after = await get(ledgerSelect, [id]);
+      const u = req.user || {};
+      const keys = ['name', 'group_name', 'opening_balance', 'opening_balance_type', 'gstin', 'pan', 'state', 'state_code', 'address', 'description'];
+      const changed = keys.filter((k) => String(cur[k] == null ? '' : cur[k]) !== String(after[k] == null ? '' : after[k]));
+      await run('INSERT INTO activity_log (user_id, username, role, action, entity, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [u.userId || null, u.username || 'system', u.role || null, 'LEDGER_ALTER', 'ledger', String(id),
+          JSON.stringify({ changed, before: Object.fromEntries(keys.map((k) => [k, cur[k]])), after: Object.fromEntries(keys.map((k) => [k, after[k]])) }), req.ip || null]);
+    });
+    const after = await get(ledgerSelect, [id]);
+    res.json({ success: true, data: after, message: `Ledger '${after.name}' altered${cur.group_id !== after.group_id ? ` (moved from ${cur.group_name} to ${after.group_name})` : ''}` });
+  } catch (err) {
+    res.status(/UNIQUE/.test(String(err.message)) ? 409 : 500).json({ success: false, error: err.message });
+  }
+});
+
 router.post('/ledgers', async (req, res) => {
   try {
     const { name, group_id, opening_balance, opening_balance_type, gstin, pan, state, state_code, address, bank_account_no, bank_ifsc, description } = req.body;

@@ -23,7 +23,8 @@ const FAMILIES = [
   { re: /^\/inv\/orders\/(\d+)\/?$/, table: 'inv_orders' },
   { re: /^\/inv\/(?:sales-orders|purchase-orders)\/?$/, table: 'inv_orders' },
   { re: /^\/quotations(?:\/(\d+))?\/?$/, table: 'quotations' },
-  { re: /^\/vouchers(?:\/(\d+))?\/?$/, table: 'vouchers' }
+  { re: /^\/vouchers(?:\/(\d+))?\/?$/, table: 'vouchers' },
+  { re: /^\/masters\/ledgers(?:\/(\d+))?\/?$/, table: 'ledgers' }
 ];
 const WRITE = new Set(['PUT', 'PATCH', 'DELETE']);
 
