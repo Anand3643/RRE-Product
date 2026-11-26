@@ -627,6 +627,16 @@ const MIGRATIONS = [
       'CREATE INDEX IF NOT EXISTS idx_vouchers_party ON vouchers(party_ledger_id, date)',
       'CREATE INDEX IF NOT EXISTS idx_ledgers_group ON ledgers(group_id)'
     ]
+  },
+  {
+    id: '024_row_versions',
+    description: 'A version number on every record people edit (items, categories, units, warehouses, customers / suppliers, orders, quotations), raised by every change: a save made from an older copy is refused instead of overwriting the newer one (core/rowVersion.js)',
+    sqliteOnly: true, // PostgreSQL: db/postgres/migrations/008_row_versions.sql (trigger syntax differs)
+    statements: ['stock_items', 'stock_groups', 'units_of_measure', 'godowns', 'ledgers', 'inv_orders', 'quotations'].flatMap((t) => [
+      `ALTER TABLE ${t} ADD COLUMN row_version INTEGER NOT NULL DEFAULT 1`,
+      `CREATE TRIGGER IF NOT EXISTS trg_${t}_row_version AFTER UPDATE ON ${t} FOR EACH ROW WHEN NEW.row_version = OLD.row_version
+       BEGIN UPDATE ${t} SET row_version = OLD.row_version + 1 WHERE id = NEW.id; END`
+    ])
   }
 ];
 
@@ -646,6 +656,10 @@ async function runMigrations() {
   for (const m of MIGRATIONS) {
     const done = await get('SELECT id FROM schema_migrations WHERE id = ?', [m.id]);
     if (done) continue;
+    if (m.sqliteOnly && require('./db').isPostgres()) { // its PostgreSQL twin is a numbered file in db/postgres/migrations
+      await run('INSERT INTO schema_migrations (id, description) VALUES (?, ?)', [m.id, m.description]);
+      applied.push(m.id); continue;
+    }
 
     await run('BEGIN TRANSACTION');
     try {

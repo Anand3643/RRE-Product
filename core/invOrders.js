@@ -110,6 +110,8 @@ async function saveParty(kind, id, b, user) {
       await run('INSERT OR IGNORE INTO party_profiles (ledger_id) VALUES (?)', [rid]);
       if (prof.length) await run(`UPDATE party_profiles SET ${prof.map((k) => `${k} = ?`).join(', ')} WHERE ledger_id = ?`, [...prof.map((k) => c[k]), rid]);
     }
+    // contact details live in party_profiles: the customer / supplier as a whole still changed, so its version must go up too
+    if (id && prof.length && !ledgerCols.length) await run('UPDATE ledgers SET row_version = row_version + 1 WHERE id = ?', [id]);
     await logActivity({ user, action: id ? `INV_${kind.toUpperCase()}_UPDATE` : `INV_${kind.toUpperCase()}_CREATE`, entity: 'ledger', entityId: rid, details: { name: c.name } });
     return rid;
   }).then((rid) => partyDetail(kind, rid, user));

@@ -90,6 +90,9 @@ const quotationsRouter = require('./modules/quotations/quotationsApi');
 const { documentsRouter, reportCenterRouter } = require('./modules/documents/documentsApi');
 
 const app = express();
+// Hosted behind an https proxy (Render, Railway, a load balancer): RRE_TRUST_PROXY=1 makes req.ip the visitor's address (from
+// X-Forwarded-For, first proxy only), so sign-in lock-out and the audit log see real addresses. Off on a PC (no proxy to trust).
+if (process.env.RRE_TRUST_PROXY === '1') app.set('trust proxy', 1);
 const WEB_PORT = process.env.PORT || 4000;
 const TALLY_PORT = process.env.TALLY_PORT || 9000;
 const serverStartTime = Date.now();
@@ -123,7 +126,8 @@ app.use((req, res, next) => {
 });
 
 // compressed responses (gzip / brotli): the pages, scripts, styles and API answers travel about 4-6 times smaller
-app.use(require('compression')({ threshold: 1024 }));
+const compression = require('compression');
+app.use(compression({ threshold: 1024, filter: (req, res) => req.path !== '/api/events' && compression.filter(req, res) })); // the live-update stream must not be buffered
 app.use(express.json({ limit: '10mb' })); // GSTR-2B / bank statement uploads exceed the 100kb default
 app.use(express.urlencoded({ extended: true }));
 app.get('/login.html', (req, res, next) => (process.env.RRE_ENFORCE_AUTH === '1' ? next() : res.redirect('/')));
@@ -141,6 +145,11 @@ app.use((req, res, next) => {
   if (!require('./core/db').companyExists(own)) return res.status(503).json({ success: false, error: 'Your company is being prepared. Please try again in a moment.' });
   return require('./core/db').withCompany(own, next);
 });
+// Several devices on one account / one company: live updates, and no silent overwriting of a record changed elsewhere
+const liveEvents = require('./core/liveEvents');
+app.get('/api/events', liveEvents.stream);
+app.use(liveEvents.announce);
+app.use(require('./core/rowVersion').middleware);
 // Vouchers that trigger an approval rule are held for an approver instead of being posted
 app.use(approvals.gate);
 // A newly posted voucher is tagged with the poster's default branch/department (if they set one). The response waits for the tag
@@ -929,8 +938,12 @@ function startServer(preferredPort = WEB_PORT, preferredHost = '127.0.0.1') {
         console.log(`=======================================================`);
         console.log(`✨ RRE Entries (V5 Edition) Running!`);
         console.log(`👉 Web Interface: http://${host}:${portToTry}`);
-        console.log(`📂 Data Storage: data/100000/company.db (Local PC SQLite)`);
-        console.log(`⚡ Offline Mode: 100% Standalone (No Internet Required)`);
+        if (require('./core/db').isPostgres()) {
+          console.log(`📂 Data Storage: central PostgreSQL database (${(() => { try { return new URL(process.env.DATABASE_URL).hostname; } catch (e) { return 'DATABASE_URL'; } })()}) - every device signed in here shares it`);
+        } else {
+          console.log(`📂 Data Storage: SQLite files on THIS computer (${require('./core/paths').ROOT}) - other devices see this data only by opening this server's address`);
+          console.log(`⚡ Offline Mode: 100% Standalone (No Internet Required)`);
+        }
         console.log(`=======================================================`);
         try { require('./core/invBridge').startAuto(); } catch (e) { console.warn('[Inventory bridge] not started:', e.message); } // posts the original inventory app's purchases and sales to the books
 

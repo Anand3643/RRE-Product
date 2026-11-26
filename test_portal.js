@@ -247,7 +247,11 @@ async function main() {
   const dl = await req('DELETE', `/api/auth/users/${u2.id}`);
   assert(dl.status === 400 && /placed \d+ order/.test(dl.json.error), 'A login that has placed orders cannot be deleted (deactivate instead)');
   assert((await req('PUT', `/api/auth/users/${u2.id}`, { body: { role: 'Owner' } })).status === 400, 'A portal login cannot be promoted to a staff role');
-  assert((await req('PUT', '/api/auth/users/3', { body: { role: 'Customer' } })).status === 400, 'A staff user cannot be turned into a portal login');
+  // a real staff account made for this check (id 3 is staff only in copies of the live database, not on a fresh PostgreSQL copy)
+  const staffId = (await req('POST', '/api/auth/users', { body: { full_name: 'Staff Check', email: 'staff.check@example.com', role: 'Accountant', password: 'Staff#Check-2026x' } })).json.data.id;
+  assert((await get('SELECT role FROM users WHERE id = ?', [staffId])).role === 'Accountant'
+    && (await req('PUT', `/api/auth/users/${staffId}`, { body: { role: 'Customer' } })).status === 400
+    && (await get('SELECT role FROM users WHERE id = ?', [staffId])).role === 'Accountant', 'A staff user cannot be turned into a portal login');
   const fresh = (await mkUser(admin, { party_id: cust1.id, username: 'cust1.second', password: PW })).json.data;
   assert((await req('DELETE', `/api/auth/users/${fresh.id}`)).status === 200, 'A portal login with no orders can be deleted');
   assert((await req('GET', '/api/portal/me', { token: tk2 })).status === 200, 'Customer 2 is unaffected by all of this');

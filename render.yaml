@@ -1,0 +1,26 @@
+# Render.com blueprint for the central RRE server (one of several possible hosts; see docs/HOSTING.md).
+# Secrets are NOT in this file: Render asks for them when the blueprint is created (sync: false) or generates them.
+services:
+  - type: web
+    name: rre-tally
+    runtime: docker
+    plan: starter            # always on; the free plan sleeps when idle, which would drop the live updates
+    region: singapore        # closest Render region to India; put the Supabase project in Mumbai (ap-south-1)
+    numInstances: 1          # RRE runs as ONE server process per database (sessions, live updates, record locks)
+    healthCheckPath: /api/health
+    autoDeploy: false        # deploy only when you choose to
+    envVars:
+      - key: RRE_DB
+        value: postgres
+      - key: DATABASE_URL    # Supabase -> Connect -> Session pooler (port 5432)
+        sync: false
+      - key: RRE_PG_CA       # Supabase -> Database settings -> SSL certificate (paste the text)
+        sync: false
+      - key: SESSION_SECRET  # signs sign-in sessions; generated once, keep it
+        generateValue: true
+      - key: RRE_PUBLIC_URL  # the https address people open, e.g. https://rre-tally.onrender.com
+        sync: false
+      - key: RRE_SMTP_USER
+        sync: false
+      - key: RRE_SMTP_PASS
+        sync: false

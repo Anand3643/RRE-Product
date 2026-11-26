@@ -3,6 +3,9 @@ process.env.RRE_ENFORCE_AUTH = process.env.RRE_ENFORCE_AUTH || '1'; // these sui
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+// a DISPOSABLE copy of the data, like every other suite: this suite posts vouchers, creates users and backups, which must never
+// land in the real books (it used to run on data/100000 directly)
+if (!process.env.RRE_DATA_DIR) process.env.RRE_DATA_DIR = fs.mkdtempSync(path.join(require('os').tmpdir(), 'rre_suite_test_'));
 const { app, startServer } = require('./server');
 const {
   initDb,

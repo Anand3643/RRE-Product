@@ -77,6 +77,7 @@ Migration files (applied in order, each once, recorded with a checksum in `rre_m
 | `004_company_registry.sql` | `rre_meta.companies` |
 | `005_idempotency_keys.sql` | repeated financial requests (same Idempotency-Key) return the first result (= SQLite migration 022) |
 | `006_party_and_group_indexes.sql` | indexes for party / group look-ups used by reports and the Day Book (= SQLite migration 023) |
+| `008_row_versions.sql` | a version number (`row_version`) on items, categories, units, warehouses, ledgers (customers / suppliers), orders and quotations, raised by a trigger on every change; a save made from an older copy is refused with 409 instead of overwriting (`core/rowVersion.js`; = SQLite migration 024) |
 | `007_id_sequences.sql` | new row ids from a sequence per table instead of a per-company counter row (the counter row made every posting wait for the previous one). Rows inserted with an explicit id (copy / restore) move the sequence past it |
 
 `001` is frozen: a schema change is a NEW numbered file here plus the matching SQLite migration in `core/migrations.js`.
@@ -186,7 +187,13 @@ Recovery steps for common problems:
 
 Results are in the commit / release notes of this phase.
 
-## 8. What is not done yet (next phases)
+## 8. Several devices
+
+How to host the server so every computer and phone uses the same data, and how devices stay in step (live updates over
+`/api/events`, version checks, save status, retries): **docs/HOSTING.md**. Tested by `node test_crossdevice.js` (SQLite and, with
+`npm run test:pg -- test_crossdevice.js`, PostgreSQL): two computers and a phone on one account, other users, customers and companies.
+
+## 9. What is not done yet (next phases)
 
 * **Not yet connected to a real Supabase project** - needs your project and credentials (`.env`). Speed over the internet is not
   measured yet: every database call is a network round trip (statements inside a transaction take three), so reports that run many

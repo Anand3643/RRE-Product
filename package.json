@@ -57,7 +57,8 @@
     "test:loadtest": "node scripts/load-test.js",
     "build:css": "tailwindcss -i build/tailwind.input.css -o public/vendor/tailwind.css --minify",
     "build:icons": "node scripts/build-icons.js",
-    "build:ui": "npm run build:css && npm run build:icons"
+    "build:ui": "npm run build:css && npm run build:icons",
+    "test:crossdevice": "node test_crossdevice.js"
   },
   "repository": {
     "type": "git",

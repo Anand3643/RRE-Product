@@ -23,6 +23,8 @@ function connectionOptions(url) {
   const local = ['127.0.0.1', 'localhost', '::1'].includes(u.hostname);
   const ssl = local && process.env.RRE_PG_SSL !== '1' ? false
     : process.env.RRE_PG_CA_FILE ? { ca: fs.readFileSync(process.env.RRE_PG_CA_FILE, 'utf8'), rejectUnauthorized: true }
+    // hosting platforms take settings as text, not files: the certificate itself (PEM; "\n" may be written as \n on one line)
+    : process.env.RRE_PG_CA ? { ca: process.env.RRE_PG_CA.replace(/\\n/g, '\n'), rejectUnauthorized: true }
       : { rejectUnauthorized: process.env.RRE_PG_SSL_NO_VERIFY !== '1' };
   return { connectionString: url, ssl, application_name: 'rre-tally' };
 }

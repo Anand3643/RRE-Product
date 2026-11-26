@@ -1,0 +1,19 @@
+# Never put business data, secrets or local tools into the server image
+.env
+.env.*
+!.env.example
+data/
+backups/
+.pg-local/
+*.db
+*.db-wal
+*.db-shm
+*.log
+node_modules/
+dist/
+build/
+release/
+inventory-app/
+.git/
+.claude/
+.vscode/
