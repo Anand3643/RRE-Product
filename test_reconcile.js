@@ -263,7 +263,7 @@ async function main() {
   console.log('\n--- TEST 15: accounting period ---');
   await data('POST', '/api/vouchers', { body: { voucher_type: 'Journal', date: '2027-04-05', narration: 'next year', entries: [{ ledger_id: await lid('Office Rent'), debit_amount: 7000, credit_amount: 0 }, { ledger_id: await lid(cashL), debit_amount: 0, credit_amount: 7000 }] } });
   const plFY = await data('GET', '/api/reports/profit-loss?from=2026-04-01&date=2027-03-31'), plNext = await data('GET', '/api/reports/profit-loss?from=2027-04-01&date=2028-03-31');
-  const rentFY = await groupNet(['Indirect Expenses'], { from: '2026-04-01', to: '2027-03-31', openings: false });
+  const rentFY = await groupNet(['Indirect Expenses'], { from: '2026-04-01', to: '2027-03-31', openings: true }); // the books begin 1 Apr 2026: openings belong to this year
   assert(near(plFY.indirect.indirect_expenses, rentFY) && near(plNext.indirect.indirect_expenses, 7000) && near(plNext.trading.sales, 0), 'P&L for FY 2026-27 leaves out the April 2027 rent; FY 2027-28 shows only it (₹7,000) and no sales', JSON.stringify({ fy: plFY.indirect.indirect_expenses, exp: rentFY, next: plNext.indirect.indirect_expenses }));
   assert(near(plNext.trading.opening_stock, plFY.trading.closing_stock, 0.05), 'the next year opens with the stock this year closed with');
   const tbJune = await data('GET', '/api/reports/trial-balance?date=2026-06-05');
@@ -289,6 +289,52 @@ async function main() {
   await data('PUT', '/api/vouchers/settings/period-lock', { body: { books_locked_upto: '' } });
   assert((await data('GET', '/api/vouchers/settings/period-lock')).books_locked_upto === null && (await data('GET', '/api/vouchers/settings/negative-stock')).negative_stock, 'the lock can be lifted; the settings can be read (they were answered as "voucher not found" before)');
   await reconcile('TEST 15');
+
+  // ------------------------------------------------------------------------------------------------ P&L drill-down, narration
+  console.log('\n--- Profit & Loss drill-down to ledger vouchers; narration on every voucher type ---');
+  const NARR = {};
+  const vt = [['Payment', 'Office Rent', cashL], ['Receipt', bankL, 'Kaveri Pumps Ltd'], ['Contra', bankL, cashL], ['Journal', 'Office Rent', cashL], ['Sales', 'Kaveri Pumps Ltd', salesL], ['Purchase', purchL, 'Godavari Steels'], ['Debit Note', 'Godavari Steels', purchL], ['Credit Note', salesL, 'Kaveri Pumps Ltd']];
+  for (const [type, dr, crL] of vt) {
+    const text = `Being ${type.toLowerCase()} test narration #${Math.random().toString(36).slice(2, 7)}`;
+    const v = await data('POST', '/api/vouchers', { body: { voucher_type: type, date: '2026-08-03', narration: text, entries: [{ ledger_id: await lid(dr), debit_amount: 111, credit_amount: 0 }, { ledger_id: await lid(crL), debit_amount: 0, credit_amount: 111 }] } });
+    NARR[type] = { id: v.id, no: v.voucher_no, text, dr };
+  }
+  const dbN = await data('GET', '/api/reports/daybook?from=2026-08-03&to=2026-08-03&limit=100');
+  const missingN = Object.entries(NARR).filter(([t, x]) => !dbN.some((v) => v.voucher_no === x.no && v.narration === x.text));
+  assert(!missingN.length, 'narration is saved on Payment, Receipt, Contra, Journal, Sales, Purchase, Debit Note and Credit Note and shown in the Day Book', missingN.map((m) => m[0]).join(', '));
+  const ls = await data('GET', `/api/reports/ledger-statement/${await lid('Office Rent')}?from=2026-08-01&to=2026-08-31`);
+  assert(ls.statement.some((s) => s.voucher_id === NARR.Payment.id && s.narration === NARR.Payment.text && /Cash/.test(s.against)), 'and in the ledger statement, with the other side of the voucher (Cash)', JSON.stringify(ls.statement.slice(0, 2)).slice(0, 300));
+  const vd = await data('GET', `/api/vouchers/${NARR['Credit Note'].id}`);
+  assert(vd.narration === NARR['Credit Note'].text, 'and in the voucher detail');
+  // every ledger line of the P&L opens its own ledger: its net for the same period = the P&L amount
+  const FROM = '2026-04-01', TO = '2027-03-31';
+  const plD = await data('GET', `/api/reports/profit-loss?from=${FROM}&date=${TO}`);
+  const lines = [...plD.trading.sales_items.map((i) => [i, -1]), ...plD.trading.purchase_items.map((i) => [i, 1]), ...plD.trading.direct_expense_items.map((i) => [i, 1]), ...(plD.trading.direct_income_items || []).map((i) => [i, -1]), ...plD.indirect.indirect_expense_items.map((i) => [i, 1]), ...plD.indirect.indirect_income_items.map((i) => [i, -1])];
+  const bad = []; const seenIds = new Set();
+  for (const [i, sign] of lines) {
+    if (!i.id) { bad.push(`${i.name}: no ledger id`); continue; }
+    seenIds.add(i.id);
+    const st = await data('GET', `/api/reports/ledger-statement/${i.id}?from=${FROM}&to=${TO}`);
+    if (st.ledger.id !== i.id || st.ledger.name !== i.name) bad.push(`${i.name} opened ${st.ledger.name}`);
+    const closingSigned = (st.closing_type === 'Cr' ? -1 : 1) * st.closing_balance;
+    if (!near(sign * closingSigned, i.closing_balance)) bad.push(`${i.name}: P&L ${i.closing_balance} ≠ ledger closing for the period ${sign * closingSigned}`);
+    if (!near(st.total_debit, st.statement.reduce((t, s) => t + s.debit_amount, 0)) || !near(st.total_credit, st.statement.reduce((t, s) => t + s.credit_amount, 0))) bad.push(`${i.name}: totals ≠ its lines`);
+  }
+  assert(lines.length >= 5 && !bad.length && seenIds.size === lines.length, `all ${lines.length} P&L ledger lines open their own ledger (by id) and its closing balance for the period equals the P&L amount (incl. the return ledger and opening balances in the first year)`, bad.slice(0, 5).join(' | '));
+  const st0 = await data('GET', `/api/reports/ledger-statement/${(await L('Godavari Steels')).id}?from=2030-01-01&to=2030-12-31`);
+  const empty = await data('POST', '/api/masters/ledgers', { body: { name: 'No Transactions Ledger', group_id: await grp('Indirect Expenses') } }).catch(() => null);
+  const st1 = await data('GET', `/api/reports/ledger-statement/${(await L('No Transactions Ledger')).id}?from=${FROM}&to=${TO}`);
+  assert(st0.statement.length === 0 && near(st0.opening_balance, st0.closing_balance) && st1.statement.length === 0 && st1.closing_balance === 0 && st1.net_debit === 0, 'a period without transactions and a ledger without any: an empty list with the right opening / closing, no error');
+  const lc = await data('GET', `/api/reports/ledger-statement/${await lid(cashL)}?from=2026-08-01&to=2026-08-31`);
+  const sg = (amt, t) => (t === 'Cr' ? -1 : 1) * amt;
+  assert(lc.statement.length && near(lc.statement[lc.statement.length - 1].balance, lc.closing_balance) && near(sg(lc.opening_balance, lc.opening_type) + lc.net_debit, sg(lc.closing_balance, lc.closing_type)) && near(sg(lc.opening_balance, lc.opening_type), await bal(cashL, '2026-07-31')) && near(sg(lc.closing_balance, lc.closing_type), await bal(cashL, '2026-08-31')),
+    'Cash (a balance-sheet ledger) for August: opening = its balance on 31 Jul, opening + movement = closing = its balance on 31 Aug, the running balance ends there');
+  assert(ls.opening_balance === 0 && near(sg(ls.closing_balance, ls.closing_type), ls.net_debit), 'Office Rent (an expense) for August starts from zero, as in the P&L for August');
+  assert((await call('GET', '/api/reports/ledger-statement/999999')).status === 404 && (await call('GET', '/api/reports/ledger-statement/1?from=31-08-2026')).status === 400, 'an unknown ledger is 404, a malformed date is refused');
+  const vCountAfterDrill = Number((await get('SELECT COUNT(*) AS n FROM vouchers')).n);
+  await data('GET', `/api/reports/ledger-statement/${await lid(salesL)}?from=${FROM}&to=${TO}`);
+  assert(Number((await get('SELECT COUNT(*) AS n FROM vouchers')).n) === vCountAfterDrill, 'opening a ledger from the P&L posts nothing');
+  await reconcile('drill-down');
 
   // ------------------------------------------------------------------------------------------------ TEST 17 roles
   console.log('\n--- TEST 17: roles and customers (server side) ---');

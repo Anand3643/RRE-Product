@@ -349,27 +349,61 @@ router.post('/bank-reconciliation/clear', async (req, res) => {
 });
 
 // 10. Ledger Statement / Khata
+/**
+ * Ledger Vouchers (a ledger's statement), optionally for a period (?from=&to=): the opening balance as on the period start (the ledger's
+ * opening balance + everything before it), every entry in the period with the other ledgers of its voucher and the party, a running
+ * balance, the period totals and the net for the period (for an income / expense ledger that is its Profit & Loss figure), and the closing.
+ */
 router.get('/ledger-statement/:id', async (req, res) => {
   try {
+    const okd = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d || '') ? d : null);
+    const from = okd(req.query.from), to = okd(req.query.to);
+    if ((req.query.from && !from) || (req.query.to && !to)) return res.status(400).json({ success: false, error: 'Dates must be YYYY-MM-DD.' });
+    if (from && to && from > to) return res.status(400).json({ success: false, error: 'The period starts after it ends.' });
     const ledger = await get(`
       SELECT l.*, g.name as group_name, g.nature as group_nature
       FROM ledgers l
       JOIN account_groups g ON l.group_id = g.id
       WHERE l.id = ?
-    `, [req.params.id]);
+    `, [parseInt(req.params.id, 10) || 0]);
 
     if (!ledger) return res.status(404).json({ success: false, error: 'Ledger not found' });
 
+    let opening = (ledger.opening_balance_type === 'Cr' ? -1 : 1) * (Number(ledger.opening_balance) || 0);
+    // an income / expense ledger for a period starts as the Profit & Loss does: from zero, with its opening balance only in the period
+    // where the books begin (earlier periods' amounts went to those periods' profit) — so its closing here = its P&L amount
+    const nominal = ['Income', 'Expenses'].includes(ledger.group_nature);
+    if (from && nominal) {
+      if (!(await require('../../core/accountingEngine').nominalOpeningIncluded(from))) opening = 0;
+    } else if (from) {
+      const before = await get('SELECT COALESCE(SUM(e.debit_amount), 0) - COALESCE(SUM(e.credit_amount), 0) AS n FROM ledger_entries e JOIN vouchers v ON v.id = e.voucher_id WHERE e.ledger_id = ? AND v.date < ?', [ledger.id, from]);
+      opening += Number(before.n) || 0;
+    }
+    const params = [ledger.id]; let period = '';
+    if (from) { period += ' AND v.date >= ?'; params.push(from); }
+    if (to) { period += ' AND v.date <= ?'; params.push(to); }
     const entries = await all(`
       SELECT e.id as entry_id, e.entry_type, e.debit_amount, e.credit_amount, e.particulars,
-             v.id as voucher_id, v.voucher_type, v.voucher_no, v.date, v.narration
+             v.id as voucher_id, v.voucher_type, v.voucher_no, v.date, v.reference_no, v.narration, p.name AS party
       FROM ledger_entries e
       JOIN vouchers v ON e.voucher_id = v.id
-      WHERE e.ledger_id = ?
-      ORDER BY v.date ASC, v.id ASC
-    `, [ledger.id]);
+      LEFT JOIN ledgers p ON p.id = v.party_ledger_id
+      WHERE e.ledger_id = ?${period}
+      ORDER BY v.date ASC, v.id ASC, e.id ASC
+    `, params);
+    // the other side of each voucher ("Particulars" in Tally's Ledger Vouchers)
+    const against = new Map();
+    const vids = [...new Set(entries.map((e) => e.voucher_id))];
+    for (let i = 0; i < vids.length; i += 500) {
+      const chunk = vids.slice(i, i + 500);
+      for (const o of await all(`SELECT e.voucher_id, l.name FROM ledger_entries e JOIN ledgers l ON l.id = e.ledger_id WHERE e.voucher_id IN (${chunk.map(() => '?').join(',')}) AND e.ledger_id <> ? ORDER BY e.id`, [...chunk, ledger.id])) {
+        if (!against.has(o.voucher_id)) against.set(o.voucher_id, []);
+        if (!against.get(o.voucher_id).includes(o.name)) against.get(o.voucher_id).push(o.name);
+      }
+    }
 
-    let runningBalance = ledger.opening_balance_type === 'Dr' ? ledger.opening_balance : -ledger.opening_balance;
+    const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+    let runningBalance = opening;
     let totalDebit = 0;
     let totalCredit = 0;
 
@@ -380,7 +414,8 @@ router.get('/ledger-statement/:id', async (req, res) => {
 
       return {
         ...en,
-        balance: Math.abs(runningBalance),
+        against: (against.get(en.voucher_id) || []).join(', '),
+        balance: r2(Math.abs(runningBalance)),
         balance_type: runningBalance >= 0 ? 'Dr' : 'Cr'
       };
     });
@@ -389,10 +424,14 @@ router.get('/ledger-statement/:id', async (req, res) => {
       success: true,
       data: {
         ledger,
+        period: { from, to },
+        opening_balance: r2(Math.abs(opening)),
+        opening_type: opening >= 0 ? 'Dr' : 'Cr',
         statement,
-        total_debit: totalDebit,
-        total_credit: totalCredit,
-        closing_balance: Math.abs(runningBalance),
+        total_debit: r2(totalDebit),
+        total_credit: r2(totalCredit),
+        net_debit: r2(totalDebit - totalCredit), // the movement in the period (Dr +)
+        closing_balance: r2(Math.abs(runningBalance)),
         closing_type: runningBalance >= 0 ? 'Dr' : 'Cr'
       }
     });

@@ -2008,23 +2008,25 @@ async function loadProfitLoss() {
     if (!json.success) return;
 
     const d = json.data;
+    // one ledger line: the amount opens that ledger (by its id) for the same period; "Back to Profit & Loss" returns here
+    const plLedgerRow = (i) => `<div class="flex justify-between items-baseline gap-2 pl-4 text-slate-500 text-[11px]"><span class="truncate">${escapeHtml(i.name)}</span><button type="button" class="pl-drill font-mono shrink-0" data-ledger="${Number(i.id)}" title="Open the vouchers of ${escapeHtml(i.name)}" onclick="openLedgerStatement(${Number(i.id)}, { from: '${per.from}', to: '${per.to}', back: 'profit-loss' })">${formatCurrency(i.closing_balance)}</button></div>`;
 
     // Trading Account Debit Side
     let tdHtml = `
       <div class="flex justify-between font-bold border-b border-slate-200 pb-1">
         <span>To Opening Stock</span>
-        <span class="font-mono">${formatCurrency(d.trading.opening_stock)}</span>
+        <button type="button" class="pl-drill font-mono" onclick="openReport('stock-summary')" title="Open the Stock Summary">${formatCurrency(d.trading.opening_stock)}</button>
       </div>
       <div class="flex justify-between font-bold border-b border-slate-200 pb-1">
         <span>To Purchases</span>
         <span class="font-mono">${formatCurrency(d.trading.purchases)}</span>
       </div>
-      ${(d.trading.purchase_items || []).map(i => `<div class="flex justify-between pl-4 text-slate-500 text-[11px]"><span>${i.name}</span><span class="font-mono">${formatCurrency(i.closing_balance)}</span></div>`).join('')}
+      ${(d.trading.purchase_items || []).map(plLedgerRow).join('')}
       <div class="flex justify-between font-bold border-b border-slate-200 pb-1 pt-1">
         <span>To Direct Expenses</span>
         <span class="font-mono">${formatCurrency(d.trading.direct_expenses)}</span>
       </div>
-      ${(d.trading.direct_expense_items || []).map(i => `<div class="flex justify-between pl-4 text-slate-500 text-[11px]"><span>${i.name}</span><span class="font-mono">${formatCurrency(i.closing_balance)}</span></div>`).join('')}
+      ${(d.trading.direct_expense_items || []).map(plLedgerRow).join('')}
     `;
     document.getElementById('pl-trading-debit').innerHTML = tdHtml;
 
@@ -2034,10 +2036,15 @@ async function loadProfitLoss() {
         <span>By Sales Accounts</span>
         <span class="font-mono">${formatCurrency(d.trading.sales)}</span>
       </div>
-      ${(d.trading.sales_items || []).map(i => `<div class="flex justify-between pl-4 text-slate-500 text-[11px]"><span>${i.name}</span><span class="font-mono">${formatCurrency(i.closing_balance)}</span></div>`).join('')}
+      ${(d.trading.sales_items || []).map(plLedgerRow).join('')}
+      ${d.trading.direct_incomes || (d.trading.direct_income_items || []).length ? `<div class="flex justify-between font-bold border-b border-slate-200 pb-1 pt-1">
+        <span>By Direct Incomes</span>
+        <span class="font-mono">${formatCurrency(d.trading.direct_incomes)}</span>
+      </div>
+      ${(d.trading.direct_income_items || []).map(plLedgerRow).join('')}` : ''}
       <div class="flex justify-between font-bold border-b border-slate-200 pb-1 pt-1">
         <span>By Closing Stock</span>
-        <span class="font-mono text-blue-700">${formatCurrency(d.trading.closing_stock)}</span>
+        <button type="button" class="pl-drill font-mono text-blue-700" onclick="openReport('stock-summary')" title="Open the Stock Summary">${formatCurrency(d.trading.closing_stock)}</button>
       </div>
     `;
     document.getElementById('pl-trading-credit').innerHTML = tcHtml;
@@ -2049,7 +2056,7 @@ async function loadProfitLoss() {
         <span>To Indirect Expenses</span>
         <span class="font-mono">${formatCurrency(d.indirect.indirect_expenses)}</span>
       </div>
-      ${(d.indirect.indirect_expense_items || []).map(i => `<div class="flex justify-between pl-4 text-slate-500 text-[11px]"><span>${i.name}</span><span class="font-mono">${formatCurrency(i.closing_balance)}</span></div>`).join('')}
+      ${(d.indirect.indirect_expense_items || []).map(plLedgerRow).join('')}
     `;
     document.getElementById('pl-indirect-debit').innerHTML = idHtml;
 
@@ -2062,7 +2069,7 @@ async function loadProfitLoss() {
         <span>By Indirect Incomes</span>
         <span class="font-mono">${formatCurrency(d.indirect.indirect_incomes)}</span>
       </div>
-      ${(d.indirect.indirect_income_items || []).map(i => `<div class="flex justify-between pl-4 text-slate-500 text-[11px]"><span>${i.name}</span><span class="font-mono">${formatCurrency(i.closing_balance)}</span></div>`).join('')}
+      ${(d.indirect.indirect_income_items || []).map(plLedgerRow).join('')}
     `;
     document.getElementById('pl-indirect-credit').innerHTML = icHtml;
     document.getElementById('pl-net-profit').textContent = formatCurrency(d.indirect.net_profit);

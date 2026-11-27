@@ -133,7 +133,7 @@
 
   // ------------------------------------------------------------------------------------------------ refreshing the screen
   const LOADERS = {
-    'view-dashboard': 'loadDashboard', 'view-daybook': 'loadDaybook', 'view-trial-balance': 'loadTrialBalance', 'view-balance-sheet': 'loadBalanceSheet',
+    'view-dashboard': 'loadDashboard', 'view-ledger-vouchers': 'reloadLedgerVouchers', 'view-daybook': 'loadDaybook', 'view-trial-balance': 'loadTrialBalance', 'view-balance-sheet': 'loadBalanceSheet',
     'view-profit-loss': 'loadProfitLoss', 'view-stock-summary': 'loadStockSummary', 'view-ratio-analysis': 'loadRatioAnalysis', 'view-gst': 'loadGSTReport',
     'view-outstandings': 'loadOutstandings', 'view-bank-recon': 'loadBankReconciliation', 'view-chart-accounts': 'loadChartOfAccountsTree', 'view-quotations': 'loadQuotations'
   };

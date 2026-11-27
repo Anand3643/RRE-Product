@@ -103,10 +103,23 @@ async function calculatePeriodBalances(from, to) {
     FROM ledgers l JOIN account_groups g ON l.group_id = g.id
     LEFT JOIN ledger_entries e ON l.id = e.ledger_id AND e.voucher_id IN (SELECT id FROM vouchers WHERE date >= ? ${upTo})
     GROUP BY l.id ORDER BY g.nature, g.name, l.name`, params);
+  // an opening balance on an income / expense ledger belongs to the period in which the books begin (as in Tally); later periods start
+  // from zero (that profit was earlier years')
+  const co = await get('SELECT books_beginning_from, financial_year_from FROM company_info LIMIT 1').catch(() => null);
+  const booksBegin = (co && (co.books_beginning_from || co.financial_year_from)) || null;
+  const withOpening = !booksBegin || from <= booksBegin;
+  const ob = withOpening ? new Map((await all('SELECT id, opening_balance, opening_balance_type FROM ledgers')).map((x) => [x.id, (x.opening_balance_type === 'Cr' ? -1 : 1) * (Number(x.opening_balance) || 0)])) : new Map();
   return rows.map((l) => {
-    const net = l.total_debit - l.total_credit;
+    const net = (ob.get(l.id) || 0) + l.total_debit - l.total_credit;
     return { ...l, opening_balance: 0, opening_balance_type: 'Dr', net_debit: l.total_debit, net_credit: l.total_credit, closing_balance: Math.abs(net), closing_type: net >= 0 ? 'Dr' : 'Cr' };
   });
+}
+/** the period an income / expense ledger's balance is counted from: its opening balance only in the period where the books begin */
+async function nominalOpeningIncluded(from) {
+  if (!from) return true;
+  const co = await get('SELECT books_beginning_from, financial_year_from FROM company_info LIMIT 1').catch(() => null);
+  const booksBegin = (co && (co.books_beginning_from || co.financial_year_from)) || null;
+  return !booksBegin || from <= booksBegin;
 }
 const dayBefore = (d) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() - 1); return x.toISOString().slice(0, 10); };
 
@@ -363,5 +376,6 @@ module.exports = {
   calculateClosingStockValuation,
   calculateProfitLoss,
   calculateBalanceSheet,
-  calculateRatioAnalysis
+  calculateRatioAnalysis,
+  nominalOpeningIncluded
 };

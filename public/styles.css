@@ -739,3 +739,9 @@ section[id^="view-"]:not(.hidden) {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* Profit & Loss: an amount that opens its ledger's vouchers (Tally-style drill-down) */
+.pl-drill { cursor: pointer; background: none; border: 0; padding: 0 1px; color: inherit; border-bottom: 1px dotted currentColor; border-radius: 2px; line-height: inherit; }
+.pl-drill:hover, .pl-drill:focus-visible { color: #4338ca; background: rgba(99, 102, 241, .10); border-bottom-style: solid; outline: none; }
+.pl-drill:focus-visible { box-shadow: 0 0 0 2px rgba(99, 102, 241, .45); }
+[data-au="dark"] .pl-drill:hover, [data-au="dark"] .pl-drill:focus-visible { color: #c7d2fe; background: rgba(129, 140, 248, .16); }
