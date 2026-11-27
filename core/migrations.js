@@ -647,6 +647,25 @@ const MIGRATIONS = [
       `CREATE TRIGGER IF NOT EXISTS trg_vouchers_row_version AFTER UPDATE ON vouchers FOR EACH ROW WHEN NEW.row_version = OLD.row_version
        BEGIN UPDATE vouchers SET row_version = OLD.row_version + 1 WHERE id = NEW.id; END`
     ]
+  },
+  {
+    id: '026_import_documents',
+    description: 'Documents uploaded for import (PDF / Excel / CSV / images): the original file, what was read, the preview settings and the result (Import History). Additive only. PostgreSQL: 010_import_documents.sql',
+    statements: [
+      `CREATE TABLE IF NOT EXISTS import_documents (
+         id INTEGER PRIMARY KEY AUTOINCREMENT,
+         file_name TEXT NOT NULL, mime TEXT, kind TEXT, size INTEGER DEFAULT 0, sha256 TEXT NOT NULL,
+         category TEXT, status TEXT NOT NULL DEFAULT 'uploaded',
+         detected INTEGER DEFAULT 0, imported INTEGER DEFAULT 0, rejected INTEGER DEFAULT 0,
+         extraction TEXT, settings TEXT, result TEXT, error TEXT,
+         uploaded_by TEXT, uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP, imported_by TEXT, imported_at DATETIME
+       )`,
+      'CREATE INDEX IF NOT EXISTS idx_import_documents_sha ON import_documents(sha256)',
+      `CREATE TABLE IF NOT EXISTS import_document_data (
+         document_id INTEGER PRIMARY KEY REFERENCES import_documents(id) ON DELETE CASCADE,
+         data BLOB NOT NULL
+       )`
+    ]
   }
 ];
 

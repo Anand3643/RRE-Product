@@ -101,13 +101,17 @@ const serverStartTime = Date.now();
 app.use(securityHeadersMiddleware);
 
 // 2. Loopback & Local Origin Lockdown (Pillar 7)
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1') || origin.startsWith('file://')) {
-      return callback(null, true);
-    }
-    return callback(new Error('CORS access blocked by RRE Entries local security policy.'));
-  }
+// Which web pages may call this server from a browser: this computer (localhost / 127.0.0.1 / the desktop app), the application's
+// OWN address (the page and the API on the same host: a phone on the office network, or the hosted https address) and
+// RRE_PUBLIC_URL. Any other web site stays blocked. (Same-origin pages send an Origin header on every save, so before this the
+// application could not save anything when opened at any address other than localhost.)
+const PUBLIC_ORIGIN = (() => { try { return process.env.RRE_PUBLIC_URL ? new URL(process.env.RRE_PUBLIC_URL).origin : null; } catch (e) { return null; } })();
+app.use(cors((req, callback) => {
+  const origin = req.header('Origin');
+  let allowed = !origin || origin.startsWith('http://localhost') || origin.startsWith('http://127.0.0.1') || origin.startsWith('file://') || (PUBLIC_ORIGIN && origin === PUBLIC_ORIGIN);
+  if (!allowed) { try { allowed = new URL(origin).host === req.headers.host; } catch (e) { allowed = false; } } // same origin as the page
+  if (!allowed) return callback(new Error('CORS access blocked by RRE Entries local security policy.'));
+  return callback(null, { origin: true });
 }));
 
 // Raw body parser for Tally XML envelopes
@@ -614,6 +618,11 @@ app.use('/api/tracking', trackingRouter); // new: batch / expiry / serial tracki
 app.use('/api/attachments', attachmentsRouter); // new: documents attached to vouchers (stored in the company DB)
 app.use('/api/recurring', recurringRouter); // new: recurring voucher drafts (human-confirmed)
 app.use('/api/import', importRouter); // new: previewed, all-or-nothing CSV voucher import
+app.use('/api/doc-import', require('./modules/docimport/docImportApi')); // PDF / Excel / CSV / scans -> classified, previewed, imported through the normal engines
+// pdf.js for the browser (draws the pages of a SCANNED PDF so the offline OCR can read them): exactly the two files, from the installed package
+for (const f of ['pdf.min.mjs', 'pdf.worker.min.mjs']) {
+  app.get(`/vendor/pdfjs/${f}`, (req, res) => res.type('text/javascript').sendFile(path.join(__dirname, 'node_modules', 'pdfjs-dist', 'legacy', 'build', f), { maxAge: '7d' }));
+}
 app.use('/api/automation', automationRouter); // new: duplicates, suggestions, unusual transactions, reminders
 app.use('/api/bank', bankRouter); // new: statement import, smart reconciliation
 app.use('/api/gst', gstRouter); // new: GSTIN/HSN validation, tax checks, GSTR-2B reconciliation

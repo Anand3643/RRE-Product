@@ -15,8 +15,13 @@ function getWorker(langPath) {
 process.on('message', async (m) => {
   try {
     const w = await getWorker(m.langPath);
-    const r = await w.recognize(Buffer.from(m.image, 'base64'));
-    process.send({ id: m.id, ok: true, text: r.data.text || '', confidence: Math.round(r.data.confidence || 0) });
+    const r = await w.recognize(Buffer.from(m.image, 'base64'), {}, { text: true, blocks: true });
+    // each word with its box: lets a scanned TABLE be put back into its columns by position (document import)
+    const boxes = [];
+    for (const b of r.data.blocks || []) for (const p of b.paragraphs || []) for (const l of p.lines || []) for (const wd of l.words || []) {
+      if (boxes.length < 20000 && wd.text && wd.text.trim()) boxes.push([wd.text, wd.bbox.x0, wd.bbox.y0, wd.bbox.x1, wd.bbox.y1]);
+    }
+    process.send({ id: m.id, ok: true, text: r.data.text || '', confidence: Math.round(r.data.confidence || 0), boxes });
   } catch (e) {
     process.send({ id: m.id, ok: false, error: String((e && e.message) || e) });
   }

@@ -90,7 +90,7 @@ function recognise(buf) {
     const timer = setTimeout(() => { pending.delete(id); reject(bad('Scanning took too long and was cancelled.', 504)); try { c.kill(); } catch (e) {} }, TIMEOUT_MS);
     pending.set(id, { resolve, reject, timer, child: c });
     c.send({ id, langPath: langDir(), image: buf.toString('base64') });
-  })).then((m) => { touchIdle(); return { text: m.text, confidence: m.confidence, words: 0, image_type: info.type, width: info.width, height: info.height }; });
+  })).then((m) => { touchIdle(); return { text: m.text, confidence: m.confidence, words: 0, boxes: m.boxes || [], image_type: info.type, width: info.width, height: info.height }; });
   queue = job.catch(() => {}); // a failed scan must not block the next one
   return job;
 }

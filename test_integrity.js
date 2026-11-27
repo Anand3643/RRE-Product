@@ -190,7 +190,8 @@ async function main() {
 
   console.log('\n--- 6. Permissions, sessions, escalation ---');
   assert((await req('GET', '/api/vouchers', { token: null })).status === 401 && (await req('GET', '/api/reports/trial-balance', { token: null })).status === 401, 'No sign-in: vouchers and reports refused (401)');
-  const ghost = await req('PUT', '/api/masters/ledgers/1', { body: { name: 'x' } });
+  // (PUT /api/masters/ledgers/:id exists since ledger alteration was added, so a really missing address is used here)
+  const ghost = await req('PUT', '/api/masters/no-such-master/1', { body: { name: 'x' } });
   assert(ghost.status === 404 && ghost.json && ghost.json.success === false, 'A write to an API address that does not exist answers 404 (not "200 OK" with the web page)', String(ghost.status));
   assert((await req('POST', '/api/vouchers', { token: viewer, body: { voucher_type: 'Journal', entries: [] } })).status === 403, 'A Viewer cannot post vouchers');
   assert((await req('GET', '/api/auth/users', { token: clerk })).status === 403 && (await req('GET', '/api/auth/users', { token: acc })).status === 403, 'Employees cannot open user administration');
