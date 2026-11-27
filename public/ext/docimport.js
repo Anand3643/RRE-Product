@@ -442,5 +442,25 @@
     ['dragleave', 'drop'].forEach((ev) => block.addEventListener(ev, (e) => { e.preventDefault(); block.classList.remove('border-indigo-600'); }));
     block.addEventListener('drop', (e) => pick([...(e.dataTransfer && e.dataTransfer.files || [])]));
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectParserUpload); else injectParserUpload();
+  // an "Import Documents" button in the header of the screens where imported data shows up: Day Book, Ledgers & Accounts,
+  // Financial Statements (a trial balance / balance sheet / P&L file is compared with the books there, never posted)
+  const SCREEN_BUTTONS = ['view-daybook', 'view-chart-accounts', 'view-balance-sheet', 'view-profit-loss', 'view-trial-balance', 'view-ratio-analysis'];
+  const UPLOAD_SVG = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>';
+  function injectScreenButtons() {
+    for (const id of SCREEN_BUTTONS) {
+      const sec = document.getElementById(id);
+      if (!sec || sec.querySelector('.di-screen-btn')) continue;
+      const bar = sec.firstElementChild && sec.firstElementChild.lastElementChild; // the header's button group
+      if (!bar || bar === sec.firstElementChild.firstElementChild) continue;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'di-screen-btn px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-bold inline-flex items-center gap-1.5';
+      btn.title = 'Upload a PDF, Excel, CSV or scanned document and import it';
+      btn.innerHTML = `${UPLOAD_SVG}<span>Import Documents</span>`;
+      btn.addEventListener('click', () => openDocImport());
+      bar.insertBefore(btn, bar.firstChild);
+    }
+  }
+  function bootUi() { injectParserUpload(); injectScreenButtons(); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootUi); else bootUi();
 })();

@@ -3787,6 +3787,7 @@ const OMNI_COMMANDS = [
   { title: 'AI Copilot Assistant', category: 'AI', hotkey: 'Alt+A', action: () => toggleAiCopilot(true) },
   { title: 'AI Executive Workspace', category: 'AI', hotkey: '⚡', action: () => toggleAiWorkspaceView() },
   { title: 'Parse Invoice / Bill Document', category: 'AI', hotkey: '🧾', action: () => openAiDocParserModal() },
+  { title: 'Upload / Import Documents (PDF, Excel, CSV, Scan)', category: 'Utilities', hotkey: '📤', action: () => window.openDocImport && window.openDocImport() },
   ...(window.__RRE_AUTH_ENABLED === true ? [{ title: 'Security Control & User Management', category: 'System', hotkey: 'Alt+K', action: () => openUserManagement() }] : []),
   { title: 'Change Theme Palette', category: 'System', hotkey: 'Alt+T', action: () => openThemeSelectorModal() },
   { title: 'Change Current Date', category: 'System', hotkey: 'F2', action: () => openChangeDateModal() }

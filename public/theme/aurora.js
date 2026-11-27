@@ -63,6 +63,7 @@
     ['Gateway', 'compass', () => showGateway(), ['view-gateway', 'view-display-more']],
     ['Dashboard', 'layout-dashboard', openDash, ['view-dashboard']],
     ['Vouchers', 'receipt', () => openVoucherScreen('Sales'), ['view-voucher']],
+    ['Import Documents', 'upload', () => (typeof window.openDocImport === 'function' ? window.openDocImport() : null), ['view-doc-import']],
     ['Day Book', 'book-open', () => openReport('daybook'), ['view-daybook']],
     ['Ledgers & Accounts', 'landmark', () => openReport('chart-accounts'), ['view-chart-accounts']],
     ['Financial Statements', 'scale', () => openReport('balance-sheet'), ['view-balance-sheet', 'view-profit-loss', 'view-trial-balance', 'view-ratio-analysis']],
