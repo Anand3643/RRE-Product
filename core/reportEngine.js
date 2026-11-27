@@ -47,15 +47,114 @@ async function salesVoucherBreakup(voucherIds) {
   for (const r of rows) {
     const m = (map[r.voucher_id] = map[r.voucher_id] || { taxable: 0, cgst: 0, sgst: 0, igst: 0 });
     const net = r.credit_amount - r.debit_amount;
-    if (/CGST/i.test(r.name)) m.cgst += net;
-    else if (/SGST/i.test(r.name)) m.sgst += net;
-    else if (/IGST/i.test(r.name)) m.igst += net;
-    else if (r.group_name === 'Sales Accounts' || /sales account/i.test(r.name)) m.taxable += net;
+    if (r.group_name === 'Sales Accounts') m.taxable += net; // by group first: "Interstate Sales (IGST)" is a sales ledger, not IGST
+    else if (r.group_name === 'Duties & Taxes' && /CGST/i.test(r.name)) m.cgst += net;
+    else if (r.group_name === 'Duties & Taxes' && /SGST|UTGST/i.test(r.name)) m.sgst += net;
+    else if (r.group_name === 'Duties & Taxes' && /IGST/i.test(r.name)) m.igst += net;
   }
   return map;
 }
 
+// Tax split for a posted Purchase voucher: taxable = Purchase Accounts (Dr), input GST = Duties & Taxes CGST / SGST / IGST (Dr)
+async function purchaseVoucherBreakup(voucherIds) {
+  if (!voucherIds.length) return {};
+  const rows = await all(
+    `SELECT e.voucher_id, l.name, e.debit_amount, e.credit_amount, g.name AS group_name
+     FROM ledger_entries e JOIN ledgers l ON e.ledger_id = l.id JOIN account_groups g ON l.group_id = g.id
+     WHERE e.voucher_id IN (${voucherIds.map(() => '?').join(',')})`,
+    voucherIds
+  );
+  const map = {};
+  for (const r of rows) {
+    const m = (map[r.voucher_id] = map[r.voucher_id] || { taxable: 0, cgst: 0, sgst: 0, igst: 0 });
+    const net = r.debit_amount - r.credit_amount;
+    if (r.group_name === 'Purchase Accounts') m.taxable += net;
+    else if (r.group_name === 'Duties & Taxes' && /CGST/i.test(r.name)) m.cgst += net;
+    else if (r.group_name === 'Duties & Taxes' && /SGST|UTGST/i.test(r.name)) m.sgst += net;
+    else if (r.group_name === 'Duties & Taxes' && /IGST/i.test(r.name)) m.igst += net;
+  }
+  return map;
+}
+
+/** Cash Book / Bank Book: every line on the cash (or bank) ledgers in the period, with the other ledgers of the voucher and a running balance */
+async function moneyBook(f, groups, title) {
+  const params = [...groups];
+  let ledgerFilter = '';
+  if (f.ledger_id) { ledgerFilter = ' AND l.id = ?'; params.push(parseInt(f.ledger_id, 10) || 0); }
+  const ledgers = await all(`SELECT l.id, l.name, l.opening_balance, l.opening_balance_type FROM ledgers l JOIN account_groups g ON g.id = l.group_id WHERE g.name IN (${groups.map(() => '?').join(',')})${ledgerFilter} ORDER BY l.name`, params);
+  const ids = ledgers.map((l) => l.id);
+  if (!ids.length) return { subtitle: period(f), columns: [], rows: [], totals: {}, kpis: [{ label: 'Accounts', value: 0 }] };
+  const q = ids.map(() => '?').join(',');
+  // opening = ledger opening balance + everything before the period
+  let opening = ledgers.reduce((t, l) => t + (l.opening_balance_type === 'Cr' ? -1 : 1) * (parseFloat(l.opening_balance) || 0), 0);
+  if (f.from_date) {
+    const b = await get(`SELECT COALESCE(SUM(e.debit_amount - e.credit_amount), 0) AS n FROM ledger_entries e JOIN vouchers v ON v.id = e.voucher_id WHERE e.ledger_id IN (${q}) AND v.date < ?`, [...ids, f.from_date]);
+    opening += parseFloat(b.n) || 0;
+  }
+  const p2 = [...ids];
+  const lines = await all(`SELECT e.id, e.voucher_id, e.debit_amount, e.credit_amount, l.name AS account, v.date, v.voucher_no, v.voucher_type, v.narration
+    FROM ledger_entries e JOIN vouchers v ON v.id = e.voucher_id JOIN ledgers l ON l.id = e.ledger_id
+    WHERE e.ledger_id IN (${q})` + dateClause('v', f, p2) + ' ORDER BY v.date ASC, v.id ASC, e.id ASC', p2);
+  const vids = [...new Set(lines.map((x) => x.voucher_id))];
+  const others = {};
+  if (vids.length) {
+    for (const o of await all(`SELECT e.voucher_id, l.name FROM ledger_entries e JOIN ledgers l ON l.id = e.ledger_id WHERE e.voucher_id IN (${vids.map(() => '?').join(',')}) AND e.ledger_id NOT IN (${q}) ORDER BY e.id`, [...vids, ...ids])) {
+      (others[o.voucher_id] = others[o.voucher_id] || new Set()).add(o.name);
+    }
+  }
+  let bal = round2(opening);
+  const rows = [{ date: f.from_date || '', voucher_no: '', voucher_type: '', account: '', particulars: 'Opening balance', receipt: null, payment: null, balance: bal }];
+  for (const x of lines) {
+    bal = round2(bal + x.debit_amount - x.credit_amount);
+    rows.push({ date: x.date, voucher_no: x.voucher_no, voucher_type: x.voucher_type, account: x.account, particulars: [...(others[x.voucher_id] || [])].join(', ') || x.narration || '',
+      receipt: x.debit_amount ? round2(x.debit_amount) : null, payment: x.credit_amount ? round2(x.credit_amount) : null, balance: bal });
+  }
+  const tot = sumCols(rows.slice(1), ['receipt', 'payment']);
+  return {
+    subtitle: period(f) + (f.ledger_id && ledgers[0] ? ` · ${ledgers[0].name}` : ` · ${ledgers.length} account(s)`),
+    columns: [{ key: 'date', label: 'Date', type: 'date' }, { key: 'voucher_no', label: 'Voucher' }, { key: 'voucher_type', label: 'Type' }, { key: 'account', label: title === 'Cash Book' ? 'Cash account' : 'Bank account' },
+      { key: 'particulars', label: 'Particulars' }, { key: 'receipt', label: 'Receipts (Dr)', type: 'money' }, { key: 'payment', label: 'Payments (Cr)', type: 'money' }, { key: 'balance', label: 'Balance', type: 'money' }],
+    rows,
+    totals: { ...tot, balance: bal },
+    kpis: [{ label: 'Opening', value: inr(opening) }, { label: 'Receipts', value: inr(tot.receipt) }, { label: 'Payments', value: inr(tot.payment) }, { label: 'Closing', value: inr(bal) }]
+  };
+}
+
 const REPORTS = {
+  'purchase-register': {
+    title: 'Purchase Register',
+    group: 'Purchases',
+    description: 'Bill-wise taxable value and input GST.',
+    async build(f) {
+      const params = [];
+      const vs = await all(
+        `SELECT v.id, v.date, v.voucher_no, v.reference_no, v.total_amount, p.name AS party, p.gstin
+         FROM vouchers v LEFT JOIN ledgers p ON v.party_ledger_id = p.id
+         WHERE v.voucher_type = 'Purchase'` + dateClause('v', f, params) + ' ORDER BY v.date ASC, v.id ASC',
+        params
+      );
+      const br = await purchaseVoucherBreakup(vs.map((v) => v.id));
+      const rows = vs.map((v) => {
+        const b = br[v.id] || {};
+        return { date: v.date, voucher_no: v.voucher_no, party: v.party || '', gstin: v.gstin || '', reference_no: v.reference_no || '',
+          taxable: round2(b.taxable), cgst: round2(b.cgst), sgst: round2(b.sgst), igst: round2(b.igst), total: v.total_amount };
+      });
+      const tot = sumCols(rows, ['taxable', 'cgst', 'sgst', 'igst', 'total']);
+      return {
+        subtitle: period(f),
+        columns: [
+          { key: 'date', label: 'Date', type: 'date' }, { key: 'voucher_no', label: 'Voucher #' }, { key: 'party', label: 'Supplier' },
+          { key: 'gstin', label: 'GSTIN' }, { key: 'reference_no', label: 'Supplier bill' }, { key: 'taxable', label: 'Taxable', type: 'money' },
+          { key: 'cgst', label: 'CGST', type: 'money' }, { key: 'sgst', label: 'SGST', type: 'money' }, { key: 'igst', label: 'IGST', type: 'money' },
+          { key: 'total', label: 'Bill Value', type: 'money' }
+        ],
+        rows, totals: tot,
+        kpis: [{ label: 'Bills', value: rows.length }, { label: 'Taxable', value: inr(tot.taxable) }, { label: 'Input GST', value: inr(tot.cgst + tot.sgst + tot.igst) }, { label: 'Gross Purchases', value: inr(tot.total) }]
+      };
+    }
+  },
+  'cash-book': { title: 'Cash Book', group: 'Accounts', description: 'Cash receipts and payments with the running balance.', build: (f) => moneyBook(f, ['Cash-in-hand'], 'Cash Book') },
+  'bank-book': { title: 'Bank Book', group: 'Accounts', description: 'Bank receipts and payments with the running balance.', build: (f) => moneyBook(f, ['Bank Accounts', 'Bank OD A/c'], 'Bank Book') },
   // ---------------- QUOTATIONS ----------------
   'quotation-register': {
     title: 'Quotation Register',

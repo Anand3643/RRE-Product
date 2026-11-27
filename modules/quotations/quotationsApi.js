@@ -200,17 +200,19 @@ async function insertLines(quotationId, lines) {
   }
 }
 
-async function insertQuotation(row, lines, extra = {}) {
+/** the inserts only: for a caller that is already inside a transaction (document import saves many quotations in one) */
+async function insertQuotationRows(row, lines, extra = {}) {
   const full = { ...row, ...extra };
   const cols = Object.keys(full);
-  return withTransaction(async () => { // the company's transaction queue: never overlaps another posting
-    const r = await run(
-      `INSERT INTO quotations (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`,
-      cols.map((c) => full[c])
-    );
-    await insertLines(r.lastID, lines);
-    return r.lastID;
-  });
+  const r = await run(
+    `INSERT INTO quotations (${cols.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`,
+    cols.map((c) => full[c])
+  );
+  await insertLines(r.lastID, lines);
+  return r.lastID;
+}
+async function insertQuotation(row, lines, extra = {}) {
+  return withTransaction(() => insertQuotationRows(row, lines, extra)); // the company's transaction queue: never overlaps another posting
 }
 
 // --------------------------------------------------------
@@ -582,3 +584,6 @@ module.exports.computeTotals = computeTotals;
 module.exports.loadQuotation = loadQuotation;
 module.exports.expireStaleQuotes = expireStaleQuotes;
 module.exports.STATUSES = STATUSES;
+module.exports.buildQuotePayload = buildQuotePayload;
+module.exports.insertQuotationRows = insertQuotationRows;
+module.exports.nextQuoteNo = nextQuoteNo;

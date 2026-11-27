@@ -31,6 +31,33 @@ async function negativeStockPolicy() {
   const r = await get("SELECT value FROM app_settings WHERE key = 'negative_stock'").catch(() => null);
   return r && r.value === 'block' ? 'block' : 'allow';
 }
+/**
+ * Accounting period: the books can be locked up to a date (after a period is audited / GST is filed). Nothing dated on or before it
+ * can be posted, altered, reversed into it or deleted. Every voucher date must also be a real calendar date.
+ */
+async function periodLock() {
+  const r = await get("SELECT value FROM app_settings WHERE key = 'books_locked_upto'").catch(() => null);
+  return r && /^\d{4}-\d{2}-\d{2}$/.test(r.value || '') ? r.value : null;
+}
+async function setPeriodLock(value) {
+  const v = value ? String(value).trim() : '';
+  if (v && !isRealDate(v)) throw new VoucherValidationError('The lock date must be a date (YYYY-MM-DD).');
+  await run('CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)');
+  await run("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('books_locked_upto', ?)", [v]);
+  return v || null;
+}
+function isRealDate(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ''));
+  if (!m) return false;
+  const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]));
+  return d.getUTCFullYear() === +m[1] && d.getUTCMonth() === +m[2] - 1 && d.getUTCDate() === +m[3] && +m[1] >= 2000 && +m[1] <= 2100;
+}
+async function checkPeriod(date, what = 'A voucher') {
+  if (!isRealDate(date)) throw new VoucherValidationError(`${what} date "${date}" is not a valid date (YYYY-MM-DD).`);
+  const lock = await periodLock();
+  if (lock && date <= lock) throw Object.assign(new VoucherValidationError(`The books are locked up to ${lock}: ${what.toLowerCase()} dated ${date} cannot be posted or changed. An administrator can change the lock date.`), { status: 409, code: 'PERIOD_LOCKED' });
+}
+
 async function setNegativeStockPolicy(value) {
   if (!['allow', 'block'].includes(value)) throw new VoucherValidationError("negative_stock must be 'allow' or 'block'.");
   await run('CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT)');
@@ -181,6 +208,7 @@ async function postVoucher(payload, options = {}) {
       const prev = await get('SELECT result FROM idempotency_keys WHERE scope_key = ?', [idemKey]);
       if (prev) return { ...JSON.parse(prev.result), replayed: true };
     }
+    await checkPeriod(vDate);
     await checkLedgers(validatedEntries);
     await checkStock(voucher_type, inventory);
 
@@ -257,6 +285,8 @@ async function alterVoucher(id, payload, { user = null, ip = null } = {}) {
     const partyAmount = partyId ? validatedEntries.filter((e) => e.ledger_id === partyId).reduce((s, e) => s + e.debit_amount + e.credit_amount, 0) : null;
     const blocked = await alterationBlocker(v, partyAmount);
     if (blocked) throw new VoucherConflictError(blocked);
+    await checkPeriod(v.date, 'This voucher'); // a voucher in a locked period stays as it is
+    if (payload.date && payload.date !== v.date) await checkPeriod(payload.date, 'The new');
     await checkLedgers(validatedEntries);
 
     const vNo = payload.voucher_no ? String(payload.voucher_no).trim() : v.voucher_no;
@@ -319,4 +349,4 @@ async function reverseVoucher(id, { date, narration, userId } = {}) {
   });
 }
 
-module.exports = { postVoucher, alterVoucher, snapshotOf, reverseVoucher, nextVoucherNo, negativeStockPolicy, setNegativeStockPolicy, VoucherValidationError, VoucherConflictError, round2 };
+module.exports = { postVoucher, alterVoucher, snapshotOf, reverseVoucher, nextVoucherNo, negativeStockPolicy, setNegativeStockPolicy, periodLock, setPeriodLock, checkPeriod, VoucherValidationError, VoucherConflictError, round2 };

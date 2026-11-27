@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { all, get, run } = require('../../core/db');
-const { postVoucher, alterVoucher, snapshotOf, reverseVoucher, negativeStockPolicy, setNegativeStockPolicy, VoucherValidationError, VoucherConflictError } = require('../../core/voucherService');
+const { postVoucher, alterVoucher, snapshotOf, reverseVoucher, negativeStockPolicy, setNegativeStockPolicy, periodLock, setPeriodLock, checkPeriod, VoucherValidationError, VoucherConflictError } = require('../../core/voucherService');
 const { withTransaction } = require('../../core/tx');
 const { logActivity } = require('../../core/auth');
 
@@ -45,7 +45,8 @@ router.get('/', async (req, res) => {
 });
 
 // Single voucher detail
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (req, res, next) => {
+  if (!/^\d+$/.test(req.params.id)) return next(); // /settings/... is another route (it was answered here as "voucher not found")
   try {
     const voucher = await get(`
       SELECT v.*, p.name as party_name, p.gstin as party_gstin, p.state as party_state
@@ -137,6 +138,19 @@ router.put('/settings/negative-stock', async (req, res) => {
   } catch (err) { res.status(err instanceof VoucherValidationError ? 400 : 500).json({ success: false, error: err.message }); }
 });
 
+// Company setting: the books are locked up to this date (nothing on or before it can be posted, altered or deleted). Administrators.
+router.get('/settings/period-lock', async (req, res) => {
+  try { res.json({ success: true, data: { books_locked_upto: await periodLock() } }); } catch (err) { res.status(500).json({ success: false, error: err.message }); }
+});
+router.put('/settings/period-lock', async (req, res) => {
+  try {
+    const before = await periodLock();
+    const v = await setPeriodLock((req.body || {}).books_locked_upto);
+    await logActivity({ user: req.user, action: 'SETTING_PERIOD_LOCK', entity: 'setting', entityId: 'books_locked_upto', details: { before, after: v } });
+    res.json({ success: true, data: { books_locked_upto: v } });
+  } catch (err) { res.status(err instanceof VoucherValidationError ? 400 : 500).json({ success: false, error: err.message }); }
+});
+
 // Reverse a posted voucher: posts its mirror image (Credit/Debit Note or Journal) and keeps the original - the accounting way to
 // correct a posted voucher, with both visible in the books.
 router.post('/:id/reverse', async (req, res) => {
@@ -156,6 +170,7 @@ router.delete('/:id', async (req, res) => {
   try {
     const v = await get('SELECT * FROM vouchers WHERE id = ?', [req.params.id]);
     if (!v) return res.status(404).json({ success: false, error: 'Voucher not found' });
+    try { await checkPeriod(v.date, 'This voucher'); } catch (e) { return res.status(e.status || 400).json({ success: false, code: e.code, error: e.message }); }
 
     // A voucher created from a purchase/sales order is part of that order's record: deleting it would leave the order claiming goods
     // that were never received or invoiced. Reverse it with a Debit/Credit Note instead.

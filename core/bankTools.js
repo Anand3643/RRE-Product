@@ -272,6 +272,42 @@ async function confirmMatches(importId, pairs, user) {
   });
 }
 
+/**
+ * A statement line that is NOT in the books (a new transaction): post it through the central voucher engine
+ * (withdrawal = Payment: Dr the chosen ledger, Cr bank; deposit = Receipt: Dr bank, Cr the chosen ledger; to or from another bank /
+ * cash ledger = Contra) and mark the line matched and cleared, in one transaction. Only when the person chooses the ledger and confirms.
+ */
+async function recordLine(lineId, { ledger_id, narration } = {}, user) {
+  const { postVoucher } = require('./voucherService');
+  return withTransaction(async () => {
+    const line = await get('SELECT * FROM bank_statement_lines WHERE id = ?', [lineId]);
+    if (!line) throw httpErr(404, 'Statement line not found.');
+    if (line.status !== 'unmatched') throw httpErr(409, `This line is already ${line.status}.`);
+    const bankL = await getBankLedger(line.bank_ledger_id);
+    const led = await get('SELECT l.id, l.name, g.name AS group_name FROM ledgers l JOIN account_groups g ON g.id = l.group_id WHERE l.id = ?', [parseInt(ledger_id, 10)]);
+    if (!led) throw httpErr(400, 'Choose the ledger this money was paid to / received from.');
+    if (led.id === bankL.id) throw httpErr(400, 'Choose a ledger other than the bank account itself.');
+    const out = line.debit > 0, amt = round2(out ? line.debit : line.credit);
+    if (!(amt > 0)) throw httpErr(400, 'This line has no amount.');
+    const type = ['Bank Accounts', 'Cash-in-hand', 'Bank OD A/c'].includes(led.group_name) ? 'Contra' : out ? 'Payment' : 'Receipt';
+    const perms = require('./db').getRolePermissions((user && user.role) || 'Owner');
+    if (!(perms.allowedVoucherTypes || []).includes(type)) throw httpErr(403, `Your role may not post ${type} vouchers.`);
+    const entries = out ? [{ ledger_id: led.id, debit_amount: amt, credit_amount: 0, particulars: led.name }, { ledger_id: bankL.id, debit_amount: 0, credit_amount: amt, particulars: bankL.name }]
+      : [{ ledger_id: bankL.id, debit_amount: amt, credit_amount: 0, particulars: bankL.name }, { ledger_id: led.id, debit_amount: 0, credit_amount: amt, particulars: led.name }];
+    const v = await postVoucher({ voucher_type: type, date: line.line_date, reference_no: line.ref_no || '', entries,
+      party_ledger_id: ['Sundry Debtors', 'Sundry Creditors'].includes(led.group_name) ? led.id : null,
+      narration: String(narration || line.description || `${out ? 'Bank withdrawal' : 'Bank deposit'} ${line.ref_no || ''}`).slice(0, 300) + ' (from bank statement)' }, { inTransaction: true, userId: user && user.userId });
+    const entry = await get('SELECT id FROM ledger_entries WHERE voucher_id = ? AND ledger_id = ? ORDER BY id LIMIT 1', [v.id, bankL.id]);
+    await run(
+      `INSERT INTO bank_reconciliation (ledger_entry_id, bank_clearing_date, instrument_no, status) VALUES (?, ?, ?, 'Cleared')
+       ON CONFLICT(ledger_entry_id) DO UPDATE SET bank_clearing_date = excluded.bank_clearing_date, status = 'Cleared'`,
+      [entry.id, line.line_date, line.ref_no || null]);
+    await run(`UPDATE bank_statement_lines SET status = 'matched', matched_entry_id = ?, matched_at = CURRENT_TIMESTAMP, matched_by = ? WHERE id = ?`, [entry.id, user?.username || 'unknown', line.id]);
+    await history({ bank_ledger_id: bankL.id, import_id: line.import_id, action: 'RECORD', line_id: line.id, entry_id: entry.id, details: { voucher_no: v.voucher_no, voucher_type: type, ledger: led.name, amount: amt }, user });
+    return { line_id: line.id, voucher: v, ledger: led.name, amount: amt };
+  });
+}
+
 async function unmatchLine(lineId, user) {
   return withTransaction(async () => {
     const line = await get('SELECT * FROM bank_statement_lines WHERE id = ?', [lineId]);
@@ -369,4 +405,4 @@ async function listHistory(bankLedgerId, limit = 100) {
     WHERE (? IS NULL OR h.bank_ledger_id = ?) ORDER BY h.id DESC LIMIT ?`, [bankLedgerId || null, bankLedgerId || null, Math.min(500, limit)]);
 }
 
-module.exports = { parseStatement, importStatement, suggestMatches, confirmMatches, unmatchLine, setIgnored, bankSummary, paymentStatus, listImports, listHistory, getBankLedger };
+module.exports = { parseStatement, importStatement, suggestMatches, confirmMatches, recordLine, unmatchLine, setIgnored, bankSummary, paymentStatus, listImports, listHistory, getBankLedger };

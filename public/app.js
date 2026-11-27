@@ -824,6 +824,7 @@ async function loadGatewayInfo() {
 
     const d = json.data;
     appState.company = d.company;
+    showReportPeriod();
 
     // Update Top & Gateway DOM safely
     const companyTitle = d.company?.name || 'RRE Entries';
@@ -1035,7 +1036,8 @@ function toggleDashboard() {
 
 async function loadDashboard() {
   try {
-    const res = await fetch(`${API_BASE}/dashboard/tiles`);
+    const dp = reportPeriod();
+    const res = await fetch(`${API_BASE}/dashboard/tiles?from=${dp.from}&date=${dp.to}`);
     const json = await res.json();
     if (!json.success) return;
 
@@ -1926,7 +1928,8 @@ async function saveVoucherNow(e) {
 // 4A. BALANCE SHEET
 async function loadBalanceSheet() {
   try {
-    const res = await fetch(`${API_BASE}/reports/balance-sheet`);
+    const per = reportPeriod(); setReportSubtitle('view-balance-sheet', `As on ${formatDateDisplay(per.to)} (Schedule III Double-Entry Format)`);
+    const res = await fetch(`${API_BASE}/reports/balance-sheet?date=${per.to}`);
     const json = await res.json();
     if (!json.success) return;
 
@@ -1949,6 +1952,8 @@ async function loadBalanceSheet() {
     }
     lHtml += renderBSGroup('Loans (Liability)', d.liabilities.loans_total, d.liabilities.loans_items);
     lHtml += renderBSGroup('Current Liabilities', d.liabilities.current_liabilities_total, d.liabilities.current_liabilities_items);
+    const odRow = d.opening_difference && d.opening_difference.amount ? `<div class="flex justify-between font-bold border-b border-amber-300 bg-amber-50 text-amber-900 px-1 py-1 mt-1" title="${d.opening_difference.note || ''}"><span>Difference in opening balances</span><span class="font-mono">${formatCurrency(d.opening_difference.amount)}</span></div>` : '';
+    if (d.opening_difference && d.opening_difference.side === 'liabilities') lHtml += odRow;
     lDiv.innerHTML = lHtml;
 
     // Render Assets
@@ -1956,6 +1961,7 @@ async function loadBalanceSheet() {
     aHtml += renderBSGroup('Fixed Assets', d.assets.fixed_assets_total, d.assets.fixed_assets_items);
     aHtml += renderBSGroup('Investments', d.assets.investments_total, d.assets.investments_items);
     aHtml += renderBSGroup('Current Assets (including Closing Stock)', d.assets.current_assets_total, d.assets.current_assets_items);
+    if (d.opening_difference && d.opening_difference.side === 'assets') aHtml += odRow;
     aDiv.innerHTML = aHtml;
 
     document.getElementById('bs-total-liabilities').textContent = formatCurrency(d.liabilities.total);
@@ -1996,7 +2002,8 @@ function renderBSGroup(title, total, items) {
 // 4B. PROFIT & LOSS ACCOUNT
 async function loadProfitLoss() {
   try {
-    const res = await fetch(`${API_BASE}/reports/profit-loss`);
+    const per = reportPeriod(); setReportSubtitle('view-profit-loss', `For ${formatDateDisplay(per.from)} to ${formatDateDisplay(per.to)}`);
+    const res = await fetch(`${API_BASE}/reports/profit-loss?from=${per.from}&date=${per.to}`);
     const json = await res.json();
     if (!json.success) return;
 
@@ -2067,7 +2074,8 @@ async function loadProfitLoss() {
 // 4C. TRIAL BALANCE
 async function loadTrialBalance() {
   try {
-    const res = await fetch(`${API_BASE}/reports/trial-balance`);
+    const per = reportPeriod(); setReportSubtitle('view-trial-balance', `As on ${formatDateDisplay(per.to)} (Strict Mathematical Double-Entry Proof)`);
+    const res = await fetch(`${API_BASE}/reports/trial-balance?date=${per.to}`);
     const json = await res.json();
     if (!json.success) return;
 
@@ -2647,8 +2655,28 @@ function setLedgerFormMode(ledger) {
   const t = document.getElementById('m-ledger-title'), b = document.getElementById('m-ledger-submit');
   if (t) t.textContent = ledger ? `Ledger Alteration — ${ledger.name}` : 'Ledger Creation Master (Alt+C)';
   if (b) b.textContent = ledger ? 'Save Changes' : 'Save Ledger';
+  const del = document.getElementById('m-ledger-delete'); if (del) del.classList.toggle('hidden', !ledger);
   if (!ledger) ['m-ledger-name', 'm-ledger-opbal', 'm-ledger-gstin', 'm-ledger-desc'].forEach((i) => { const el = document.getElementById(i); if (el) el.value = i === 'm-ledger-opbal' ? 0 : ''; });
 }
+/** Delete the ledger being altered: the server allows it only for an unused ledger (no transactions, bills, opening balance ...) */
+async function deleteEditingLedger() {
+  const ed = appState.editingLedger; if (!ed) return;
+  const name = (document.getElementById('m-ledger-name') || {}).value || 'this ledger';
+  if (!confirm(`Delete the ledger "${name}"?
+
+Only a ledger that was never used can be deleted; one with transactions keeps its history.`)) return;
+  try {
+    const res = await fetch(`${API_BASE}/masters/ledgers/${ed.id}`, { method: 'DELETE' });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || j.success === false) { alert(j.error || `The ledger could not be deleted (${res.status}).`); return; }
+    closeModal('createLedgerModal'); setLedgerFormMode(null);
+    if (typeof loadMasters === 'function') await loadMasters();
+    if (appState.currentView === 'view-chart-accounts' && typeof loadChartOfAccountsTree === 'function') loadChartOfAccountsTree();
+    if (typeof showToast === 'function') showToast(j.message || 'Ledger deleted'); else alert(j.message || 'Ledger deleted');
+  } catch (err) { alert(`The ledger could not be deleted: ${err.message}`); }
+}
+window.deleteEditingLedger = deleteEditingLedger;
+
 async function openLedgerForAlter(id) {
   try {
     const res = await fetch(`${API_BASE}/masters/ledgers/${id}`); // also remembers the version this alteration is made from (live-sync.js)
@@ -3145,10 +3173,39 @@ function openChangeDateModal() {
   }
 }
 
+/**
+ * The reporting period (F2): Profit & Loss for it, Balance Sheet and Trial Balance as on its last day. Remembered on this device;
+ * the company's financial year until someone chooses another.
+ */
+function reportPeriod() {
+  let p = null;
+  try { p = JSON.parse(localStorage.getItem('rre_report_period') || 'null'); } catch (e) { /* storage unavailable */ }
+  const ok = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d || '');
+  if (p && ok(p.from) && ok(p.to) && p.from <= p.to) return p;
+  const fy = (appState.company && ok(appState.company.financial_year_from)) ? appState.company.financial_year_from : '2026-04-01';
+  const to = new Date(fy + 'T00:00:00Z'); to.setUTCFullYear(to.getUTCFullYear() + 1); to.setUTCDate(to.getUTCDate() - 1);
+  return { from: fy, to: to.toISOString().slice(0, 10) };
+}
+function showReportPeriod() {
+  const p = reportPeriod();
+  const el = document.getElementById('top-period'); if (el) el.textContent = `${formatDateDisplay(p.from)} to ${formatDateDisplay(p.to)}`;
+  const a = document.getElementById('input-period-from'), b = document.getElementById('input-period-to');
+  if (a) a.value = p.from; if (b) b.value = p.to;
+}
+function setReportSubtitle(viewId, text) { const el = document.querySelector(`#${viewId} > div:first-child p`); if (el) el.textContent = text; }
+
 async function handleChangeDate(e) {
   e.preventDefault();
   const newDate = document.getElementById('input-change-date')?.value;
   if (!newDate) return;
+  const pFrom = document.getElementById('input-period-from')?.value, pTo = document.getElementById('input-period-to')?.value;
+  if (pFrom && pTo) {
+    if (pFrom > pTo) { alert('The period must start before it ends.'); return; }
+    try { localStorage.setItem('rre_report_period', JSON.stringify({ from: pFrom, to: pTo })); } catch (err) { /* this device keeps the default */ }
+    showReportPeriod();
+    const reload = { 'view-profit-loss': 'loadProfitLoss', 'view-balance-sheet': 'loadBalanceSheet', 'view-trial-balance': 'loadTrialBalance' }[appState.currentView];
+    if (reload && typeof window[reload] === 'function') window[reload]();
+  }
 
   const formattedDate = formatDateDisplay(newDate);
   const topDateEl = document.getElementById('top-current-date');
@@ -3157,7 +3214,7 @@ async function handleChangeDate(e) {
   if (gwDateEl) gwDateEl.textContent = `${formattedDate} (F2)`;
 
   closeModal('changeDateModal');
-  alert(`Current voucher date successfully changed to ${formattedDate}`);
+  alert(`Current voucher date changed to ${formattedDate}. Reports are for ${formatDateDisplay(reportPeriod().from)} to ${formatDateDisplay(reportPeriod().to)}.`);
 }
 
 // Helper to close modals on Esc

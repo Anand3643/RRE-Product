@@ -74,12 +74,27 @@
     } catch (e) { msg(esc(e.message), 'text-red-700'); }
   }
 
+  // every ledger except this bank account, for recording a statement line that is not in the books yet
+  let allLedgers = null;
+  async function ledgerChoices() {
+    if (!allLedgers) { try { allLedgers = ((await (await fetch(`${base()}/masters/ledgers`)).json()).data || []).sort((a, b) => a.name.localeCompare(b.name)); } catch (e) { allLedgers = []; } }
+    return allLedgers.filter((l) => l.id !== bankId());
+  }
+  const guessLedger = (list, l) => {
+    const d = String(l.description || '').toLowerCase();
+    const by = (re) => list.find((x) => re.test(x.name));
+    if (/charge|fee|commission|gst on chg/.test(d)) return by(/bank charges/i);
+    if (/interest|int\.?\s*cr|int pd/.test(d)) return by(/interest/i);
+    return list.find((x) => x.name.length >= 4 && d.includes(x.name.toLowerCase())) || null;
+  };
+
   async function openImport(id) {
     currentImport = id || parseInt($('bk-imports').value, 10);
     if (!currentImport) { $('bk-work').innerHTML = ''; return; }
     $('bk-work').innerHTML = '<div class="text-slate-500">Finding matches…</div>';
     try {
       const d = (await call(`/imports/${currentImport}/suggestions`)).data;
+      const choices = await ledgerChoices();
       const matched = (await call(`/imports/${currentImport}/lines?status=matched`)).data;
       lastSuggestions = d.suggestions;
       const high = d.suggestions.filter((s) => s.confidence === 'high' && !s.ambiguous).length;
@@ -94,8 +109,9 @@
             `<span class="px-1.5 py-0.5 rounded font-sans font-bold ${confCls[s.confidence]}">${esc(s.confidence)}${s.ambiguous ? ' · ambiguous' : ''}</span>`, `<span class="font-sans">${esc(s.reasons.join('; '))}</span>`]),
           'No automatic matches found.') +
         section('In the bank statement but not in your books', d.unmatched_bank_lines.length,
-          table(['Date', 'Description', 'Ref', 'Amount', 'Suggestion', ''], d.unmatched_bank_lines.map((l) => [esc(l.date), esc(l.description), esc(l.ref), amount(l), `<span class="font-sans">${esc(l.hint)}</span>`,
-            `<button type="button" class="bk-ignore px-1.5 py-0.5 bg-slate-200 hover:bg-slate-300 rounded font-sans font-bold" data-line="${l.line_id}">Ignore</button>`])), d.unmatched_bank_lines.length > 0) +
+          table(['Date', 'Description', 'Ref', 'Amount', 'Suggestion', 'Record as a new voucher', ''], d.unmatched_bank_lines.map((l) => { const g = guessLedger(choices, l); return [esc(l.date), esc(l.description), esc(l.ref), amount(l), `<span class="font-sans">${esc(l.hint)}</span>`,
+            `<span class="font-sans whitespace-nowrap"><select class="bk-rec-led border border-slate-300 rounded p-0.5 bg-white max-w-[12rem]" data-line="${l.line_id}"><option value="">${l.debit > 0 ? 'Paid to…' : 'Received from…'}</option>${choices.map((c) => `<option value="${c.id}" ${g && g.id === c.id ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select> <button type="button" class="bk-record px-1.5 py-0.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold" data-line="${l.line_id}" data-amt="${l.debit || l.credit}" data-dir="${l.debit > 0 ? 'out' : 'in'}">Record</button></span>`,
+            `<button type="button" class="bk-ignore px-1.5 py-0.5 bg-slate-200 hover:bg-slate-300 rounded font-sans font-bold" data-line="${l.line_id}">Ignore</button>`]; })), d.unmatched_bank_lines.length > 0) +
         section('In your books but not in the statement (uncleared)', d.books_not_in_statement.length,
           table(['Date', 'Voucher', 'Type', 'Party', 'Instrument', 'Debit', 'Credit'], d.books_not_in_statement.map((b) => [esc(b.date), esc(b.voucher_no), esc(b.voucher_type), esc(b.party || ''), esc(b.instrument_no || ''), b.debit ? fmt(b.debit) : '', b.credit ? fmt(b.credit) : ''])), false) +
         section('Already matched from this statement', matched.length,
@@ -104,6 +120,7 @@
       $('bk-sel-high').addEventListener('click', () => document.querySelectorAll('.bk-pick').forEach((c) => { const s = lastSuggestions.find((x) => x.line_id == c.dataset.line); c.checked = !!s && s.confidence === 'high' && !s.ambiguous; }));
       $('bk-confirm').addEventListener('click', confirmSelected);
       document.querySelectorAll('.bk-ignore').forEach((b) => b.addEventListener('click', () => lineAction(b.dataset.line, 'ignore')));
+      document.querySelectorAll('.bk-record').forEach((b) => b.addEventListener('click', () => recordLine(b)));
       document.querySelectorAll('.bk-unmatch').forEach((b) => b.addEventListener('click', () => lineAction(b.dataset.line, 'unmatch')));
     } catch (e) { $('bk-work').innerHTML = `<div class="text-red-700">${esc(e.message)}</div>`; }
   }
@@ -117,6 +134,19 @@
       msg(`Confirmed ${r.matched} match(es).`, 'text-emerald-700');
       await afterChange();
     } catch (e) { msg(esc(e.message), 'text-red-700'); }
+  }
+
+  async function recordLine(b) {
+    const sel = document.querySelector(`.bk-rec-led[data-line="${b.dataset.line}"]`);
+    const led = sel && sel.value ? allLedgers.find((x) => String(x.id) === sel.value) : null;
+    if (!led) return msg('Choose the ledger this money was paid to / received from, then Record.', 'text-red-700');
+    if (!confirm(`Record a new voucher for ₹${fmt(b.dataset.amt)} ${b.dataset.dir === 'out' ? 'paid to' : 'received from'} "${led.name}" and mark this statement line as cleared?`)) return;
+    b.disabled = true;
+    try {
+      const r = (await call(`/lines/${b.dataset.line}/record`, { method: 'POST', body: JSON.stringify({ ledger_id: led.id }) })).data;
+      msg(`Recorded ${esc(r.voucher.voucher_type)} ${esc(r.voucher.voucher_no)} (₹${fmt(r.amount)}, ${esc(r.ledger)}); the line is cleared.`, 'text-emerald-700');
+      await afterChange();
+    } catch (e) { b.disabled = false; msg(esc(e.message), 'text-red-700'); }
   }
 
   async function lineAction(lineId, kind) {
@@ -196,4 +226,18 @@
     }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
+
+  // Import Documents hands a statement it imported to this screen: open Bank Reconciliation on that bank account and statement
+  window.RREBank = {
+    async openImport(ledgerId, importId) {
+      if (ledgerId && typeof appState !== 'undefined') appState.activeBankLedgerId = ledgerId;
+      if (typeof openReport === 'function') openReport('bank-recon');
+      for (let i = 0; i < 40 && !($('bk-ledger') && $('bk-ledger').options.length); i++) await new Promise((r) => setTimeout(r, 150));
+      if (!$('bk-ledger')) return;
+      if (ledgerId && [...$('bk-ledger').options].some((o) => +o.value === ledgerId)) $('bk-ledger').value = String(ledgerId);
+      await refreshImports(importId); refreshSummary();
+      if (importId) await openImport(importId);
+      const card = $('bank-tools-card'); if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 })();

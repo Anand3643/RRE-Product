@@ -1,7 +1,7 @@
 /**
  * RRE Tally — banking API (new). Mounted at /api/bank.
  * Reads: any logged-in user. Writes (import / confirm / unmatch / ignore): roles that can create vouchers.
- * No endpoint here posts or edits a voucher.
+ * Vouchers are posted only by POST /lines/:id/record (a statement line the person records as a new transaction), through postVoucher.
  */
 const express = require('express');
 const router = express.Router();
@@ -52,6 +52,13 @@ router.post('/imports/:id/confirm', write, handle(async (req) => {
 router.post('/lines/:id/unmatch', write, handle(async (req) => {
   const r = await bank.unmatchLine(id(req), req.user);
   await logActivity({ user: req.user, ip: req.ip, action: 'BANK_UNMATCH', entity: 'bank', entityId: id(req) });
+  return { data: r };
+}));
+
+// a new transaction found only in the statement: post it (Payment / Receipt / Contra) and clear the line, after the person chose the ledger
+router.post('/lines/:id/record', write, handle(async (req) => {
+  const r = await bank.recordLine(id(req), { ledger_id: req.body?.ledger_id, narration: req.body?.narration }, req.user);
+  await logActivity({ user: req.user, ip: req.ip, action: 'BANK_LINE_RECORDED', entity: 'voucher', entityId: r.voucher.id, details: { line: r.line_id, voucher_no: r.voucher.voucher_no, ledger: r.ledger, amount: r.amount } });
   return { data: r };
 }));
 

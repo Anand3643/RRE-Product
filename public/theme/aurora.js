@@ -233,19 +233,26 @@
   async function renderPortfolio() {
     if (!isOn()) return; buildPortfolio(); if (!portfolioEl) return; const seq = ++renderSeq;
     const co = $('#top-company-name'); if (co && $('#au-co')) $('#au-co').textContent = co.textContent.trim() || 'your business';
-    const [tiles, pl, tr, vch] = await Promise.all([get('/dashboard/tiles'), get('/reports/profit-loss'), get('/insights/trends'), get('/vouchers?limit=500')]);
+    const per = typeof reportPeriod === 'function' ? reportPeriod() : null, pq = per ? `?from=${per.from}&date=${per.to}` : ''; // the reporting period (F2), as the reports use
+    const [tiles, pl, tr, vch] = await Promise.all([get('/dashboard/tiles' + pq), get('/reports/profit-loss' + pq), get('/insights/trends'), get('/vouchers?limit=500')]);
     if (seq !== renderSeq) return;
     const t = pl && pl.trading, ind = pl && pl.indirect;
     const sales = t ? t.sales || 0 : null, purchases = t ? t.purchases || 0 : null, revenue = t ? (t.sales || 0) + (t.direct_incomes || 0) + ((ind && ind.indirect_incomes) || 0) : null;
     const expenses = t ? (t.purchases || 0) + (t.direct_expenses || 0) + ((ind && ind.indirect_expenses) || 0) : null;
     const net = ind ? ind.net_profit : tiles ? tiles.profit_loss_tile.net_profit : null, stock = tiles ? tiles.stock_tile.total_valuation : null, cash = tiles ? tiles.funds_flow_tile.cash_bank_balance : null;
-    const stats = [['Total revenue', revenue, 'trending-up', 'profit-loss', 'Sales and other income', ''], ['Total expenses', expenses, 'credit-card', 'profit-loss', 'Purchases and running costs', ''], ['Net profit', net, 'sparkles', 'profit-loss', 'After all expenses', net == null ? '' : net >= 0 ? 'pos' : 'neg'],
-      ['Inventory value', stock, 'boxes', 'stock-summary', tiles ? tiles.stock_tile.item_count + ' items in stock' : '', ''], ['Total purchases', purchases, 'shopping-bag', 'daybook', 'Bought in this period', ''], ['Total sales', sales, 'shopping-cart', 'profit-loss', 'Sold in this period', '']];
+    // the financial summary (same ledger balances as the reports; gross profit = sales - cost of goods sold; quotations are not counted)
+    const f = (tiles && tiles.financials) || {}, fv = (k) => (tiles && tiles.financials ? f[k] : null), sign = (v) => (v == null ? '' : v >= 0 ? 'pos' : 'neg');
+    const gstDue = fv('gst_payable');
+    const stats = [['Total sales', sales, 'shopping-cart', 'profit-loss', 'Sold in this period', ''], ['Total purchases', purchases, 'shopping-bag', 'daybook', 'Bought in this period', ''], ['Gross profit', fv('gross_profit'), 'trending-up', 'profit-loss', 'Sales less cost of goods sold', sign(fv('gross_profit'))],
+      ['Cost of goods sold', fv('cost_of_goods_sold'), 'package-minus', 'stock-summary', 'Opening stock + purchases − closing stock', ''], ['Operating expenses', fv('operating_expenses'), 'receipt', 'profit-loss', 'Indirect expenses', ''], [net != null && net < 0 ? 'Net loss' : 'Net profit', net, 'sparkles', 'profit-loss', 'After all expenses', sign(net)],
+      ['Total revenue', revenue, 'badge-indian-rupee', 'profit-loss', 'Sales and other income', ''], ['Total expenses', expenses, 'credit-card', 'profit-loss', 'Purchases and running costs', ''], ['Inventory value', stock, 'boxes', 'stock-summary', tiles ? tiles.stock_tile.item_count + ' items in stock' : '', ''],
+      ['Receivables', fv('receivables'), 'arrow-down-left', 'outstandings', 'Customers owe you', ''], ['Payables', fv('payables'), 'arrow-up-right', 'outstandings', 'You owe suppliers', ''], ['Cash balance', fv('cash_balance'), 'wallet', 'daybook', 'Cash in hand', ''],
+      ['Bank balance', fv('bank_balance'), 'landmark', 'bank-recon', 'All bank accounts', ''], [gstDue != null && gstDue < 0 ? 'GST credit carried' : 'GST payable', gstDue == null ? null : Math.abs(gstDue), 'percent', 'gst', 'Output GST less input credit', ''], ['GST input credit', fv('gst_input_credit'), 'badge-percent', 'gst', 'GST paid on purchases', '']];
     const sEl = $('#au-stats');
     if (!sEl.children.length) {
       sEl.innerHTML = stats.map((s, i) => `<div class="au-stat au-tilt au-reveal ${s[5]}" style="--au-d:${(i * .07).toFixed(2)}s" data-go="${s[3]}" role="button" tabindex="0"><div class="ico"><i data-lucide="${s[2]}"></i></div><small>${s[0]}</small><div class="val" data-i="${i}">—</div><div class="sub">${esc(s[4])}</div></div>`).join(''); icons(); observe(sEl);
     }
-    stats.forEach((s, i) => { const el = $(`.val[data-i="${i}"]`, sEl), card = el && el.closest('.au-stat'); if (!el) return; card.classList.remove('pos', 'neg'); if (s[5]) card.classList.add(s[5]); if (s[1] == null) { el.textContent = 'Not available'; el.title = 'Financial figures need permission to view'; } else countUp(el, s[1], money); const sub = $('.sub', card); if (sub) sub.textContent = s[4]; });
+    stats.forEach((s, i) => { const el = $(`.val[data-i="${i}"]`, sEl), card = el && el.closest('.au-stat'); if (!el) return; card.classList.remove('pos', 'neg'); if (s[5]) card.classList.add(s[5]); const lab = card.querySelector('small'); if (lab && lab.textContent !== s[0]) lab.textContent = s[0]; if (s[1] == null) { el.textContent = 'Not available'; el.title = 'Financial figures need permission to view'; } else countUp(el, s[1], money); const sub = $('.sub', card); if (sub) sub.textContent = s[4]; });
     if (cash != null) countUp($('#au-f-cash'), cash, money); if (stock != null) countUp($('#au-f-stock'), stock, money);
     // revenue & expenses by month
     let series = ((tr && tr.series) || []).map((s) => ({ ...s, label: monthLabel(s.month) })), fromVouchers = false;

@@ -51,6 +51,7 @@ const RULES = [
   { m: 'POST', re: /^\/api\/vouchers\/?$/, perm: 'canCreateVouchers', checkVoucherType: true },
   { m: 'POST', re: /^\/api\/masters\//, perm: 'canCreateVouchers' },
   { m: 'PUT', re: /^\/api\/masters\/ledgers\/\d+\/?$/, perm: 'canEditVouchers' }, // ledger alteration (group, opening balance ...) changes the books
+  { m: 'DELETE', re: /^\/api\/masters\/ledgers\/\d+\/?$/, perm: 'canDeleteVouchers' }, // only an unused ledger (mastersApi refuses one with history)
   // Quotations can be converted into Sales invoices (a posting), so changing them needs the same permission as posting
   { re: /^\/api\/quotations(\/|$)/, m: 'POST', perm: 'canCreateVouchers' },
   { re: /^\/api\/quotations(\/|$)/, m: 'PUT', perm: 'canCreateVouchers' },

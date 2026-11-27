@@ -4,8 +4,10 @@ const { all, get, run } = require('./db');
 async function calculateAllLedgerBalances(asOfDate = null) {
   let dateClause = '';
   const params = [];
+  // "as on a date": only entries of vouchers dated up to it. The condition belongs in the JOIN: in a WHERE it dropped every ledger
+  // without entries by then, together with its opening balance
   if (asOfDate) {
-    dateClause = 'WHERE v.date <= ?';
+    dateClause = 'AND e.voucher_id IN (SELECT id FROM vouchers WHERE date <= ?)';
     params.push(asOfDate);
   }
 
@@ -17,8 +19,7 @@ async function calculateAllLedgerBalances(asOfDate = null) {
       COALESCE(SUM(e.credit_amount), 0) as total_credit
     FROM ledgers l
     JOIN account_groups g ON l.group_id = g.id
-    LEFT JOIN ledger_entries e ON l.id = e.ledger_id
-    LEFT JOIN vouchers v ON e.voucher_id = v.id ${dateClause}
+    LEFT JOIN ledger_entries e ON l.id = e.ledger_id ${dateClause}
     GROUP BY l.id
     ORDER BY g.nature, g.name, l.name
   `;
@@ -54,7 +55,9 @@ async function calculateAllLedgerBalances(asOfDate = null) {
 }
 
 // 2. Weighted Average Inventory Valuation
-async function calculateClosingStockValuation() {
+async function calculateClosingStockValuation(asOfDate = null) {
+  // as on a date: the stock movements of vouchers dated up to it
+  const upTo = asOfDate ? 'AND i.voucher_id IN (SELECT id FROM vouchers WHERE date <= ?)' : '';
   const items = await all(`
     SELECT s.id, s.name, s.opening_qty, s.opening_rate, s.opening_val, s.standard_cost, s.hsn_code, s.gst_rate,
       u.symbol as uom_symbol,
@@ -64,9 +67,9 @@ async function calculateClosingStockValuation() {
       COALESCE(SUM(CASE WHEN i.direction = 'OUT' THEN i.amount ELSE 0 END), 0) as outward_val
     FROM stock_items s
     JOIN units_of_measure u ON s.uom_id = u.id
-    LEFT JOIN inventory_entries i ON s.id = i.stock_item_id
+    LEFT JOIN inventory_entries i ON s.id = i.stock_item_id ${upTo}
     GROUP BY s.id
-  `);
+  `, asOfDate ? [asOfDate] : []);
 
   let totalStockValuation = 0;
   const detailed = items.map((it) => {
@@ -90,12 +93,34 @@ async function calculateClosingStockValuation() {
 }
 
 // 3. Profit & Loss / Trading Engine
-async function calculateProfitLoss(date = null) {
-  const ledgers = await calculateAllLedgerBalances(date);
-  const { totalStockValuation } = await calculateClosingStockValuation();
+/** income / expense ledgers for a PERIOD: only the entries of vouchers dated from..to (a period's profit starts from zero) */
+async function calculatePeriodBalances(from, to) {
+  const params = [from]; let upTo = '';
+  if (to) { upTo = 'AND date <= ?'; params.push(to); }
+  const rows = await all(`
+    SELECT l.id, l.name, g.id as group_id, g.name as group_name, g.nature as group_nature,
+      COALESCE(SUM(e.debit_amount), 0) as total_debit, COALESCE(SUM(e.credit_amount), 0) as total_credit
+    FROM ledgers l JOIN account_groups g ON l.group_id = g.id
+    LEFT JOIN ledger_entries e ON l.id = e.ledger_id AND e.voucher_id IN (SELECT id FROM vouchers WHERE date >= ? ${upTo})
+    GROUP BY l.id ORDER BY g.nature, g.name, l.name`, params);
+  return rows.map((l) => {
+    const net = l.total_debit - l.total_credit;
+    return { ...l, opening_balance: 0, opening_balance_type: 'Dr', net_debit: l.total_debit, net_credit: l.total_credit, closing_balance: Math.abs(net), closing_type: net >= 0 ? 'Dr' : 'Cr' };
+  });
+}
+const dayBefore = (d) => { const x = new Date(d + 'T00:00:00Z'); x.setUTCDate(x.getUTCDate() - 1); return x.toISOString().slice(0, 10); };
 
-  const openingStockRow = await get('SELECT SUM(opening_val) as total FROM stock_items');
-  const openingStock = openingStockRow.total || 0;
+/**
+ * Profit & Loss up to `date` (all of it when none). With `from`: for the period from..date only — the incomes and expenses of that
+ * period, opening stock = the stock as on the day before it, closing stock = the stock as on `date`.
+ */
+async function calculateProfitLoss(date = null, from = null) {
+  const ledgers = from ? await calculatePeriodBalances(from, date) : await calculateAllLedgerBalances(date);
+  const { totalStockValuation } = await calculateClosingStockValuation(date);
+
+  const openingStock = from
+    ? (await calculateClosingStockValuation(dayBefore(from))).totalStockValuation
+    : ((await get('SELECT SUM(opening_val) as total FROM stock_items')).total || 0);
   const closingStock = totalStockValuation;
 
   let salesTotal = 0, purchaseTotal = 0, directExpensesTotal = 0, directIncomesTotal = 0;
@@ -104,16 +129,23 @@ async function calculateProfitLoss(date = null) {
   const salesList = [], purchaseList = [], directExpList = [], directIncList = [];
   const indirectExpList = [], indirectIncList = [];
 
+  // Each ledger counts with its SIGN: an income ledger adds its credit balance and subtracts a debit balance (a "Sales Return"
+  // ledger under Sales Accounts reduces sales), an expense ledger the other way round (a "Purchase Return" ledger reduces purchases).
+  // Adding every balance as positive made a sales return INCREASE sales.
+  let salesReturns = 0, purchaseReturns = 0;
   ledgers.forEach((l) => {
     const val = l.closing_balance;
     if (val === 0) return;
+    const cr = l.closing_type === 'Cr' ? val : -val; // + = credit balance
+    const dr = -cr;                                  // + = debit balance
+    const item = (amount) => ({ ...l, closing_balance: amount, unsigned_balance: val });
 
-    if (l.group_name === 'Sales Accounts') { salesTotal += val; salesList.push(l); }
-    else if (l.group_name === 'Purchase Accounts') { purchaseTotal += val; purchaseList.push(l); }
-    else if (l.group_name === 'Direct Expenses') { directExpensesTotal += val; directExpList.push(l); }
-    else if (l.group_name === 'Direct Incomes') { directIncomesTotal += val; directIncList.push(l); }
-    else if (l.group_name === 'Indirect Expenses') { indirectExpensesTotal += val; indirectExpList.push(l); }
-    else if (l.group_name === 'Indirect Incomes') { indirectIncomesTotal += val; indirectIncList.push(l); }
+    if (l.group_name === 'Sales Accounts') { salesTotal += cr; if (cr < 0) salesReturns += -cr; salesList.push(item(cr)); }
+    else if (l.group_name === 'Purchase Accounts') { purchaseTotal += dr; if (dr < 0) purchaseReturns += -dr; purchaseList.push(item(dr)); }
+    else if (l.group_name === 'Direct Expenses') { directExpensesTotal += dr; directExpList.push(item(dr)); }
+    else if (l.group_name === 'Direct Incomes') { directIncomesTotal += cr; directIncList.push(item(cr)); }
+    else if (l.group_name === 'Indirect Expenses') { indirectExpensesTotal += dr; indirectExpList.push(item(dr)); }
+    else if (l.group_name === 'Indirect Incomes') { indirectIncomesTotal += cr; indirectIncList.push(item(cr)); }
   });
 
   const cogs = openingStock + purchaseTotal + directExpensesTotal - closingStock;
@@ -128,7 +160,10 @@ async function calculateProfitLoss(date = null) {
       purchase_items: purchaseList,
       direct_expenses: directExpensesTotal,
       direct_expense_items: directExpList,
-      sales: salesTotal,
+      sales: salesTotal,                       // net of sales returns
+      gross_sales: salesTotal + salesReturns,
+      sales_returns: salesReturns,
+      purchase_returns: purchaseReturns,
       sales_items: salesList,
       closing_stock: closingStock,
       direct_incomes: directIncomesTotal,
@@ -149,7 +184,7 @@ async function calculateProfitLoss(date = null) {
 async function calculateBalanceSheet(date = null) {
   const plData = await calculateProfitLoss(date);
   const netProfit = plData.indirect.net_profit;
-  const { totalStockValuation } = await calculateClosingStockValuation();
+  const { totalStockValuation } = await calculateClosingStockValuation(date);
   const ledgers = await calculateAllLedgerBalances(date);
 
   const liabilities = {
@@ -205,10 +240,22 @@ async function calculateBalanceSheet(date = null) {
     closing_type: 'Dr'
   });
 
-  const totalLiabilities = liabilities.capital_account.total + netProfit + liabilities.loans.total + liabilities.current_liabilities.total;
-  const totalAssets = assets.fixed_assets.total + assets.investments.total + assets.current_assets.total;
+  // "Difference in opening balances" (as Tally shows it): opening balances that do not balance among themselves, opening stock
+  // included (stock entered with an opening value is an asset with no matching capital). Assets − liabilities always equals exactly
+  // this, so it is shown on the short side: the sheet balances and the difference stays visible to be corrected.
+  // (ledgers under Stock-in-hand are left out: the sheet shows stock at the stock items' value instead)
+  const ob = await get("SELECT COALESCE(SUM(CASE WHEN l.opening_balance_type = 'Cr' THEN -l.opening_balance ELSE l.opening_balance END), 0) AS n FROM ledgers l JOIN account_groups g ON g.id = l.group_id WHERE g.name <> 'Stock-in-hand'");
+  const os = await get('SELECT COALESCE(SUM(opening_val), 0) AS n FROM stock_items');
+  const openingDifference = Math.round(((Number(ob.n) || 0) + (Number(os.n) || 0)) * 100) / 100; // + = more on the debit (assets) side
+
+  let totalLiabilities = liabilities.capital_account.total + netProfit + liabilities.loans.total + liabilities.current_liabilities.total;
+  let totalAssets = assets.fixed_assets.total + assets.investments.total + assets.current_assets.total;
+  if (openingDifference > 0) totalLiabilities += openingDifference;
+  else if (openingDifference < 0) totalAssets += -openingDifference;
 
   return {
+    opening_difference: { amount: Math.abs(openingDifference), side: openingDifference > 0 ? 'liabilities' : openingDifference < 0 ? 'assets' : null,
+      note: openingDifference ? 'Opening balances (including opening stock) do not balance: correct them in Ledger / Stock Item alteration (for example the Capital Account).' : null },
     liabilities: {
       capital_total: liabilities.capital_account.total,
       capital_items: liabilities.capital_account.items,
@@ -269,11 +316,12 @@ async function calculateRatioAnalysis() {
     if (l.group_id === 1 || l.group_id === 28) {
       capitalAndReserves += netLiab;
     }
-    if (l.group_name === 'Sales Accounts') sales += val;
-    if (l.group_name === 'Purchase Accounts') purchases += val;
-    if (l.group_name === 'Direct Expenses') directExp += val;
-    if (l.group_name === 'Indirect Expenses') indirectExp += val;
-    if (l.group_name === 'Indirect Incomes') indirectInc += val;
+    // signed, as in the Profit & Loss (a return ledger reduces its group)
+    if (l.group_name === 'Sales Accounts') sales += netLiab;
+    if (l.group_name === 'Purchase Accounts') purchases += netAsset;
+    if (l.group_name === 'Direct Expenses') directExp += netAsset;
+    if (l.group_name === 'Indirect Expenses') indirectExp += netAsset;
+    if (l.group_name === 'Indirect Incomes') indirectInc += netLiab;
   });
 
   const cogs = openingStock + purchases + directExp - totalStockValuation;

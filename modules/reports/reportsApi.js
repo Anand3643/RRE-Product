@@ -55,7 +55,11 @@ router.get('/trial-balance', async (req, res) => {
 // 2. Profit & Loss Account
 router.get('/profit-loss', async (req, res) => {
   try {
-    const data = await calculateProfitLoss(req.query.date);
+    const date = req.query.date || null, from = req.query.from || null;
+    for (const d of [date, from]) if (d && !/^\d{4}-\d{2}-\d{2}$/.test(d)) return res.status(400).json({ success: false, error: 'Dates must be YYYY-MM-DD.' });
+    if (date && from && from > date) return res.status(400).json({ success: false, error: 'The period starts after it ends.' });
+    const data = await calculateProfitLoss(date, from);
+    data.period = { from, to: date };
     res.json({ success: true, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

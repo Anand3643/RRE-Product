@@ -18,6 +18,7 @@
 const crypto = require('crypto');
 const { get, all, run } = require('./db');
 const { readDocument } = require('./docRead');
+const { itemsFromRows, stockIndex, quotationHeader, QUOTE_STATUS, PAYMENT_STATUS } = require('./docItems');
 const { parseAmount: csvAmount, parseDate: csvDate } = require('./csv');
 
 const bad = (status, msg, extra = {}) => Object.assign(new Error(msg), { status, ...extra });
@@ -33,6 +34,7 @@ const CATEGORIES = {
   payments: { label: 'Payment records', kind: 'post' },
   receipts: { label: 'Receipt records', kind: 'post' },
   transactions: { label: 'Day Book / journal / voucher list', kind: 'post' },
+  quotation: { label: 'Quotation / estimate (saved to Quotations, never posted)', kind: 'quotation' },
   bank_statement: { label: 'Bank statement', kind: 'bank' },
   party_list: { label: 'Customer / supplier list', kind: 'master' },
   stock_statement: { label: 'Stock / inventory statement', kind: 'master' },
@@ -76,14 +78,20 @@ const FIELDS = {
   address: ['address', 'billing address'],
   state: ['state', 'place of supply', 'state name'],
   group: ['group', 'under', 'account group', 'ledger group', 'category', 'group name'],
-  mode: ['mode', 'payment mode', 'paid by', 'received in', 'bank', 'cash bank', 'paid through', 'mode of payment', 'bank cash']
+  mode: ['mode', 'payment mode', 'paid by', 'received in', 'bank', 'cash bank', 'paid through', 'mode of payment', 'bank cash'],
+  quote_no: ['quotation no', 'quote no', 'quotation number', 'quote number', 'estimate no', 'estimate number', 'qtn no', 'quotation ref', 'quote ref'],
+  status: ['status', 'payment status', 'paid status', 'quotation status', 'paid unpaid', 'quote status'],
+  discount_pct: ['disc %', 'discount %', 'disc', 'disc pct', 'discount pct', 'disc percent', 'discount percent'],
+  discount: ['discount', 'discount amount', 'disc amount', 'disc amt', 'discount rs'],
+  code: ['item code', 'product code', 'sku', 'part no', 'part number', 'code', 'item no'],
+  expiry: ['valid till', 'valid until', 'expiry date', 'expiry', 'validity', 'valid upto']
 };
 const FIELD_LOOKUP = new Map();
 for (const [f, names] of Object.entries(FIELDS)) for (const n of names) if (!FIELD_LOOKUP.has(norm(n))) FIELD_LOOKUP.set(norm(n), f);
 // a word that means different things in different documents
 const CONTEXT_FIELD = {
-  particulars: { bank_statement: 'narration', stock_statement: 'item', default: 'ledger' },
-  description: { stock_statement: 'item', default: 'narration' },
+  particulars: { bank_statement: 'narration', stock_statement: 'item', quotation: 'item', default: 'ledger' },
+  description: { stock_statement: 'item', quotation: 'item', default: 'narration' },
   name: { party_list: 'party', stock_statement: 'item', default: 'party' },
   amount: { trial_balance: 'amount', default: 'amount' },
   value: { stock_statement: 'value', default: 'amount' },
@@ -143,11 +151,16 @@ function classify(doc, company) {
   const head = `${doc.sheets.map((s) => s.name).join(' ')}\n${doc.text.slice(0, 4000)}`.toLowerCase();
   const reasons = [];
   let category = null;
-  for (const [c, re] of KEYWORDS) if (re.test(head)) { category = c; reasons.push(`title / words: "${(head.match(re) || [''])[0]}"`); break; }
+  // a quotation / estimate / proforma says so in its title (the first lines, or the sheet name): never an invoice to post
+  const top = `${doc.sheets.map((s) => s.name).join(' ')}\n${doc.text.slice(0, 400)}`.toLowerCase();
+  const qm = /\b(quotation|estimate|pro ?forma invoice|price quote)s?\b/.exec(top);
+  if (qm) { category = 'quotation'; reasons.push(`title / words: "${qm[0]}"`); }
+  if (!category) for (const [c, re] of KEYWORDS) if (re.test(head)) { category = c; reasons.push(`title / words: "${(head.match(re) || [''])[0]}"`); break; }
   const t = doc.sheets.map((s) => findTable(s.rows, category)).find(Boolean);
   const f = new Set(t ? t.fields.filter(Boolean) : []);
   if (!category) {
-    if (f.has('debit') && f.has('credit') && (f.has('balance') && (f.has('narration') || f.has('reference')))) category = 'bank_statement';
+    if (f.has('quote_no')) category = 'quotation';
+    else if (f.has('debit') && f.has('credit') && (f.has('balance') && (f.has('narration') || f.has('reference')))) category = 'bank_statement';
     else if (f.has('ledger') && f.has('debit') && f.has('credit')) category = f.has('date') ? 'transactions' : 'trial_balance';
     else if ((f.has('taxable') || f.has('cgst') || f.has('igst')) && (f.has('invoice_no') || f.has('party'))) category = /purchase|supplier|vendor|bill/.test(head) ? 'purchase_register' : 'sales_register';
     else if (f.has('item') && f.has('qty')) category = 'stock_statement';
@@ -207,6 +220,26 @@ const isTotalRow = (r) => /^(grand )?total\b|^sub ?total\b|^closing balance\b|^o
 const TYPE_ALIASES = { sale: 'Sales', sales: 'Sales', 'sales invoice': 'Sales', purchase: 'Purchase', purchases: 'Purchase', payment: 'Payment', pymt: 'Payment', pmt: 'Payment', receipt: 'Receipt', rcpt: 'Receipt', contra: 'Contra', journal: 'Journal', jrnl: 'Journal', jv: 'Journal', 'credit note': 'Credit Note', 'debit note': 'Debit Note', cn: 'Credit Note', dn: 'Debit Note' };
 const voucherType = (v) => TYPE_ALIASES[norm(v)] || null;
 
+const numOrNull = (v) => (v == null || v === '' ? null : amount(v));
+/** a register with one row per ITEM: the rows of the same invoice (number + party) become one invoice with its item lines */
+function groupItemRows(records) {
+  if (!records.some((r) => r.data.items && r.data.items.length)) return;
+  const byKey = new Map(), keep = [];
+  for (const r of records) {
+    const d = r.data;
+    const key = d.invoice_no ? `${norm(d.invoice_no)}|${norm(d.party)}` : null;
+    const first = key && byKey.get(key);
+    if (!first) { if (key) byKey.set(key, r); keep.push(r); continue; }
+    const f = first.data;
+    for (const k of ['taxable', 'cgst', 'sgst', 'igst', 'total']) f[k] = d[k] == null && f[k] == null ? null : r2((f[k] || 0) + (d[k] || 0));
+    f.items = (f.items || []).concat(d.items || []);
+    if (!f.payment_status) f.payment_status = d.payment_status;
+    first.problems = first.problems.concat(r.problems.map((pr) => `Row ${r.row}: ${pr}`));
+    first.rows = (first.rows || [first.row]).concat(r.row);
+  }
+  records.length = 0; keep.forEach((r, i) => { r.n = i + 1; records.push(r); });
+}
+
 function buildRecords(doc, category, mapping) {
   const { rows, headers, fields } = tableRows(doc, category, mapping);
   const records = [];
@@ -237,15 +270,46 @@ function buildRecords(doc, category, mapping) {
       const date = toDate(r.date); if (!date) p.push(r.date ? `Invalid date "${r.date}"` : 'Date is missing');
       const party = r.party ? String(r.party).trim() : ''; if (!party) p.push('Party name is missing');
       const num = (k) => (r[k] == null || r[k] === '' ? null : amount(r[k]));
+      // one row per item: a "Rate" column is the unit price when qty × it gives the row's amount (not a GST rate)
+      if (r.item && r.qty != null && r.rate == null && r.gst_rate != null) {
+        const q = num('qty'), g = num('gst_rate'), base = num('taxable') ?? num('amount');
+        if (q && g != null && base != null && !Number.isNaN(q) && !Number.isNaN(g) && Math.abs(q * g - base) <= Math.max(1, base * 0.2) && (g > 28 || !GST_RATES.includes(g))) { r.rate = r.gst_rate; delete r.gst_rate; }
+      }
       let taxable = num('taxable'), cgst = num('cgst'), sgst = num('sgst'), igst = num('igst'), total = num('total'), rate = num('gst_rate'), amt = num('amount');
       for (const [k, v] of Object.entries({ taxable, cgst, sgst, igst, total, rate, amount: amt })) if (Number.isNaN(v)) p.push(`${k} is not a number ("${r[k]}")`);
-      if (taxable == null && amt != null && total == null) taxable = amt;
+      if (taxable == null && amt != null && !Number.isNaN(amt)) {
+        // "Amount" next to "Total": the amount before tax when amount + GST = total; the total itself when it already includes GST
+        const t = (cgst || 0) + (sgst || 0) + (igst || 0);
+        if (total == null || Math.abs(amt + t - total) <= 1) taxable = amt;
+        else if (t && Math.abs(amt - total) <= 1) taxable = r2(total - t);
+      }
       if (taxable == null && total != null && rate != null && cgst == null && igst == null) { taxable = r2(total / (1 + rate / 100)); }
       if (cgst == null && sgst == null && igst == null && rate != null && taxable != null) { cgst = r2(taxable * rate / 200); sgst = cgst; }
       if (total == null && taxable != null) total = r2(taxable + (cgst || 0) + (sgst || 0) + (igst || 0));
       if (taxable == null && total != null && cgst == null && sgst == null && igst == null) { taxable = total; }
       if (taxable == null) p.push('Taxable value / amount is missing');
-      push(r, { date, invoice_no: r.invoice_no != null ? String(r.invoice_no).trim() : (r.voucher_no != null ? String(r.voucher_no).trim() : ''), party, gstin: r.gstin ? String(r.gstin).trim().toUpperCase() : '', taxable, cgst: cgst || 0, sgst: sgst || 0, igst: igst || 0, total, gst_rate: rate, narration: r.narration ? String(r.narration) : '' }, p);
+      const items = r.item && r.qty != null ? itemsFromRows([{ ...r, gst_rate: rate, amount: r.amount != null ? r.amount : r.taxable }], numOrNull) : [];
+      push(r, { date, invoice_no: r.invoice_no != null ? String(r.invoice_no).trim() : (r.voucher_no != null ? String(r.voucher_no).trim() : ''), party, gstin: r.gstin ? String(r.gstin).trim().toUpperCase() : '', taxable, cgst: cgst || 0, sgst: sgst || 0, igst: igst || 0, total, gst_rate: rate, narration: r.narration ? String(r.narration) : '', items, payment_status: PAYMENT_STATUS(r.status) }, p);
+    }
+    groupItemRows(records);
+  } else if (category === 'quotation') {
+    // a register of quotations (one row per quotation, or one row per item of a quotation)
+    const byNo = new Map();
+    for (const r of rows) {
+      if (isTotalRow(r)) continue;
+      const no = String(r.quote_no ?? r.invoice_no ?? r.voucher_no ?? '').trim();
+      const customer = String(r.party || '').trim();
+      const item = r.item && r.qty != null ? itemsFromRows([r], numOrNull)[0] : null;
+      const prev = no && byNo.get(no);
+      if (prev) { if (item) prev.data.items.push(item); continue; }
+      const p = [];
+      const date = toDate(r.date); if (!date) p.push(r.date ? `Invalid date "${r.date}"` : 'Date is missing');
+      if (!customer) p.push('Customer name is missing');
+      const num = (k) => numOrNull(r[k]);
+      const taxable = item ? null : (num('taxable') ?? num('amount')), total = num('total');
+      for (const [k, v] of Object.entries({ taxable, total })) if (Number.isNaN(v)) p.push(`${k} is not a number ("${r[k]}")`);
+      push(r, { date, quote_no: no, party: customer, gstin: r.gstin ? String(r.gstin).trim().toUpperCase() : '', expiry: r.expiry ? toDate(r.expiry) : null, status: QUOTE_STATUS(r.status), taxable, cgst: num('cgst') || 0, sgst: num('sgst') || 0, igst: num('igst') || 0, total, gst_rate: num('gst_rate'), items: item ? [item] : [], narration: r.narration ? String(r.narration) : '' }, p);
+      if (no) byNo.set(no, records[records.length - 1]);
     }
   } else if (['payments', 'receipts'].includes(category)) {
     for (const r of rows) {
@@ -312,7 +376,26 @@ async function singleInvoice(doc, category) {
   if (taxable == null) p.push('Taxable value could not be read');
   const date = val('date') || null;
   if (!date) p.push('Invoice date could not be read');
-  return { records: [{ n: 1, sheet: 'Document', row: null, data: { date, invoice_no: val('invoice_no') || '', party, gstin: (category === 'sales_invoice' ? val('buyer_gstin') : val('supplier_gstin')) || '', taxable: taxable != null ? r2(taxable) : null, cgst: r2(cgst), sgst: r2(sgst), igst: r2(igst), total: total != null ? r2(total) : null, narration: '' }, problems: p, warnings: ex.warnings || [] }], meta: { headers: [], fields: [], invoice_reader: { warnings: ex.warnings || [] } } };
+  const items = itemsFromRows(tableRows(doc, 'stock_statement').rows, numOrNull); // the item table, if the invoice has one
+  // only a labelled status ("Payment status: Paid") or an explicit stamp ("PAID IN FULL", "UNPAID"): the word "paid" alone says nothing
+  const status = PAYMENT_STATUS((/\bpayment\s*status\s*[:\-]\s*([a-z ]+)/i.exec(doc.text) || [])[1] || (/\b(fully paid|paid in full|unpaid)\b/i.exec(doc.text) || [])[1] || '');
+  return { records: [{ n: 1, sheet: 'Document', row: null, data: { date, invoice_no: val('invoice_no') || '', party, gstin: (category === 'sales_invoice' ? val('buyer_gstin') : val('supplier_gstin')) || '', taxable: taxable != null ? r2(taxable) : null, cgst: r2(cgst), sgst: r2(sgst), igst: r2(igst), total: total != null ? r2(total) : null, narration: '', items, payment_status: status }, problems: p, warnings: ex.warnings || [] }], meta: { headers: [], fields: [], invoice_reader: { warnings: ex.warnings || [] } } };
+}
+
+/** a single quotation / estimate / proforma (PDF, scan, or a one-quotation sheet): header from the text, lines from its item table */
+async function singleQuotation(doc, company) {
+  const h = quotationHeader(doc.text);
+  const items = itemsFromRows(tableRows(doc, 'stock_statement').rows, numOrNull);
+  const { extractInvoice } = require('./invoiceExtract');
+  const ex = await extractInvoice(doc.text, {}); const f = ex.fields || {}; const tax = f.tax || {};
+  const val = (k) => (f[k] && typeof f[k] === 'object' && 'value' in f[k] ? f[k].value : null);
+  const ours = company && company.gstin ? String(company.gstin).toUpperCase() : null;
+  const p = [];
+  const date = h.date ? toDate(h.date) : (val('date') || null);
+  if (!date) p.push('Quotation date could not be read');
+  if (!h.customer) p.push('The customer could not be read: type it');
+  if (!items.length && val('taxable_value') == null) p.push('No item lines and no taxable value could be read');
+  return { records: [{ n: 1, sheet: 'Document', row: null, data: { date, quote_no: h.quote_no || '', party: h.customer || '', gstin: h.gstins.find((g) => g !== ours) || '', expiry: h.valid_till ? toDate(h.valid_till) : null, status: QUOTE_STATUS(h.status), taxable: items.length ? null : val('taxable_value'), cgst: tax.cgst || 0, sgst: tax.sgst || 0, igst: tax.igst || 0, total: val('total'), gst_rate: null, items, narration: '' }, problems: p, warnings: [] }], meta: { headers: [], fields: [] } };
 }
 
 // ------------------------------------------------------------------------------------------------ ledgers
@@ -336,7 +419,10 @@ const GST_RATES = [0, 0.1, 0.25, 1, 1.5, 3, 5, 6, 7.5, 12, 18, 28];
 async function evaluate(docRow, extraction, settings = {}) {
   const category = settings.category || extraction.classification.category;
   if (!category || !CATEGORIES[category]) return { category: null, needs_category: true, records: [], summary: {} };
-  const built = category.endsWith('_invoice') && !extraction.tableLike ? await singleInvoice(extraction.doc, category) : buildRecords(extraction.doc, category.replace(/_invoice$/, '_register'), settings.mapping);
+  const company0 = (await get('SELECT gstin FROM company_info LIMIT 1')) || {};
+  const quoteRegister = category === 'quotation' && extraction.doc.sheets.some((s) => { const t = findTable(s.rows || [], 'quotation'); return t && (t.fields.includes('quote_no') || t.fields.includes('invoice_no')) && t.fields.includes('party'); });
+  const built = category === 'quotation' ? (quoteRegister ? buildRecords(extraction.doc, 'quotation', settings.mapping) : await singleQuotation(extraction.doc, company0))
+    : category.endsWith('_invoice') && !extraction.tableLike ? await singleInvoice(extraction.doc, category) : buildRecords(extraction.doc, category.replace(/_invoice$/, '_register'), settings.mapping);
   // the person's corrections to individual values (record number -> fields)
   // a corrected value replaces the one read from the file, and the problems that value caused are re-checked from scratch
   const FIELD_PROBLEM = { date: /date/i, party: /party|name/i, taxable: /taxable/i, total: /total/i, cgst: /cgst/i, sgst: /sgst/i, igst: /igst/i, amount: /amount/i, invoice_no: /invoice/i, qty: /quantity/i, gst_rate: /rate/i };
@@ -345,7 +431,7 @@ async function evaluate(docRow, extraction, settings = {}) {
     if (!rec || !patch || typeof patch !== 'object') continue;
     for (const [k, v] of Object.entries(patch)) {
       let val = v;
-      if (k === 'date') { val = toDate(v); if (!val) { rec.problems.push(`Invalid date "${v}"`); continue; } }
+      if (k === 'date' || k === 'expiry') { val = toDate(v); if (!val) { rec.problems.push(`Invalid date "${v}"`); continue; } }
       else if (['taxable', 'cgst', 'sgst', 'igst', 'total', 'amount', 'qty', 'rate', 'gst_rate', 'withdrawal', 'deposit'].includes(k)) { val = v === '' || v == null ? null : amount(v); if (Number.isNaN(val)) { rec.problems.push(`${k} is not a number ("${v}")`); continue; } }
       else val = v == null ? '' : String(v).trim();
       rec.data[k] = val;
@@ -381,6 +467,38 @@ async function evaluate(docRow, extraction, settings = {}) {
   const purchL = pickDefault(settings.purchase_ledger_id) || idx.rows.find((l) => l.group_name === 'Purchase Accounts');
   const bankL = pickDefault(settings.bank_ledger_id) || idx.rows.find((l) => l.group_name === 'Bank Accounts') || idx.rows.find((l) => l.group_name === 'Cash-in-hand');
   const roundL = idx.rows.find((l) => /^round off/i.test(l.name));
+  // stock items of invoice / quotation lines
+  let sidx = null;
+  const unknownItems = new Map(), stockOut = new Map();
+  const stockPolicy = await require('./voucherService').negativeStockPolicy();
+  const resolveItems = async (items, { sales, gstRate, errors, warnings, create = true }) => {
+    if (!items || !items.length) return [];
+    if (!sidx) sidx = await stockIndex();
+    const out = [];
+    for (const it of items) {
+      const s = sidx.find(it.name, it.code);
+      let make = null;
+      const service = /^99/.test(String(it.hsn || '')); // SAC 99xxxx: a service, never stock
+      if (!s && create && (sales || service)) {
+        // selling something that is not a stock item (a service, or an item never bought in): the sale is posted, no stock moves
+        warnings.push(`"${it.name}" is not a stock item${service ? ' (service)' : ''}: posted without a stock movement${service ? '' : '. Create the item first to track its stock.'}`);
+        continue;
+      }
+      if (!s && create) {
+        if (settings.create_missing_items === false) { errors.push(`Stock item "${it.name}" does not exist (creating missing items is switched off)`); continue; }
+        make = { name: it.name, unit: it.unit, hsn: it.hsn, gst_rate: it.gst_rate != null ? it.gst_rate : gstRate, rate: it.rate };
+        const k = norm(it.name); if (!unknownItems.has(k)) unknownItems.set(k, { name: it.name, unit: it.unit, records: 0 }); unknownItems.get(k).records++;
+      }
+      if (sales && stockPolicy === 'block' && create) {
+        const k = s ? `id:${s.id}` : `new:${norm(it.name)}`;
+        const have = (s ? Number(s.on_hand) : 0) - (stockOut.get(k) || 0);
+        if (have - it.qty < -1e-9) errors.push(`Not enough stock of ${s ? s.name : it.name}: ${r2(have)} on hand, ${it.qty} on this invoice (negative stock is blocked for this company)`);
+        else stockOut.set(k, (stockOut.get(k) || 0) + it.qty);
+      }
+      out.push({ item: s ? s.name : it.name, stock_item_id: s ? s.id : null, create: make, quantity: it.qty, unit: it.unit, rate: it.rate, discount_pct: it.discount_pct, amount: it.amount, hsn: it.hsn, gst_rate: it.gst_rate });
+    }
+    return out;
+  };
 
   for (const rec of built.records) {
     const d = rec.data;
@@ -412,6 +530,16 @@ async function evaluate(docRow, extraction, settings = {}) {
       const tax = (part, amt) => { if (!amt) return null; const l = taxLedger(idx, sales, part, part === 'igst' ? rate : rate); if (!l) errors.push(`No ${sales ? 'Output' : 'Input'} ${part.toUpperCase()} ledger for ${part === 'igst' ? rate : rate / 2}%: create it in Masters first`); return l; };
       const lc = tax('cgst', d.cgst), ls = tax('sgst', d.sgst), li = tax('igst', d.igst);
       if (Math.abs(diff) > 0.004 && Math.abs(diff) <= 1 && !roundL) errors.push('A Round Off ledger is needed for the paise difference');
+      // item lines -> stock lines of the voucher (stock quantity, valuation and cost of goods sold follow from them)
+      const inventory = await resolveItems(d.items, { sales, gstRate: rate, errors, warnings });
+      if (inventory.length && inventory.length === d.items.length && d.taxable != null) {
+        const itemsTotal = r2(inventory.reduce((t, i) => t + (i.amount || 0), 0));
+        if (Math.abs(itemsTotal - d.taxable) > 1) warnings.push(`The item lines add up to ₹${itemsTotal}, the taxable value is ₹${d.taxable}: stock is valued at the item amounts`);
+      }
+      // "Paid" on the invoice: also record the receipt / payment (only when the person asks for it)
+      const recordPaid = settings.record_payments === true && d.payment_status === 'paid';
+      if (recordPaid && !bankL) errors.push('Choose the bank / cash ledger to record the payment through');
+      if (d.payment_status === 'partial') warnings.push('Partly paid: record the amount received / paid as a separate receipt / payment');
       if (!errors.length && d.party && (party || map[d.party])) {
         const lines = [];
         const total = d.total != null ? d.total : calc;
@@ -426,7 +554,9 @@ async function evaluate(docRow, extraction, settings = {}) {
           if (Math.abs(diff) > 0.004) lines.push({ ledger: roundL.name, ledger_id: roundL.id, debit: diff > 0 ? diff : 0, credit: diff < 0 ? -diff : 0 });
           lines.push({ ledger: pName, ledger_id: party && party.id, debit: 0, credit: total });
         }
-        voucher = { voucher_type: sales ? 'Sales' : 'Purchase', date: d.date, reference_no: d.invoice_no || '', narration: d.narration || `${sales ? 'Sales' : 'Purchase'} invoice ${d.invoice_no || ''} (imported from ${docRow.file_name})`.trim(), party: pName, party_create: party && party.create ? party : null, party_gstin: d.gstin, lines, bill: { ref: d.invoice_no || null, amount: total } };
+        voucher = { voucher_type: sales ? 'Sales' : 'Purchase', date: d.date, reference_no: d.invoice_no || '', narration: d.narration || `${sales ? 'Sales' : 'Purchase'} invoice ${d.invoice_no || ''} (imported from ${docRow.file_name})`.trim(), party: pName, party_create: party && party.create ? party : null, party_gstin: d.gstin, lines, bill: { ref: d.invoice_no || null, amount: total },
+          inventory: inventory.length ? inventory : undefined,
+          payment: recordPaid ? { voucher_type: sales ? 'Receipt' : 'Payment', ledger: bankL.name, ledger_id: bankL.id, amount: total, date: d.date } : undefined };
       } else if (!errors.length && d.party && !party) errors.push(`"${d.party}" is not a ledger yet: choose an existing ledger or let it be created`);
       // duplicates: in this file, and in the books (same invoice number for the same party, or the same voucher number)
       const key = `${sales}|${norm(d.party)}|${norm(d.invoice_no)}`;
@@ -435,6 +565,43 @@ async function evaluate(docRow, extraction, settings = {}) {
         seen.add(key);
         const inBooks = party && party.id ? await get('SELECT voucher_no FROM vouchers WHERE voucher_type = ? AND reference_no = ? AND party_ledger_id = ? LIMIT 1', [sales ? 'Sales' : 'Purchase', d.invoice_no, party.id]) : null;
         if (inBooks) { action = 'duplicate'; warnings.push(`Already in the books as ${inBooks.voucher_no}`); }
+      }
+    } else if (category === 'quotation') {
+      // saved into Quotations (status Draft / Sent / Accepted ...): never a voucher, never revenue until it is converted to an invoice
+      checkDate(d.date);
+      if (!d.party) errors.push('Customer name is missing');
+      const taxes = r2((d.cgst || 0) + (d.sgst || 0) + (d.igst || 0));
+      let lines = d.items || [];
+      let rate = d.gst_rate;
+      if (rate == null && taxes && d.taxable) rate = GST_RATES.find((g) => Math.abs(g - taxes / d.taxable * 100) <= 0.15) ?? r2(taxes / d.taxable * 100);
+      if (!lines.length && d.taxable != null && !Number.isNaN(d.taxable)) lines = [{ name: `As per quotation ${d.quote_no || ''}`.trim(), qty: 1, rate: d.taxable, discount_pct: 0, amount: d.taxable, gst_rate: rate, unit: '' }];
+      if (!lines.length) errors.push('No item lines to quote');
+      if (rate == null && lines.some((l) => l.gst_rate == null)) {
+        if (d.total != null && d.taxable != null && Math.abs(d.total - d.taxable) < 0.01) rate = 0;
+        else if (lines.length) {
+          // the lines' total vs the document's total tells the rate when it is not printed
+          const sub = lines.reduce((t, l) => t + (l.amount || 0), 0);
+          const g = d.total && sub ? GST_RATES.find((x) => Math.abs(sub * (1 + x / 100) - d.total) <= 1) : null;
+          if (g != null) rate = g; else { rate = 18; warnings.push('GST rate is not in the document: 18% assumed. Correct it if it is different.'); }
+        }
+      }
+      const party = d.party ? idx.find(d.party, d.gstin) : null;
+      const matched = await resolveItems(lines, { sales: true, errors, warnings, create: false }); // linked to stock items when they exist (for the later invoice)
+      const body = { date: d.date, expiry_date: d.expiry || undefined, customer_name: d.party, party_ledger_id: party && party.group_name === 'Sundry Debtors' ? party.id : undefined, customer_gstin: d.gstin || '',
+        quote_no: d.quote_no || '', status: d.status || 'Draft', reference_no: '', subject: d.narration || '',
+        items: lines.map((l, i) => ({ stock_item_id: matched[i] && matched[i].stock_item_id ? matched[i].stock_item_id : undefined, item_name: l.name, hsn_code: l.hsn || '', uom: l.unit || '', quantity: l.qty, rate: l.rate, discount_pct: l.discount_pct || 0, gst_rate: l.gst_rate != null ? l.gst_rate : rate })) };
+      if (!errors.length) {
+        try {
+          const { row } = await require('../modules/quotations/quotationsApi').buildQuotePayload({ ...body, items: body.items.map((x) => ({ ...x })) });
+          if (d.total != null && Math.abs(row.total - d.total) > 1) warnings.push(`Worked out total ₹${row.total} differs from the document's ₹${d.total}`);
+          rec.quotation = { ...body, total: row.total, taxable: row.taxable_amount, gst: r2(row.cgst + row.sgst + row.igst) };
+        } catch (e) { errors.push(e.message); }
+      }
+      if (d.quote_no) {
+        if (seen.has('q|' + d.quote_no)) { action = 'duplicate'; warnings.push(`Quotation ${d.quote_no} appears twice in this file`); }
+        seen.add('q|' + d.quote_no);
+        const ex = await get('SELECT id, status FROM quotations WHERE quote_no = ?', [d.quote_no]);
+        if (ex) { action = 'duplicate'; warnings.push(`Quotation ${d.quote_no} is already in Quotations (${ex.status})`); }
       }
     } else if (['payments', 'receipts'].includes(category)) {
       checkDate(d.date);
@@ -499,7 +666,7 @@ async function evaluate(docRow, extraction, settings = {}) {
       } else if (!d.total_row) rec.compare = { ledger: null, in_file: r2((d.debit || 0) - (d.credit || 0)), note: 'no ledger of this name in the books' };
     }
     const status = errors.length ? 'error' : action === 'duplicate' ? 'duplicate' : action === 'exists' ? 'exists' : CATEGORIES[category].kind === 'report' ? 'reference' : 'ok';
-    out.push({ n: rec.n, sheet: rec.sheet, row: rec.row, data: d, edited: !!rec.edited, status, errors, warnings, voucher, master: rec.master || null, compare: rec.compare || null });
+    out.push({ n: rec.n, sheet: rec.sheet, row: rec.row, data: d, edited: !!rec.edited, status, errors, warnings, voucher, master: rec.master || null, quotation: rec.quotation || null, compare: rec.compare || null });
   }
 
   // summary for the preview
@@ -511,6 +678,11 @@ async function evaluate(docRow, extraction, settings = {}) {
     records: out.length, valid: ok.length, errors: out.filter((r) => r.status === 'error').length, duplicates: out.filter((r) => r.status === 'duplicate').length, existing: out.filter((r) => r.status === 'exists').length,
     total_debit: sumLines(ok, 'debit'), total_credit: sumLines(ok, 'credit'),
     gst: r2(out.reduce((t, r) => t + (r.data ? (r.data.cgst || 0) + (r.data.sgst || 0) + (r.data.igst || 0) : 0), 0)),
+    sales_total: r2(ok.filter((r) => r.voucher && r.voucher.voucher_type === 'Sales').reduce((t, r) => t + (r.voucher.bill ? r.voucher.bill.amount : 0), 0)),
+    purchase_total: r2(ok.filter((r) => r.voucher && r.voucher.voucher_type === 'Purchase').reduce((t, r) => t + (r.voucher.bill ? r.voucher.bill.amount : 0), 0)),
+    quotation_total: r2(ok.reduce((t, r) => t + (r.quotation ? r.quotation.total : 0), 0)),
+    item_lines: ok.reduce((t, r) => t + (r.voucher && r.voucher.inventory ? r.voucher.inventory.length : 0), 0),
+    payments_to_record: ok.filter((r) => r.voucher && r.voucher.payment).length,
     invoice_total: r2(inv.reduce((t, r) => t + (r.data.total || 0), 0)),
     missing_fields: [...new Set(out.flatMap((r) => r.errors.filter((e) => /missing|could not be read/i.test(e)).map((e) => e.replace(/ \(.*$/, ''))))],
     report_debit: kind === 'report' ? r2(out.filter((r) => !r.data.total_row).reduce((t, r) => t + (r.data.debit || 0), 0)) : undefined,
@@ -520,6 +692,7 @@ async function evaluate(docRow, extraction, settings = {}) {
   if (kind === 'bank_statement' || category === 'bank_statement') { summary.withdrawals = r2(out.reduce((t, r) => t + (r.data.withdrawal || 0), 0)); summary.deposits = r2(out.reduce((t, r) => t + (r.data.deposit || 0), 0)); }
   return {
     category, category_label: CATEGORIES[category].label, kind, summary, records: out,
+    unknown_items: [...unknownItems.values()],
     unknown_ledgers: [...unknown.values()].map((u) => ({ ...u, suggest_group_id: gid(u.suggest) || null })),
     columns: built.meta.headers.map((h, i) => ({ index: i, header: h, field: built.meta.fields[i] || null })),
     totals_in_file: built.meta.totals_in_file || [],
@@ -620,10 +793,10 @@ async function commitOnce(id, settings = {}, user) {
   if (!take.length) throw bad(400, 'Nothing to import: no valid record is selected.', { preview: p });
   // the role may post these voucher types?
   const perms = require('./db').getRolePermissions((user && user.role) || 'Owner');
-  for (const r of take) if (r.voucher && !(perms.allowedVoucherTypes || []).includes(r.voucher.voucher_type)) throw bad(403, `Your role may not post ${r.voucher.voucher_type} vouchers.`);
+  for (const r of take) for (const t of [r.voucher && r.voucher.voucher_type, r.voucher && r.voucher.payment && r.voucher.payment.voucher_type].filter(Boolean)) if (!(perms.allowedVoucherTypes || []).includes(t)) throw bad(403, `Your role may not post ${t} vouchers.`);
 
   const { postVoucher } = require('./voucherService');
-  const created = { vouchers: [], ledgers: [], parties: [], items: [], bank_import: null };
+  const created = { vouchers: [], ledgers: [], parties: [], items: [], quotations: [], payments: [], bank_import: null };
   const groupId = async (name) => (await get('SELECT id FROM account_groups WHERE name = ?', [name]) || {}).id;
   if (p.category === 'bank_statement') {
     // the statement goes to bank reconciliation (it never posts vouchers): bankTools reads it as CSV
@@ -633,6 +806,8 @@ async function commitOnce(id, settings = {}, user) {
     const bank = require('./bankTools');
     const imp = await bank.importStatement({ bank_ledger_id: bankId, content: csv, filename: d.file_name }, user);
     created.bank_import = imp;
+    // match against the vouchers already in the books: only suggestions; nothing is cleared or posted until the person confirms in Banking
+    try { const m = await bank.suggestMatches(imp.import_id); created.bank_matching = { import_id: imp.import_id, bank_ledger_id: bankId, suggested: m.suggestions.length, high_confidence: m.suggestions.filter((x) => x.confidence === 'high').length, new_lines: m.unmatched_bank_lines.length }; } catch (e) { created.bank_matching = { import_id: imp.import_id, bank_ledger_id: bankId, error: e.message }; }
   } else {
     await require('./tx').withTransaction(async () => {
       const made = new Map(); // ledger names created in this import -> id
@@ -644,7 +819,32 @@ async function commitOnce(id, settings = {}, user) {
           [name, g.id, ['Sundry Creditors', 'Duties & Taxes'].includes(g.name) || /income|sales/i.test(g.name) ? 'Cr' : 'Dr', extra.gstin || null, extra.state || null, extra.gstin ? String(extra.gstin).slice(0, 2) : null]);
         made.set(k, r.lastID); created.ledgers.push({ id: r.lastID, name, group: g.name }); return r.lastID;
       };
-      if (['party_list', 'stock_statement'].includes(p.category)) {
+      const madeItems = new Map();
+      // a stock item: the existing one of that name, or a new one (group "Imported Items"; an opening quantity only from a stock statement)
+      const ensureItem = async (m, { qty = 0, rate = 0 } = {}) => {
+        const k = norm(m.name); if (madeItems.has(k)) return madeItems.get(k);
+        const ex = await get('SELECT id FROM stock_items WHERE LOWER(name) = LOWER(?)', [m.name]); if (ex) { madeItems.set(k, ex.id); return ex.id; }
+        let uom = m.unit ? await get('SELECT id FROM units_of_measure WHERE LOWER(symbol) = LOWER(?) OR LOWER(formal_name) = LOWER(?)', [m.unit, m.unit]) : null;
+        if (!uom && m.unit) { const u = await run('INSERT INTO units_of_measure (symbol, formal_name, decimal_places) VALUES (?, ?, 2)', [m.unit.toUpperCase().slice(0, 10), m.unit]); uom = { id: u.lastID }; }
+        if (!uom) uom = (await get("SELECT id FROM units_of_measure WHERE UPPER(symbol) IN ('NOS', 'PCS') ORDER BY id LIMIT 1")) || (await get('SELECT id FROM units_of_measure ORDER BY id LIMIT 1'));
+        const grp = (await get("SELECT id FROM stock_groups WHERE name = 'Imported Items'")) || { id: (await run("INSERT INTO stock_groups (name) VALUES ('Imported Items')")).lastID };
+        const gst = m.gst_rate != null && !Number.isNaN(Number(m.gst_rate)) ? Number(m.gst_rate) : 18;
+        const ins = await run('INSERT INTO stock_items (name, stock_group_id, uom_id, hsn_code, gst_rate, opening_qty, opening_rate, opening_val, standard_cost, standard_price, reorder_level, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 1)',
+          [m.name, grp.id, uom.id, /^\d{4,8}$/.test(m.hsn || '') ? m.hsn : null, gst, qty, rate, r2(qty * rate), m.rate || rate || 0]);
+        await run('UPDATE stock_items SET sku = ? WHERE id = ?', [`SKU-${String(ins.lastID).padStart(5, '0')}`, ins.lastID]);
+        madeItems.set(k, ins.lastID); return ins.lastID;
+      };
+      if (p.category === 'quotation') {
+        const Q = require('../modules/quotations/quotationsApi');
+        for (const r of take) {
+          const { row, lines } = await Q.buildQuotePayload({ ...r.quotation, items: r.quotation.items.map((x) => ({ ...x })) });
+          const no = r.quotation.quote_no || await Q.nextQuoteNo();
+          if (await get('SELECT id FROM quotations WHERE quote_no = ?', [no])) throw bad(409, `Quotation ${no} is already in Quotations.`);
+          const status = ['Draft', 'Sent', 'Accepted', 'Declined', 'Expired'].includes(r.quotation.status) ? r.quotation.status : 'Draft';
+          const qid = await Q.insertQuotationRows(row, lines, { quote_no: no, status, created_by: userName(user) });
+          created.quotations.push({ n: r.n, id: qid, quote_no: no, customer: row.customer_name, status, total: row.total });
+        }
+      } else if (['party_list', 'stock_statement'].includes(p.category)) {
         for (const r of take) {
           if (p.category === 'party_list') {
             const m = r.master; const id = await ensureLedger(m.name, await groupId(m.kind === 'supplier' ? 'Sundry Creditors' : 'Sundry Debtors'), m);
@@ -654,15 +854,8 @@ async function commitOnce(id, settings = {}, user) {
             created.parties.push({ id, name: m.name, kind: m.kind });
           } else {
             const m = r.master;
-            let uom = m.unit ? await get('SELECT id FROM units_of_measure WHERE LOWER(symbol) = LOWER(?) OR LOWER(formal_name) = LOWER(?)', [m.unit, m.unit]) : null;
-            if (!uom && m.unit) { const u = await run('INSERT INTO units_of_measure (symbol, formal_name, decimal_places) VALUES (?, ?, 2)', [m.unit.toUpperCase().slice(0, 10), m.unit]); uom = { id: u.lastID }; }
-            if (!uom) uom = await get('SELECT id FROM units_of_measure ORDER BY id LIMIT 1');
-            const grp = (await get("SELECT id FROM stock_groups WHERE name = 'Imported Items'")) || { id: (await run("INSERT INTO stock_groups (name) VALUES ('Imported Items')")).lastID };
-            const q = m.qty || 0, rate = m.rate || 0;
-            const ins = await run('INSERT INTO stock_items (name, stock_group_id, uom_id, hsn_code, gst_rate, opening_qty, opening_rate, opening_val, standard_cost, standard_price, reorder_level, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 1)',
-              [m.name, grp.id, uom.id, /^\d{4,8}$/.test(m.hsn || '') ? m.hsn : null, m.gst_rate != null && !Number.isNaN(m.gst_rate) ? m.gst_rate : 18, q, rate, r2(q * rate), rate]);
-            await run('UPDATE stock_items SET sku = ? WHERE id = ?', [`SKU-${String(ins.lastID).padStart(5, '0')}`, ins.lastID]);
-            created.items.push({ id: ins.lastID, name: m.name, qty: q });
+            const id = await ensureItem(m, { qty: m.qty || 0, rate: m.rate || 0 });
+            created.items.push({ id, name: m.name, qty: m.qty || 0 });
           }
         }
       } else {
@@ -678,16 +871,34 @@ async function commitOnce(id, settings = {}, user) {
             }
             if (norm(l.ledger) === norm(v.party)) partyId = l.ledger_id;
           }
-          const payload = { voucher_type: v.voucher_type, voucher_no: v.voucher_no || undefined, date: v.date, reference_no: v.reference_no, narration: v.narration, party_ledger_id: partyId,
+          let inventory;
+          if (v.inventory && v.inventory.length) {
+            inventory = [];
+            for (const it of v.inventory) {
+              const sid = it.stock_item_id || await ensureItem(it.create || { name: it.item, unit: it.unit, hsn: it.hsn, gst_rate: it.gst_rate, rate: it.rate });
+              if (!it.stock_item_id && !created.items.some((x) => x.id === sid)) created.items.push({ id: sid, name: it.item, qty: 0 });
+              inventory.push({ stock_item_id: sid, quantity: it.quantity, rate: it.rate, amount: it.amount, discount_pct: it.discount_pct || 0 });
+            }
+          }
+          const payload = { voucher_type: v.voucher_type, voucher_no: v.voucher_no || undefined, date: v.date, reference_no: v.reference_no, narration: v.narration, party_ledger_id: partyId, inventory,
             entries: v.lines.map((l) => ({ ledger_id: l.ledger_id, debit_amount: l.debit, credit_amount: l.credit, particulars: l.ledger })),
             bill_allocations: v.bill && partyId ? [{ ledger_id: partyId, bill_type: 'New Ref', bill_ref: v.bill.ref || undefined, amount: v.bill.amount }] : undefined };
           const res = await postVoucher(payload, { inTransaction: true, userId: user && user.userId });
-          created.vouchers.push({ n: r.n, id: res.id, voucher_no: res.voucher_no, voucher_type: res.voucher_type, total: res.total_amount });
+          created.vouchers.push({ n: r.n, id: res.id, voucher_no: res.voucher_no, voucher_type: res.voucher_type, total: res.total_amount, items: inventory ? inventory.length : 0 });
+          if (v.payment && partyId) { // the invoice says Paid: the receipt / payment that settles it (against this bill)
+            const pay = v.payment, inflow = pay.voucher_type === 'Receipt';
+            const pr = await postVoucher({ voucher_type: pay.voucher_type, date: pay.date, reference_no: v.reference_no, party_ledger_id: partyId,
+              narration: `${inflow ? 'Received against' : 'Paid against'} invoice ${v.reference_no || res.voucher_no} (marked Paid in ${d.file_name})`,
+              entries: inflow ? [{ ledger_id: pay.ledger_id, debit_amount: pay.amount, credit_amount: 0, particulars: pay.ledger }, { ledger_id: partyId, debit_amount: 0, credit_amount: pay.amount, particulars: v.party }]
+                : [{ ledger_id: partyId, debit_amount: pay.amount, credit_amount: 0, particulars: v.party }, { ledger_id: pay.ledger_id, debit_amount: 0, credit_amount: pay.amount, particulars: pay.ledger }],
+              bill_allocations: [{ ledger_id: partyId, bill_type: 'Agst Ref', bill_ref: (v.bill && v.bill.ref) || res.voucher_no, amount: pay.amount }] }, { inTransaction: true, userId: user && user.userId });
+            created.payments.push({ n: r.n, id: pr.id, voucher_no: pr.voucher_no, voucher_type: pr.voucher_type, total: pr.total_amount, against: res.voucher_no });
+          }
         }
       }
       await run('INSERT INTO activity_log (user_id, username, role, action, entity, entity_id, details) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [user && user.userId || null, userName(user), user && user.role || null, 'DOCUMENT_IMPORT', 'import_document', String(id),
-          JSON.stringify({ file: d.file_name, category: p.category, vouchers: created.vouchers.map((x) => x.voucher_no), ledgers: created.ledgers.map((x) => x.name), parties: created.parties.length, items: created.items.length })]);
+          JSON.stringify({ file: d.file_name, category: p.category, vouchers: created.vouchers.map((x) => x.voucher_no), quotations: created.quotations.map((x) => x.quote_no), payments: created.payments.map((x) => x.voucher_no), ledgers: created.ledgers.map((x) => x.name), parties: created.parties.length, items: created.items.length })]);
     });
   }
   if (before) { // merge with the first import
@@ -697,11 +908,12 @@ async function commitOnce(id, settings = {}, user) {
   const importedNs = [...done, ...take.map((r) => String(r.n))];
   const t = (k) => r2(take.reduce((s, r) => s + (r.voucher ? r.voucher.lines.reduce((a, l) => a + (l[k] || 0), 0) : 0), 0));
   const totals = { debit: r2(((before && before.totals || {}).debit || 0) + t('debit')), credit: r2(((before && before.totals || {}).credit || 0) + t('credit')),
-    gst: r2(((before && before.totals || {}).gst || 0) + take.reduce((s, r) => s + (r.data ? (r.data.cgst || 0) + (r.data.sgst || 0) + (r.data.igst || 0) : 0), 0)) };
+    gst: r2(((before && before.totals || {}).gst || 0) + take.reduce((s, r) => s + (r.data && !r.quotation ? (r.data.cgst || 0) + (r.data.sgst || 0) + (r.data.igst || 0) : 0), 0)),
+    quotations: r2(((before && before.totals || {}).quotations || 0) + take.reduce((s, r) => s + (r.quotation ? r.quotation.total : 0), 0)) };
   const ex = JSON.parse(d.extraction);
   const result = { id, file_name: d.file_name, file_info: fileInfo(d, ex), category: p.category, category_label: p.category_label, kind: p.kind,
     records: p.records.length, valid: done.size + p.records.filter((r) => r.status === 'ok' && !done.has(String(r.n))).length, duplicates: p.records.filter((r) => r.status === 'duplicate' && !done.has(String(r.n))).length, imported: importedNs.length, imported_now: take.length, imported_ns: importedNs,
-    rejected: rejected.length, rejected_records: rejected, created, totals, summary: p.summary, verification: await verifySaved(created) };
+    rejected: rejected.length, rejected_records: rejected, created, totals, summary: p.summary, verification: await verifySaved({ vouchers: (created.vouchers || []).concat(created.payments || []) }) };
   await run('UPDATE import_documents SET status = ?, imported = ?, rejected = ?, result = ?, imported_by = ?, imported_at = CURRENT_TIMESTAMP, error = NULL WHERE id = ?',
     ['imported', importedNs.length, rejected.length, JSON.stringify(result), userName(user), id]);
   return result;

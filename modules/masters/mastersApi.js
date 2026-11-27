@@ -121,12 +121,47 @@ router.put('/ledgers/:id', async (req, res) => {
   }
 });
 
+// Delete a ledger: only one that was never used (no transactions, bills, opening balance, quotations, orders, bank statements,
+// budgets or recurring entries) and is not one the invoice / tax calculations rely on. A used ledger keeps its history: it is refused.
+router.delete('/ledgers/:id', async (req, res) => {
+  const id = parseInt(req.params.id, 10) || 0;
+  try {
+    const cur = await get(ledgerSelect, [id]);
+    if (!cur) return res.status(404).json({ success: false, error: 'Ledger not found' });
+    if (FIXED_NAME.test(cur.name)) return res.status(409).json({ success: false, error: `"${cur.name}" is used by the invoice and tax calculations and cannot be deleted.` });
+    if (Number(cur.opening_balance) > 0) return res.status(409).json({ success: false, error: `"${cur.name}" has an opening balance of ₹${cur.opening_balance} ${cur.opening_balance_type}. Set it to zero first (deleting it would unbalance the opening trial balance).` });
+    const uses = [['ledger_entries', 'ledger_id', 'transaction line'], ['bill_allocations', 'ledger_id', 'bill'], ['vouchers', 'party_ledger_id', 'voucher (as party)'], ['quotations', 'party_ledger_id', 'quotation'],
+      ['inv_orders', 'party_ledger_id', 'order'], ['bank_statement_lines', 'bank_ledger_id', 'bank statement line'], ['budgets', 'ledger_id', 'budget'], ['recurring_templates', 'party_ledger_id', 'recurring entry']];
+    const found = [];
+    for (const [t, c, label] of uses) {
+      const r = await get(`SELECT COUNT(*) AS n FROM ${t} WHERE ${c} = ?`, [id]).catch(() => ({ n: 0 })); // a table a company does not have yet
+      if (Number(r.n)) found.push(`${r.n} ${label}(s)`);
+    }
+    if (found.length) return res.status(409).json({ success: false, code: 'LEDGER_IN_USE', error: `"${cur.name}" is used by ${found.join(', ')}. A ledger with history cannot be deleted (its entries must stay in the books); leave it unused instead.` });
+    await require('../../core/tx').withTransaction(async () => {
+      await run('DELETE FROM party_profiles WHERE ledger_id = ?', [id]).catch(() => {});
+      await run('DELETE FROM ledgers WHERE id = ?', [id]);
+      const u = req.user || {};
+      await run('INSERT INTO activity_log (user_id, username, role, action, entity, entity_id, details, ip_address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        [u.userId || null, u.username || 'system', u.role || null, 'LEDGER_DELETE', 'ledger', String(id), JSON.stringify({ ledger: cur }), req.ip || null]);
+    });
+    res.json({ success: true, message: `Ledger '${cur.name}' deleted` });
+  } catch (err) {
+    res.status(/FOREIGN KEY|violates foreign key/i.test(String(err.message)) ? 409 : 500).json({ success: false, error: /FOREIGN KEY|violates foreign key/i.test(String(err.message)) ? 'This ledger is still referenced by other records and cannot be deleted.' : err.message });
+  }
+});
+
 router.post('/ledgers', async (req, res) => {
   try {
     const { name, group_id, opening_balance, opening_balance_type, gstin, pan, state, state_code, address, bank_account_no, bank_ifsc, description } = req.body;
-    if (!name || !group_id) {
+    if (!name || !String(name).trim() || !group_id) {
       return res.status(400).json({ success: false, error: 'Ledger name and group are required' });
     }
+    if (!(await get('SELECT id FROM account_groups WHERE id = ?', [parseInt(group_id, 10) || 0]))) return res.status(400).json({ success: false, error: 'Choose a valid group (Under).' });
+    if (await get('SELECT id FROM ledgers WHERE LOWER(name) = LOWER(?)', [String(name).trim()])) return res.status(409).json({ success: false, error: `A ledger named "${String(name).trim()}" already exists.` });
+    const ob0 = opening_balance == null || opening_balance === '' ? 0 : parseFloat(opening_balance);
+    if (!Number.isFinite(ob0) || ob0 < 0) return res.status(400).json({ success: false, error: 'Opening balance must be zero or more (choose Dr or Cr for its side).' });
+    if (opening_balance_type && !['Dr', 'Cr'].includes(opening_balance_type)) return res.status(400).json({ success: false, error: 'Opening balance side must be Dr or Cr.' });
 
     const result = await run(
       `INSERT INTO ledgers (name, group_id, opening_balance, opening_balance_type, gstin, pan, state, state_code, address, bank_account_no, bank_ifsc, description)

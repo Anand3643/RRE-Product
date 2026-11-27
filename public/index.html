@@ -143,7 +143,7 @@
       </div>
 
       <div class="flex items-center space-x-4 text-[11px] text-slate-300">
-        <div>Period: <strong class="text-white font-mono">1-Apr-26 to 31-Mar-27</strong></div>
+        <div>Period: <strong class="text-white font-mono" id="top-period">1-Apr-2026 to 31-Mar-2027</strong></div>
         <div>Date: <strong class="text-amber-300 font-mono cursor-pointer hover:underline"
             onclick="openChangeDateModal()" id="top-current-date">1-Jun-2026 (F2)</strong></div>
         <button onclick="toggleAiWorkspaceView()" id="btn-ai-view-toggle"
@@ -2301,6 +2301,7 @@
           </div>
         </div>
         <div class="pt-3 border-t border-slate-200 flex justify-end space-x-2">
+          <button type="button" id="m-ledger-delete" onclick="deleteEditingLedger()" class="hidden mr-auto px-3 py-1.5 border border-red-300 text-red-700 rounded font-semibold hover:bg-red-50">Delete ledger</button>
           <button type="button" onclick="closeModal('createLedgerModal')"
             class="px-3 py-1.5 border border-slate-300 rounded font-semibold text-slate-600">Cancel</button>
           <button type="submit" id="m-ledger-submit" class="px-4 py-1.5 bg-[#1f3a52] text-white rounded font-bold hover:bg-[#162a3b]">Save

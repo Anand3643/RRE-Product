@@ -168,7 +168,8 @@ reportCenterRouter.get('/:id', async (req, res) => {
     const filters = {
       from_date: req.query.from_date || '',
       to_date: req.query.to_date || '',
-      status: req.query.status || ''
+      status: req.query.status || '',
+      ledger_id: req.query.ledger_id || ''
     };
     const report = await buildReport(req.params.id, filters);
     if (!report) return res.status(404).json({ success: false, error: 'Unknown report' });
