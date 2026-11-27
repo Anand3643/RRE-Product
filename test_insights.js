@@ -155,8 +155,12 @@ async function main() {
   await run('DELETE FROM recurring_drafts'); await run("UPDATE recurring_templates SET next_due = '2026-10-01', is_active = 1");
   const f = await ins.cashflowForecast(AS, { days: 30 });
   const cashNow = (await ins.cashPosition(AS)).total;
-  const independent = r2(1325000 - (20000 * 9 + 30000 * 9 + 30000 + 8000) + 20000);
-  assert(f.opening_balance === cashNow && near(cashNow, independent), `Opening cash = ₹${cashNow} (opening balances − expense payments + the ₹20,000 receipt)`, `${cashNow} vs ${independent}`);
+  // the opening balances of the cash / bank ledgers come from THIS copy of the data (they change whenever someone adds or alters a
+  // bank or cash ledger), added up here independently of the insights engine: Dr positive, Cr negative
+  const openingCash = r2((await get(`SELECT COALESCE(SUM(CASE WHEN l.opening_balance_type = 'Cr' THEN -l.opening_balance ELSE l.opening_balance END), 0) AS s
+    FROM ledgers l JOIN account_groups g ON g.id = l.group_id WHERE g.name IN ('Cash-in-hand', 'Bank Accounts', 'Bank OD A/c')`)).s);
+  const independent = r2(openingCash - (20000 * 9 + 30000 * 9 + 30000 + 8000) + 20000);
+  assert(f.opening_balance === cashNow && near(cashNow, independent), `Opening cash = ₹${cashNow} (opening balances ₹${openingCash} − expense payments + the ₹20,000 receipt)`, `${cashNow} vs ${independent}`);
   const items = f.weeks.flatMap((w) => w.items);
   const find = (re) => items.find((i) => re.test(i.label));
   assert(find(/F-1/)?.amount === 95000 && find(/F-1/).date === '2026-10-05', 'F-1 (₹1,00,000, due 25 Sep): Chennai usually pays 10 days late => 5 Oct, 95% likely = ₹95,000', JSON.stringify(find(/F-1/)));
