@@ -75,7 +75,12 @@
 
   async function preview() {
     const f = $('bk2-file').files[0];
-    if (!f) return say('bk2-imp-msg', 'Choose a CSV file first (Excel: File → Save As → CSV).', 'text-red-700');
+    if (!f) return say('bk2-imp-msg', 'Choose a CSV, Excel or PDF file first.', 'text-red-700');
+    if (!/\.csv$/i.test(f.name) && window.RREDocImport) { // Excel / PDF: read by Import Documents (same checks, preview, then import)
+      $('bk2-file').value = '';
+      if (typeof closeModal === 'function') document.querySelectorAll('.modal-backdrop:not(.hidden)').forEach((m) => m.id && closeModal(m.id));
+      return window.RREDocImport.importFiles([f], { settings: { category: 'transactions' } });
+    }
     if (f.size > 8 * 1024 * 1024) return say('bk2-imp-msg', 'File is larger than 8 MB.', 'text-red-700');
     say('bk2-imp-msg', 'Checking the file…');
     try {
@@ -147,7 +152,7 @@
       <div class="text-[10px] text-slate-500">One row per ledger line; rows with the same <code>voucher_ref</code> form one voucher. The file is checked first and nothing is posted until you press "Post to books".</div>
       <div class="flex flex-wrap items-center gap-2">
         <button type="button" id="bk2-tpl" class="px-2 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded font-bold">Download template</button>
-        <input id="bk2-file" type="file" accept=".csv,text/csv" class="text-[11px]">
+        <input id="bk2-file" type="file" accept=".csv,text/csv,.xlsx,.xls,.pdf" class="text-[11px]">
         <button type="button" id="bk2-prev" class="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold">Check file</button>
       </div>
       <div id="bk2-imp-msg" class="text-[10px] text-slate-500"></div>

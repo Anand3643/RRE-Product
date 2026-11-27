@@ -361,7 +361,8 @@ async function evaluate(docRow, extraction, settings = {}) {
   const unknown = new Map();                            // name -> { suggested group, used by }
   const resolve = (name, gstin, suggest) => {
     const m = map[name];
-    if (m && /^create:\d+$/.test(String(m))) return { create: true, group_id: parseInt(String(m).slice(7), 10), name };
+    // "create it" chosen earlier, but the ledger exists by now (created by an earlier import of this file): it is that ledger
+    if (m && /^create:\d+$/.test(String(m))) return idx.find(name, gstin) || { create: true, group_id: parseInt(String(m).slice(7), 10), name };
     if (m && /^\d+$/.test(String(m))) { const l = idx.rows.find((x) => x.id === parseInt(m, 10)); if (l) return l; }
     const l = idx.find(name, gstin);
     if (l) return l;
@@ -578,6 +579,13 @@ async function addOcrPage(id, page, imageBuffer) {
   return { page, pages: ex.doc.pages, done, confidence: Math.round(r.confidence || 0), classification: done >= ex.doc.pages ? ex.classification : null };
 }
 
+/** what was read from the file: type, pages / sheets, rows */
+function fileInfo(d, ex) {
+  const sheets = (ex.doc.sheets || []).filter(Boolean);
+  return { kind: d.kind, size: d.size, pages: ex.doc.pages || null, sheets: d.kind === 'pdf' || d.kind === 'image' ? [] : sheets.map((s) => s.name),
+    rows: sheets.reduce((t, s) => t + (s.rows || []).filter((r) => (r || []).some((c) => c !== '' && c != null)).length, 0), ocr_confidence: ex.doc.ocr_confidence || null, truncated: !!ex.doc.truncated };
+}
+
 async function preview(id, settings = {}) {
   const d = await loadDoc(id);
   if (d.status === 'needs_ocr') throw bad(409, 'The scanned pages are still being read (OCR).');
@@ -586,19 +594,29 @@ async function preview(id, settings = {}) {
   const p = await evaluate(d, ex, merged);
   await run('UPDATE import_documents SET settings = ?, category = ?, detected = ? WHERE id = ?', [JSON.stringify(merged), p.category, p.records.length, id]);
   const prior = await get("SELECT id, imported_at FROM import_documents WHERE sha256 = ? AND status = 'imported' AND id <> ? ORDER BY id DESC LIMIT 1", [d.sha256, id]);
-  return { id: d.id, file_name: d.file_name, kind: d.kind, status: d.status, classification: ex.classification, warnings: ex.doc.warnings || [], already_imported: prior ? { id: prior.id, at: prior.imported_at } : null,
+  return { id: d.id, file_name: d.file_name, kind: d.kind, status: d.status, file_info: fileInfo(d, ex), classification: ex.classification, warnings: ex.doc.warnings || [], already_imported: prior ? { id: prior.id, at: prior.imported_at } : null,
     categories: Object.entries(CATEGORIES).map(([k, v]) => ({ id: k, label: v.label, kind: v.kind })), settings: merged, ...p };
 }
 
+const committing = new Set(); // one import at a time per document (a double click waits for nothing: it is refused)
 async function commit(id, settings = {}, user) {
+  const key = `${require('./db').getCompanyNumber()}:${id}`;
+  if (committing.has(key)) throw bad(409, 'This document is being imported right now.');
+  committing.add(key);
+  try { return await commitOnce(id, settings, user); } finally { committing.delete(key); }
+}
+async function commitOnce(id, settings = {}, user) {
   const d = await loadDoc(id);
-  if (d.status === 'imported') return { ...JSON.parse(d.result || '{}'), replayed: true }; // retry / second click: the first result
+  const before = d.status === 'imported' ? JSON.parse(d.result || '{}') : null;
+  // a retry / second click returns the first result; "continue" imports the rows corrected after the first import
+  if (before && !settings.continue) return { ...before, replayed: true };
+  const done = new Set((before && before.imported_ns || []).map(String));
   const p = await preview(id, settings);
   if (!p.category) throw bad(400, 'Choose what kind of document this is.');
   if (p.kind === 'report') throw bad(400, `A ${p.category_label.split(' (')[0].toLowerCase()} is a report: it is compared with the books and never turned into vouchers.`);
   const only = Array.isArray(settings.only) ? new Set(settings.only.map(String)) : null; // the records the person kept (default: every valid one)
-  const take = p.records.filter((r) => r.status === 'ok' && (!only || only.has(String(r.n))));
-  const rejected = p.records.filter((r) => !take.includes(r)).map((r) => ({ n: r.n, row: r.row, status: r.status, reason: r.errors.concat(r.warnings).join('; ') || (only && !only.has(String(r.n)) ? 'left out by you' : '') }));
+  const take = p.records.filter((r) => r.status === 'ok' && !done.has(String(r.n)) && (!only || only.has(String(r.n))));
+  const rejected = p.records.filter((r) => !take.includes(r) && !done.has(String(r.n))).map((r) => ({ n: r.n, row: r.row, status: r.status, reason: r.errors.concat(r.warnings).join('; ') || (only && !only.has(String(r.n)) ? 'left out by you' : '') }));
   if (!take.length) throw bad(400, 'Nothing to import: no valid record is selected.', { preview: p });
   // the role may post these voucher types?
   const perms = require('./db').getRolePermissions((user && user.role) || 'Owner');
@@ -672,10 +690,45 @@ async function commit(id, settings = {}, user) {
           JSON.stringify({ file: d.file_name, category: p.category, vouchers: created.vouchers.map((x) => x.voucher_no), ledgers: created.ledgers.map((x) => x.name), parties: created.parties.length, items: created.items.length })]);
     });
   }
-  const result = { id, file_name: d.file_name, category: p.category, category_label: p.category_label, imported: take.length, rejected: rejected.length, rejected_records: rejected, created, summary: p.summary };
+  if (before) { // merge with the first import
+    for (const k of ['vouchers', 'ledgers', 'parties', 'items']) created[k] = (before.created && before.created[k] || []).concat(created[k]);
+    if (!created.bank_import && before.created) created.bank_import = before.created.bank_import;
+  }
+  const importedNs = [...done, ...take.map((r) => String(r.n))];
+  const t = (k) => r2(take.reduce((s, r) => s + (r.voucher ? r.voucher.lines.reduce((a, l) => a + (l[k] || 0), 0) : 0), 0));
+  const totals = { debit: r2(((before && before.totals || {}).debit || 0) + t('debit')), credit: r2(((before && before.totals || {}).credit || 0) + t('credit')),
+    gst: r2(((before && before.totals || {}).gst || 0) + take.reduce((s, r) => s + (r.data ? (r.data.cgst || 0) + (r.data.sgst || 0) + (r.data.igst || 0) : 0), 0)) };
+  const ex = JSON.parse(d.extraction);
+  const result = { id, file_name: d.file_name, file_info: fileInfo(d, ex), category: p.category, category_label: p.category_label, kind: p.kind,
+    records: p.records.length, valid: done.size + p.records.filter((r) => r.status === 'ok' && !done.has(String(r.n))).length, duplicates: p.records.filter((r) => r.status === 'duplicate' && !done.has(String(r.n))).length, imported: importedNs.length, imported_now: take.length, imported_ns: importedNs,
+    rejected: rejected.length, rejected_records: rejected, created, totals, summary: p.summary, verification: await verifySaved(created) };
   await run('UPDATE import_documents SET status = ?, imported = ?, rejected = ?, result = ?, imported_by = ?, imported_at = CURRENT_TIMESTAMP, error = NULL WHERE id = ?',
-    ['imported', take.length, rejected.length, JSON.stringify(result), userName(user), id]);
+    ['imported', importedNs.length, rejected.length, JSON.stringify(result), userName(user), id]);
   return result;
+}
+
+/** read back what the import saved: every voucher is in the books (and so in the Day Book), Dr = Cr, the closing balance of each ledger it touched */
+async function verifySaved(created) {
+  const ids = (created.vouchers || []).map((v) => v.id);
+  const out = { vouchers_expected: ids.length, vouchers_found: 0, balanced: true, dates: [], ledgers: [] };
+  if (!ids.length) return out;
+  const touched = new Set();
+  for (let i = 0; i < ids.length; i += 200) {
+    const chunk = ids.slice(i, i + 200), q = chunk.map(() => '?').join(',');
+    const vs = await all(`SELECT v.id, v.date, COALESCE(SUM(e.debit_amount), 0) AS dr, COALESCE(SUM(e.credit_amount), 0) AS cr FROM vouchers v LEFT JOIN ledger_entries e ON e.voucher_id = v.id WHERE v.id IN (${q}) GROUP BY v.id, v.date`, chunk);
+    out.vouchers_found += vs.length;
+    for (const v of vs) { if (Math.abs(Number(v.dr) - Number(v.cr)) > 0.005) out.balanced = false; if (!out.dates.includes(v.date)) out.dates.push(v.date); }
+    for (const e of await all(`SELECT DISTINCT ledger_id FROM ledger_entries WHERE voucher_id IN (${q})`, chunk)) touched.add(Number(e.ledger_id));
+  }
+  out.dates.sort();
+  for (const lid of [...touched].slice(0, 60)) {
+    const l = await get(`SELECT l.id, l.name, l.opening_balance, l.opening_balance_type, COALESCE((SELECT SUM(debit_amount) - SUM(credit_amount) FROM ledger_entries WHERE ledger_id = l.id), 0) AS net FROM ledgers l WHERE l.id = ?`, [lid]);
+    if (!l) continue;
+    const bal = r2((l.opening_balance_type === 'Cr' ? -1 : 1) * (Number(l.opening_balance) || 0) + Number(l.net));
+    out.ledgers.push({ id: l.id, name: l.name, closing: Math.abs(bal), type: bal < 0 ? 'Cr' : 'Dr' });
+  }
+  out.ledgers.sort((a, b) => a.name.localeCompare(b.name));
+  return out;
 }
 
 async function history({ limit = 200 } = {}) {

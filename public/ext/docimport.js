@@ -54,20 +54,49 @@
     }
   }
 
-  async function addFiles(list) {
+  // the stages a document goes through; each is todo | run | done | wait (needs the person) | fail
+  const STAGES = [['uploaded', 'File uploaded'], ['reading', 'Reading'], ['extracting', 'Extracting'], ['identifying', 'Identifying'], ['validating', 'Validating'], ['saving', 'Saving'], ['updating', 'Updating modules'], ['completed', 'Completed']];
+  const stage = (entry, k, state, note) => { entry.stages[k] = state; if (note != null) entry.status = note; renderList(); if (active === entry) renderStages(entry); };
+  const failStage = (entry, msg) => { const k = (STAGES.find(([s]) => entry.stages[s] === 'run') || [])[0]; if (k) entry.stages[k] = 'fail'; entry.error = msg; entry.status = 'Failed'; };
+
+  async function addFiles(list, opts = {}) {
     for (const file of list) {
-      const entry = { key: Math.random().toString(36).slice(2), file, status: 'Waiting…', progress: 0, settings: {} };
-      files.unshift(entry); renderList();
+      const entry = { key: Math.random().toString(36).slice(2), file, status: 'Waiting…', progress: 0, settings: { ...(opts.settings || {}) }, stages: {} };
+      files.unshift(entry); active = entry; renderList(); renderReview();
       try {
+        stage(entry, 'uploaded', 'run', 'Uploading…');
         entry.info = await uploadFile(entry); entry.id = entry.info.id;
-        if (entry.info.needs_ocr) { if (/\.pdf$/i.test(file.name)) await ocrPages(entry); }
-        entry.status = 'Reading the records…'; renderList();
-        entry.preview = await api(`/${entry.id}/preview`); entry.status = 'Ready to review';
-        if (!active) active = entry;
-      } catch (e) { entry.error = e.message; entry.status = 'Failed'; }
+        stage(entry, 'uploaded', 'done'); stage(entry, 'reading', 'run', 'Reading the file…');
+        if (entry.info.needs_ocr) {
+          if (!/\.pdf$/i.test(file.name)) throw new Error('This image has no readable text.');
+          await ocrPages(entry);
+        }
+        stage(entry, 'reading', 'done'); stage(entry, 'extracting', 'run', 'Extracting the records…');
+        entry.preview = await api(`/${entry.id}/preview`, { method: 'POST', body: JSON.stringify({ settings: entry.settings }) });
+        markChecked(entry);
+      } catch (e) { failStage(entry, e.message); }
       renderList(); renderReview();
     }
   }
+  /** after a preview: extracting / identifying / validating are done, or wait for the person (type not recognised, nothing valid) */
+  function markChecked(entry) {
+    const p = entry.preview, s = p.summary || {};
+    entry.stages.extracting = 'done';
+    entry.stages.identifying = p.category ? 'done' : 'wait';
+    entry.stages.validating = !p.category ? 'todo' : 'done';
+    entry.status = !p.category ? 'Choose what kind of document this is'
+      : p.kind === 'report' ? `Report compared with the books (${s.differences || 0} difference(s))`
+      : s.valid ? `${s.valid} valid of ${s.records} — review and Import` : `${s.records || 0} record(s), none valid yet — correct them`;
+    if (p.category && p.kind !== 'report') entry.stages.saving = 'wait';
+    if (p.kind === 'report') { entry.stages.saving = 'skip'; entry.stages.updating = 'skip'; entry.stages.completed = 'done'; } // a report is never saved as vouchers
+  }
+  const STAGE_STYLE = { done: 'bg-emerald-600 text-white border-emerald-600', run: 'bg-indigo-600 text-white border-indigo-600 animate-pulse', wait: 'bg-amber-100 text-amber-900 border-amber-400', fail: 'bg-red-600 text-white border-red-600', skip: 'bg-slate-100 text-slate-400 border-slate-200 line-through', todo: 'bg-white text-slate-400 border-slate-300' };
+  const STAGE_MARK = { done: '✓', run: '…', wait: '!', fail: '✕', skip: '–', todo: '' };
+  function stagesHtml(entry, small) {
+    return `<div class="flex flex-wrap gap-1 ${small ? 'mt-1' : ''}" data-stages="${entry.key}">${STAGES.map(([k, label]) => { const st = entry.stages[k] || 'todo';
+      return `<span title="${label}: ${st}" class="inline-flex items-center gap-0.5 border rounded-full ${small ? 'px-1 text-[9px]' : 'px-2 py-0.5 text-[10px]'} font-bold ${STAGE_STYLE[st]}">${STAGE_MARK[st] ? STAGE_MARK[st] + ' ' : ''}${small ? label.split(' ')[0] : label}</span>`; }).join('')}</div>`;
+  }
+  function renderStages(entry) { const el = document.querySelector(`#di-review [data-stages="${entry.key}"]`); if (el) el.outerHTML = stagesHtml(entry); }
 
   // ---------------------------------------------------------------------------------------------------------------- rendering
   const STATUS_CLASS = { ok: 'bg-emerald-100 text-emerald-800', error: 'bg-red-100 text-red-800', duplicate: 'bg-amber-100 text-amber-800', exists: 'bg-slate-200 text-slate-700', reference: 'bg-indigo-100 text-indigo-800' };
@@ -79,6 +108,7 @@
       <div class="text-[11px] ${f.error ? 'text-red-700' : 'text-slate-600'} mt-0.5">${esc(f.error || f.status)}</div>
       ${f.preview ? `<div class="text-[10px] text-slate-500 mt-0.5">${esc(f.preview.category_label || 'type not recognised')} · ${f.preview.summary.records || 0} record(s)</div>` : ''}
       ${f.progress && f.progress < 100 ? `<div class="h-1 bg-slate-200 rounded mt-1"><div class="h-1 bg-indigo-500 rounded" style="width:${f.progress}%"></div></div>` : ''}
+      ${f.stages ? stagesHtml(f, true) : ''}
     </button>`).join('') : '<div class="text-slate-400 text-xs p-2">No documents yet.</div>';
     box.querySelectorAll('.di-file').forEach((b) => b.addEventListener('click', () => { active = files.find((f) => f.key === b.dataset.key); renderList(); renderReview(); }));
   }
@@ -99,14 +129,18 @@
     const box = $('#di-review'); if (!box) return;
     const f = active;
     if (!f) { box.innerHTML = '<div class="text-slate-500 text-sm p-6 text-center">Upload a PDF, Excel, CSV or scanned document to see what was found in it.</div>'; return; }
-    if (f.result) { box.innerHTML = resultHtml(f); bindResult(f); return; }
-    if (!f.preview) { box.innerHTML = `<div class="p-6 text-sm ${f.error ? 'text-red-700' : 'text-slate-600'}">${esc(f.error || f.status)}</div>`; return; }
-    const p = f.preview, s = p.summary || {}, cols = colsFor(p), canImport = p.kind !== 'report' && s.valid > 0;
+    if (f.result && !f.correcting) { box.innerHTML = headHtml(f) + resultHtml(f); bindResult(f); return; }
+    if (!f.preview) { box.innerHTML = `${headHtml(f)}${f.error ? '' : `<div class="p-6 text-sm text-slate-600">${esc(f.status)}</div>`}`; return; }
+    const p = f.preview, s = p.summary || {}, cols = colsFor(p);
+    const doneNs = new Set(((f.result && f.result.imported_ns) || []).map(String)); // correcting after an import: those are in the books already
+    if (doneNs.size) p.records = p.records.filter((r) => !doneNs.has(String(r.n)));
+    const canImport = p.kind !== 'report' && p.records.some((r) => r.status === 'ok');
     // the records the person UNticked are remembered (a record that becomes valid after a correction is ticked by default)
     const excluded = new Set((f.settings.excluded || []).map(String));
     const only = new Set(p.records.filter((r) => r.status === 'ok' && !excluded.has(String(r.n))).map((r) => String(r.n)));
-    box.innerHTML = `
+    box.innerHTML = `${headHtml(f)}
       <div class="space-y-3">
+        ${f.correcting ? `<div class="p-2 rounded bg-indigo-50 border border-indigo-200 text-indigo-900 text-xs flex flex-wrap items-center gap-2"><b>Correcting the rows that were not imported.</b> The ${doneNs.size} record(s) already imported are hidden and are not imported again. Click a value to fix it, Re-check, then Import.<button type="button" id="di-cancel-fix" class="ml-auto px-2 py-0.5 rounded border border-indigo-300 bg-white font-bold">Back to the result</button></div>` : ''}
         <div class="flex flex-wrap items-end gap-2">
           <label class="flex flex-col gap-0.5 text-xs"><span class="font-bold text-slate-700">This document is a</span>
             <select id="di-cat" class="border border-slate-300 rounded p-1.5 bg-white font-semibold">${!p.category ? '<option value="">-- choose --</option>' : ''}${p.categories.map((c) => `<option value="${c.id}" ${c.id === p.category ? 'selected' : ''}>${esc(c.label)}</option>`).join('')}</select></label>
@@ -150,6 +184,23 @@
     bindReview(f);
   }
 
+  const KIND_LABEL = { pdf: 'PDF', excel: 'Excel workbook', xls: 'Excel 97-2003 workbook', csv: 'CSV', image: 'Image' };
+  /** file name, type, pages / sheets, rows read, and the processing stages */
+  function headHtml(f) {
+    const fi = (f.preview && f.preview.file_info) || (f.result && f.result.file_info) || (f.info ? { kind: f.info.kind, pages: f.info.pages } : null);
+    const bits = [];
+    if (fi) {
+      bits.push(`<span>Type <b>${esc(KIND_LABEL[fi.kind] || fi.kind || '?')}</b></span>`);
+      if (fi.pages && fi.kind === 'pdf') bits.push(`<span><b>${fi.pages}</b> page(s)</span>`);
+      if (fi.sheets && fi.sheets.length) bits.push(`<span><b>${fi.sheets.length}</b> sheet(s): ${esc(fi.sheets.join(', '))}</span>`);
+      if (fi.rows != null) bits.push(`<span><b>${fi.rows}</b> row(s) read</span>`);
+      if (fi.ocr_confidence) bits.push(`<span>OCR confidence <b>${fi.ocr_confidence}%</b></span>`);
+      if (fi.truncated) bits.push('<span class="text-red-700">File too long: only the first part was read</span>');
+    }
+    return `<div class="mb-3 space-y-1.5"><div class="text-xs text-slate-700 leading-relaxed"><span class="font-bold text-slate-900 text-sm">${esc(f.file.name)}</span>${[`<span class="text-slate-500">${(f.file.size / 1024).toFixed(0)} KB</span>`].concat(bits).map((x) => `<span class="text-slate-400"> &nbsp;·&nbsp; </span>${x}`).join('')}</div>
+      ${f.stages ? stagesHtml(f) : ''}${f.error ? `<div class="p-2 rounded bg-red-50 border border-red-200 text-red-800 text-xs font-semibold">${esc(f.error)}</div>` : ''}</div>`;
+  }
+
   function settingsHtml(f) {
     const p = f.preview, st = f.settings, d = p.defaults || {};
     const of = (g) => ledgers.filter((l) => g.includes(l.group_name));
@@ -187,7 +238,7 @@
   async function recheck(f) {
     collect(f);
     const busy = $('#di-busy'); if (busy) busy.textContent = 'Checking…';
-    try { f.preview = await api(`/${f.id}/preview`, { method: 'POST', body: JSON.stringify({ settings: f.settings }) }); }
+    try { f.preview = await api(`/${f.id}/preview`, { method: 'POST', body: JSON.stringify({ settings: f.settings }) }); if (f.stages) markChecked(f); }
     catch (e) { alert(e.message); }
     renderList(); renderReview();
   }
@@ -212,25 +263,62 @@
       if (!n) { alert('Tick at least one valid record to import.'); return; }
       if (!confirm(`Import ${n} record(s) from "${f.file.name}" into your books now?\n\nThey are saved together: if any one fails, none is saved.`)) return;
       imp.disabled = true; $('#di-busy').textContent = 'Importing…';
-      try { f.result = await api(`/${f.id}/commit`, { method: 'POST', body: JSON.stringify({ settings: f.settings }) }); f.status = `Imported ${f.result.imported} record(s)`; }
-      catch (e) { alert(`Nothing was imported: ${e.message}`); imp.disabled = false; $('#di-busy').textContent = ''; return; }
+      if (!f.stages) f.stages = {};
+      stage(f, 'saving', 'run', 'Saving…');
+      try {
+        f.result = await api(`/${f.id}/commit`, { method: 'POST', body: JSON.stringify({ settings: { ...f.settings, continue: !!f.correcting } }) });
+      } catch (e) {
+        stage(f, 'saving', 'wait', 'Nothing was imported');
+        alert(`Nothing was imported: ${e.message}`); imp.disabled = false; $('#di-busy').textContent = ''; return;
+      }
+      f.correcting = false;
+      stage(f, 'saving', 'done'); stage(f, 'updating', 'run', 'Updating the books…');
+      await updateModules(f);
       renderList(); renderReview();
-      if (typeof loadMasters === 'function') loadMasters();
     });
+    const back = $('#di-cancel-fix', box); if (back) back.addEventListener('click', () => { f.correcting = false; renderReview(); });
+  }
+  /** after saving: refresh the screens that show the new data (ledger lists, Day Book, dashboard) and confirm the server read it all back */
+  async function updateModules(f) {
+    try { if (typeof loadMasters === 'function') await loadMasters(); } catch (e) { /* the lists refresh on the next visit */ }
+    try { if (typeof loadGatewayInfo === 'function') loadGatewayInfo(); if (typeof loadDashboard === 'function') loadDashboard(); } catch (e) { /* ignore */ }
+    try { window.dispatchEvent(new CustomEvent('rre:data-changed', { detail: { source: 'doc-import', id: f.id } })); } catch (e) { /* ignore */ }
+    const v = f.result.verification || {};
+    const ok = (v.vouchers_found || 0) === (v.vouchers_expected || 0) && v.balanced !== false;
+    stage(f, 'updating', ok ? 'done' : 'fail');
+    stage(f, 'completed', ok ? 'done' : 'fail', ok ? `Imported ${f.result.imported} record(s)` : 'Saved, but the check found a problem');
   }
   function resultHtml(f) {
-    const r = f.result, c = r.created || {};
+    const r = f.result, c = r.created || {}, t = r.totals || {}, v = r.verification || null;
+    const stat = (label, val, cls = '') => `<div class="border border-slate-200 rounded p-2 bg-white"><div class="text-[10px] uppercase tracking-wide text-slate-500">${label}</div><div class="font-bold text-sm font-mono ${cls}">${val}</div></div>`;
     return `<div class="space-y-3 text-xs">
       <div class="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm font-semibold">${r.replayed ? 'Already imported earlier: ' : ''}${r.imported} record(s) imported from ${esc(r.file_name)} (${esc(r.category_label)}). ${r.rejected ? `${r.rejected} not imported (reasons below).` : ''}</div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+        ${stat('Records found', r.records != null ? r.records : (r.summary || {}).records || 0)}${stat('Valid', r.valid != null ? r.valid : (r.summary || {}).valid || 0, 'text-emerald-700')}
+        ${stat('Imported', r.imported, 'text-emerald-700')}${stat('Duplicates', r.duplicates != null ? r.duplicates : (r.summary || {}).duplicates || 0, 'text-amber-700')}${stat('Rejected', r.rejected || 0, r.rejected ? 'text-red-700' : '')}
+        ${stat('Total Dr', money(t.debit || 0))}${stat('Total Cr', money(t.credit || 0))}${stat('GST', money(t.gst || 0))}
+      </div>
+      ${v && v.vouchers_expected ? `<div class="p-2 rounded border ${v.vouchers_found === v.vouchers_expected && v.balanced ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-red-200 bg-red-50 text-red-800'}">
+        <b>Checked in the books:</b> ${v.vouchers_found} of ${v.vouchers_expected} voucher(s) found, ${v.balanced ? 'every one balanced (Dr = Cr)' : '<b>a voucher is not balanced</b>'}; Day Book date(s): ${esc((v.dates || []).slice(0, 6).join(', '))}${(v.dates || []).length > 6 ? '…' : ''}.
+        ${v.ledgers && v.ledgers.length ? `<div class="mt-1">${v.ledgers.map((l) => `<span class="whitespace-nowrap">${esc(l.name)}: <b class="font-mono">${money(l.closing)} ${l.type}</b></span>`).join('<span class="text-slate-400"> &nbsp;·&nbsp; </span>')}</div><div class="text-[10px] text-slate-500 mt-0.5">Closing balances of the ledgers these vouchers touched, read back after saving.</div>` : ''}</div>` : ''}
       ${c.vouchers && c.vouchers.length ? `<div><div class="font-bold text-slate-700 mb-1">Vouchers posted (they are in the Day Book, ledgers, GST and reports)</div><div class="flex flex-wrap gap-1.5">${c.vouchers.slice(0, 300).map((v) => `<button type="button" class="di-v px-2 py-0.5 rounded border border-slate-300 bg-white hover:bg-indigo-50 font-mono" data-id="${v.id}">${esc(v.voucher_type)} ${esc(v.voucher_no)} · ${money(v.total)}</button>`).join('')}</div></div>` : ''}
       ${c.ledgers && c.ledgers.length ? `<div>New ledgers: ${c.ledgers.map((l) => `${esc(l.name)} (${esc(l.group)})`).join(', ')}</div>` : ''}
       ${c.parties && c.parties.length ? `<div>Customers / suppliers created: ${c.parties.length}</div>` : ''}${c.items && c.items.length ? `<div>Stock items created: ${c.items.length}</div>` : ''}
       ${c.bank_import ? '<div>The statement lines are in Banking > Bank Reconciliation, ready to match.</div>' : ''}
       ${r.rejected_records && r.rejected_records.length ? `<div><div class="font-bold text-slate-700 mb-1">Not imported</div>${r.rejected_records.map((x) => `<div>${x.row ? 'Row ' + x.row : '#' + x.n}: <span class="text-red-700">${esc(x.reason || x.status)}</span></div>`).join('')}</div>` : ''}
-      <div class="flex gap-2"><button type="button" id="di-daybook" class="px-3 py-1.5 rounded bg-indigo-600 text-white font-bold">Open the Day Book</button><button type="button" id="di-history-btn" class="px-3 py-1.5 rounded border border-slate-300 bg-white font-bold">Import History</button></div></div>`;
+      <div class="flex flex-wrap gap-2">${r.rejected && f.id ? '<button type="button" id="di-fix" class="px-3 py-1.5 rounded bg-amber-500 hover:bg-amber-600 text-slate-900 font-bold">Correct the rejected rows</button>' : ''}<button type="button" id="di-daybook" class="px-3 py-1.5 rounded bg-indigo-600 text-white font-bold">Open the Day Book</button><button type="button" id="di-history-btn" class="px-3 py-1.5 rounded border border-slate-300 bg-white font-bold">Import History</button></div></div>`;
   }
-  function bindResult() {
+  function bindResult(f) {
     const box = $('#di-review');
+    const fix = $('#di-fix', box);
+    if (fix) fix.addEventListener('click', async () => {
+      fix.disabled = true; fix.textContent = 'Loading the rows…';
+      try {
+        f.settings = { ...((f.preview && f.preview.settings) || f.settings || {}) }; delete f.settings.only; delete f.settings.excluded;
+        f.preview = await api(`/${f.id}/preview`, { method: 'POST', body: JSON.stringify({ settings: f.settings }) });
+        f.correcting = true; renderReview();
+      } catch (e) { alert(e.message); fix.disabled = false; fix.textContent = 'Correct the rejected rows'; }
+    });
     box.querySelectorAll('.di-v').forEach((b) => b.addEventListener('click', () => { if (typeof viewVoucherDetail === 'function') viewVoucherDetail(parseInt(b.dataset.id, 10)); }));
     const d = $('#di-daybook', box); if (d) d.addEventListener('click', () => openReport('daybook'));
     const h = $('#di-history-btn', box); if (h) h.addEventListener('click', () => tab('history'));
@@ -316,6 +404,33 @@
     } catch (e) { /* lists stay empty; the preview still works */ }
     renderList(); renderReview();
   }
+  /** the other places that take a file (AI Document Parser, bulk voucher import, bank statement import) hand PDF / Excel here */
+  async function importFiles(list, opts = {}) {
+    const arr = [...(list || [])].filter(Boolean);
+    if (!arr.length) return;
+    await openDocImport();
+    await addFiles(arr, opts);
+  }
   window.openDocImport = openDocImport;
-  window.RREDocImport = { open: openDocImport, _files: files };
+  window.RREDocImport = { open: openDocImport, importFiles, _files: files };
+
+  // AI Invoice / Bill Document Parser (Parse Invoice button, Alt+I): it only took pasted text; give it a real file upload
+  function injectParserUpload() {
+    const modal = document.getElementById('aiDocParserModal');
+    if (!modal || document.getElementById('di-parser-upload')) return;
+    const body = modal.querySelector('.p-5'); if (!body) return;
+    const block = document.createElement('label');
+    block.id = 'di-parser-upload';
+    block.className = 'block border-2 border-dashed border-indigo-400 rounded-lg p-3 bg-indigo-50/60 cursor-pointer hover:bg-indigo-100/60 text-center';
+    block.innerHTML = `<input id="di-parser-file" type="file" class="hidden" multiple accept=".pdf,.xlsx,.xls,.csv,.png,.jpg,.jpeg">
+      <div class="font-bold text-indigo-900 text-sm">Upload a PDF, Excel or CSV file</div>
+      <div class="text-[11px] text-slate-600 mt-0.5">Invoices, bills, registers, Day Book, bank statements, ledgers, GST reports — or drop the file here. Multi-page PDFs, scanned PDFs and multi-sheet workbooks are read; you review every record before anything is saved.</div>`;
+    body.insertBefore(block, body.firstChild);
+    const pick = (list) => { if (!list || !list.length) return; if (typeof closeModal === 'function') closeModal('aiDocParserModal'); importFiles(list); };
+    block.querySelector('input').addEventListener('change', (e) => { const l = [...e.target.files]; e.target.value = ''; pick(l); });
+    ['dragenter', 'dragover'].forEach((ev) => block.addEventListener(ev, (e) => { e.preventDefault(); block.classList.add('border-indigo-600'); }));
+    ['dragleave', 'drop'].forEach((ev) => block.addEventListener(ev, (e) => { e.preventDefault(); block.classList.remove('border-indigo-600'); }));
+    block.addEventListener('drop', (e) => pick([...(e.dataTransfer && e.dataTransfer.files || [])]));
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', injectParserUpload); else injectParserUpload();
 })();

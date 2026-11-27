@@ -146,7 +146,11 @@ async function extractInvoice(rawText, { ocrConfidence = null } = {}) {
     const l = await get(`SELECT l.id, l.name FROM ledgers l WHERE upper(replace(l.gstin, ' ', '')) = ? LIMIT 1`, [supplierG.value]);
     if (l) supplier = { ledger_id: l.id, name: l.name, method: 'gstin', confidence: 'high' };
   }
-  const firstLine = lines.find((l) => !/^(tax\s+)?invoice|^gstin|^original|^duplicate|^page/i.test(l) && /[A-Za-z]{3}/.test(l)) || null;
+  // the supplier's name is the first line of text; a document title printed on the same line ("Kovai Motor Spares    TAX INVOICE") is not part of it
+  const TITLE = /\b(tax\s+invoice|retail\s+invoice|bill\s+of\s+supply|(original|duplicate|triplicate)\s+for\s+(recipient|transporter|supplier|buyer))\b/gi;
+  const EDGE_WORD = /^\s*(invoice|original|duplicate|triplicate)\b|\b(invoice|original|duplicate|triplicate)\s*$/gi; // only at the start / end: "Sri Original Traders" stays whole
+  const nameOf = (l) => String(l).split(/\s{3,}/).map((s) => s.replace(TITLE, ' ').replace(/\s+/g, ' ').replace(/^[\s:|-]+|[\s:|-]+$/g, '').replace(EDGE_WORD, '').replace(/^[\s:|-]+|[\s:|-]+$/g, '')).find((s) => /[A-Za-z]{3}/.test(s) && !/^gstin\b/i.test(s)) || null;
+  const firstLine = nameOf(lines.find((l) => !/^(tax\s+)?invoice|^gstin|^original|^duplicate|^page/i.test(l) && nameOf(l)) || '');
   if (!supplier && firstLine) {
     const creditors = await all(`SELECT l.id, l.name FROM ledgers l JOIN account_groups g ON g.id = l.group_id WHERE g.name = 'Sundry Creditors'`);
     const toks = (s) => String(s).toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length >= 3 && !['ltd', 'pvt', 'private', 'limited', 'and', 'the', 'co'].includes(t));

@@ -57,7 +57,11 @@
 
   async function importStatement() {
     const f = $('bk-file').files[0];
-    if (!f) return msg('Choose a bank statement CSV first (export it from net-banking; Excel files can be saved as CSV).', 'text-red-700');
+    if (!f) return msg('Choose a bank statement file first (CSV, Excel or PDF from net-banking).', 'text-red-700');
+    if (!/\.csv$/i.test(f.name) && window.RREDocImport) { // Excel / PDF statement: read by Import Documents, then into this reconciliation
+      $('bk-file').value = '';
+      return window.RREDocImport.importFiles([f], { settings: { category: 'bank_statement', bank_ledger_id: bankId() } });
+    }
     if (f.size > 8 * 1024 * 1024) return msg('File is larger than 8 MB.', 'text-red-700');
     msg('Importing…');
     try {
@@ -159,7 +163,7 @@
       <div class="p-4 space-y-3">
         <div class="flex flex-wrap items-center gap-2">
           <select id="bk-ledger" class="border border-slate-300 rounded p-1.5 bg-white font-semibold"></select>
-          <input id="bk-file" type="file" accept=".csv,text/csv" class="text-[11px]">
+          <input id="bk-file" type="file" accept=".csv,text/csv,.xlsx,.xls,.pdf" class="text-[11px]">
           <button type="button" id="bk-import" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded font-bold">Import statement</button>
           <select id="bk-imports" class="border border-slate-300 rounded p-1.5 bg-white max-w-sm"></select>
           <button type="button" id="bk-history" class="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded font-bold">History</button>

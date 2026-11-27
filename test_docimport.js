@@ -94,6 +94,8 @@ async function main() {
   assert(p2.unknown_ledgers.length === 1 && p2.unknown_ledgers[0].name === 'Nova Spares Pvt Ltd' && p2.unknown_ledgers[0].will_create, 'the new supplier is listed as "will be created" (Sundry Creditors)');
   const c2 = await commit(u2.json.data.id);
   assert(c2.status === 200 && c2.json.data.imported === 3 && c2.json.data.created.ledgers.some((l) => l.name === 'Nova Spares Pvt Ltd' && l.group === 'Sundry Creditors'), '3 Purchase vouchers posted; Nova Spares created under Sundry Creditors', JSON.stringify(c2.json).slice(0, 200));
+  const p2b = (await preview(u2.json.data.id)).json.data;
+  assert(p2b.records.every((r) => r.status === 'duplicate'), 'after the import, a re-check shows all 3 bills as already in the books, also the one whose supplier the import created', JSON.stringify(p2b.records.map((r) => [r.data.invoice_no, r.status, r.warnings.join(';')])));
   const elgi = await get("SELECT id FROM ledgers WHERE name = 'Elgi Equipments Ltd'");
   const elgiBal = await get('SELECT ROUND(SUM(credit_amount) - SUM(debit_amount), 2) AS b FROM ledger_entries WHERE ledger_id = ?', [elgi.id]);
   assert(Number(elgiBal.b) === 24780, 'the supplier ledger balance follows (Elgi Cr ₹24,780 = 23,600 + 1,180)');
@@ -186,6 +188,37 @@ async function main() {
   assert(fixed.json.data.records[1].status === 'ok' && fixed.json.data.records[1].edited, 'a value corrected in the preview (B-2\'s date) makes that record valid');
   const v9 = await vcount(); const c9 = await commit(u9.json.data.id, { edits: { 2: { date: '2026-06-26' } } });
   assert(c9.json.data.imported === 2 && c9.json.data.rejected === 5 && await vcount() === v9 + 2, 'the 2 valid records are imported; the 5 invalid ones are rejected with their reasons (nothing silently dropped)');
+  const vr = c9.json.data.verification || {};
+  assert(vr.vouchers_expected === 2 && vr.vouchers_found === 2 && vr.balanced && vr.dates.includes('2026-06-26') && vr.ledgers.some((l) => l.name === 'Apex Tech Pvt Ltd'),
+    'after saving, the vouchers are read back from the books: both found, balanced, on their Day Book dates, with the closing balance of each ledger', JSON.stringify(vr).slice(0, 300));
+  const fi = c9.json.data.file_info || {};
+  assert(fi.kind === 'excel' && fi.sheets.join() === 'Sales' && fi.rows === 8 && c9.json.data.totals.gst === 180 && c9.json.data.totals.debit === c9.json.data.totals.credit,
+    'the result shows the file type, its sheets, the rows read and the Dr / Cr / GST totals of what was imported', JSON.stringify({ fi, t: c9.json.data.totals }));
+  // correct two rejected rows AFTER the import and import just those (the 2 already imported are never posted again)
+  const fixEdits = { 2: { date: '2026-06-26' }, 3: { party: 'Apex Tech Pvt Ltd' }, 4: { total: '590' } };
+  const again9 = await commit(u9.json.data.id, { edits: fixEdits });
+  assert(again9.json.data.replayed === true && await vcount() === v9 + 2, 'a second Import click without "correct" returns the first result (nothing posted twice)');
+  const cont = await commit(u9.json.data.id, { edits: fixEdits, continue: true });
+  assert(cont.status === 200 && cont.json.data.imported_now === 2 && cont.json.data.imported === 4 && cont.json.data.rejected === 3 && await vcount() === v9 + 4,
+    'the corrected rejected rows (B-3 party, B-4 total) are imported afterwards; the first 2 are not posted again; 3 still rejected', JSON.stringify(cont.json).slice(0, 300));
+  const pv9 = (await preview(u9.json.data.id, { edits: fixEdits })).json.data;
+  assert(pv9.records.filter((r) => r.status === 'duplicate').length === 4 && cont.json.data.valid === 4, 'after that, the 4 imported records show as already in the books (duplicates), and the result counts 4 valid (not double)', JSON.stringify(pv9.records.map((r) => [r.data.invoice_no, r.status, r.warnings.join(';')])) + ' valid=' + cont.json.data.valid);
+  const cont2 = await commit(u9.json.data.id, { edits: fixEdits, continue: true });
+  assert(cont2.status === 400 && await vcount() === v9 + 4, 'running the correction import again posts nothing (everything valid is already in)');
+  assert((await get('SELECT imported, rejected FROM import_documents WHERE id = ?', [u9.json.data.id])).imported === 4, 'the import history shows the new total (4 imported)');
+  // the same with NEW suppliers over two sheets (as in the browser test)
+  const ms = F.workbook({
+    April: [['Bill Date', 'Bill No', 'Supplier', 'Taxable Value', 'CGST', 'SGST', 'Invoice Total'], ['2026-04-05', 'PA-1', 'Sheet Supplier One', 2000, 180, 180, 2360], ['2026-04-18', 'PA-2', 'Sheet Supplier One', 3000, 270, 270, 3540], ['2026-04-20', 'PA-3', '', 1000, 90, 90, 1180]],
+    May: [['Bill Date', 'Bill No', 'Supplier', 'Taxable Value', 'CGST', 'SGST', 'Invoice Total'], ['2026-05-02', 'PM-1', 'Sheet Supplier Two', 5000, 450, 450, 5900], ['2026-05-09', 'PM-2', 'Sheet Supplier Two', 800, 72, 72, 999]] });
+  const ums = await upload(ms, 'purchases-apr-may.xlsx');
+  const scGroup = (await get("SELECT id FROM account_groups WHERE name = 'Sundry Creditors'")).id;
+  // the screen sends the "create it under Sundry Creditors" choice it showed before the first import
+  const msEdits = { 3: { party: 'Sheet Supplier One' }, 5: { total: '944' } }, msMap = { 'Sheet Supplier One': `create:${scGroup}`, 'Sheet Supplier Two': `create:${scGroup}` };
+  const cms = await commit(ums.json.data.id, { ledger_map: msMap });
+  const pms = (await preview(ums.json.data.id, { edits: msEdits, ledger_map: msMap })).json.data;
+  const cms2 = await commit(ums.json.data.id, { edits: msEdits, ledger_map: msMap, continue: true });
+  assert(cms.json.data.imported === 3 && cms2.json.data.imported === 5 && cms2.json.data.valid === 5 && pms.records.filter((r) => r.status === 'duplicate').length === 3,
+    'two sheets, new suppliers: 3 imported, then the 2 corrected; the result says 5 valid / 5 imported', JSON.stringify({ first: cms.json.data.imported, then: cms2.json.data.imported, valid: cms2.json.data.valid, recs: pms.records.map((r) => [r.n, r.data.invoice_no, r.status, r.warnings.join(';').slice(0, 60)]) }));
 
   console.log('\n--- customers / suppliers and stock ---');
   const parties = F.csv([['Customer Name', 'GSTIN', 'Mobile', 'Email', 'City'], ['Coimbatore Pumps', gstin('33', 'AAGCC2222Q'), '9840012345', 'buy@cbepumps.example', 'Coimbatore'], ['Apex Tech Pvt Ltd', APEX, '', '', '']]);
