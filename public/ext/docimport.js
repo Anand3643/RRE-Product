@@ -419,13 +419,23 @@
     const modal = document.getElementById('aiDocParserModal');
     if (!modal || document.getElementById('di-parser-upload')) return;
     const body = modal.querySelector('.p-5'); if (!body) return;
+    // the main way in: a card in the modal's own colours (indigo, like its header and the Parse button), not a loud banner
     const block = document.createElement('label');
     block.id = 'di-parser-upload';
-    block.className = 'block border-2 border-dashed border-indigo-400 rounded-lg p-3 bg-indigo-50/60 cursor-pointer hover:bg-indigo-100/60 text-center';
+    block.className = 'flex items-center gap-3 border border-indigo-200 rounded-lg p-3 bg-indigo-50/40 cursor-pointer hover:border-indigo-400 transition-colors';
     block.innerHTML = `<input id="di-parser-file" type="file" class="hidden" multiple accept=".pdf,.xlsx,.xls,.csv,.png,.jpg,.jpeg">
-      <div class="font-bold text-indigo-900 text-sm">Upload a PDF, Excel or CSV file</div>
-      <div class="text-[11px] text-slate-600 mt-0.5">Invoices, bills, registers, Day Book, bank statements, ledgers, GST reports — or drop the file here. Multi-page PDFs, scanned PDFs and multi-sheet workbooks are read; you review every record before anything is saved.</div>`;
+      <span class="shrink-0 w-9 h-9 rounded-lg bg-indigo-600 text-white flex items-center justify-center" aria-hidden="true">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
+      <span class="flex-1 min-w-0">
+        <span class="block font-bold text-indigo-900 text-[13px]">Upload a document</span>
+        <span class="block text-[11px] text-slate-600 leading-snug">PDF, Excel, CSV or a photo / scan of an invoice — or drop it here. Every record is shown for review before anything is saved.</span></span>
+      <span class="shrink-0 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold shadow-sm">Choose file</span>`;
     body.insertBefore(block, body.firstChild);
+    const or = document.createElement('div');
+    or.id = 'di-parser-or';
+    or.className = 'flex items-center gap-2 text-[10px] uppercase tracking-wider text-slate-500';
+    or.innerHTML = '<span class="flex-1 border-t border-slate-200"></span><span>or paste the text</span><span class="flex-1 border-t border-slate-200"></span>';
+    block.after(or);
     const pick = (list) => { if (!list || !list.length) return; if (typeof closeModal === 'function') closeModal('aiDocParserModal'); importFiles(list); };
     block.querySelector('input').addEventListener('change', (e) => { const l = [...e.target.files]; e.target.value = ''; pick(l); });
     ['dragenter', 'dragover'].forEach((ev) => block.addEventListener(ev, (e) => { e.preventDefault(); block.classList.add('border-indigo-600'); }));
