@@ -989,6 +989,16 @@ const VIEW_BREADCRUMBS = {
   'view-chart-accounts': 'Gateway of RRE Entries > Chart of Accounts'
 };
 
+function refreshIcons(rootEl) {
+  try {
+    if (!window.lucide) return;
+    const scope = rootEl || document;
+    if (scope.querySelector && scope.querySelector('[data-lucide]')) {
+      window.lucide.createIcons({ root: scope });
+    }
+  } catch (e) {}
+}
+
 function showView(viewId) {
   VIEWS.forEach(id => {
     const el = document.getElementById(id);
@@ -1008,7 +1018,7 @@ function showView(viewId) {
   const statusCtx = document.getElementById('status-bar-context');
   if (statusCtx) statusCtx.textContent = label;
 
-  if (window.lucide) window.lucide.createIcons();
+  refreshIcons(target || document);
 }
 
 function showGateway() {
@@ -2629,7 +2639,10 @@ function openCreateLedgerForGroup(groupId) {
 // ========================================================
 function openModal(id) {
   const m = document.getElementById(id);
-  if (m) m.classList.remove('hidden');
+  if (m) {
+    m.classList.remove('hidden');
+    refreshIcons(m);
+  }
   if (id === 'createLedgerModal' || id === 'createGroupModal') {
     const sel = document.getElementById(id === 'createLedgerModal' ? 'm-ledger-group' : 'm-group-parent');
     if (!appState.groups || !appState.groups.length) {

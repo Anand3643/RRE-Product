@@ -607,7 +607,11 @@ body {
 
 /* Smooth Interactive Micro-transitions */
 button, a, .gateway-item, .fn-btn, .tally-v-btn, .tally-top-item, .tally-goto-pill, .theme-swatch-card, .tab-btn {
-  transition: all var(--duration-fast) var(--ease-smooth);
+  transition: background-color 0.14s var(--ease-smooth),
+              color 0.14s var(--ease-smooth),
+              border-color 0.14s var(--ease-smooth),
+              box-shadow 0.14s var(--ease-smooth),
+              transform 0.12s var(--ease-smooth);
 }
 
 button:active, .fn-btn:active, .tally-v-btn:active, .gateway-item:active {
@@ -618,7 +622,7 @@ button:active, .fn-btn:active, .tally-v-btn:active, .gateway-item:active {
 input, select, textarea {
   transition: border-color var(--duration-fast) var(--ease-smooth),
               box-shadow var(--duration-fast) var(--ease-smooth),
-              background-color var(--duration-fast) var(--ease-smooth) !important;
+              background-color var(--duration-fast) var(--ease-smooth);
 }
 
 input:focus, select:focus, textarea:focus {
@@ -634,21 +638,26 @@ input:focus, select:focus, textarea:focus {
   box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.25) !important;
 }
 
-/* Smooth Section View Transitions for All Screens */
+/* Smooth Section View & Modal Transitions */
 section[id^="view-"]:not(.hidden) {
-  animation: smoothViewFadeIn var(--duration-normal) var(--ease-smooth) forwards;
-  will-change: opacity, transform;
+  animation: smoothViewFadeIn 0.16s var(--ease-smooth) forwards;
+}
+
+.modal-backdrop:not(.hidden) {
+  animation: smoothBackdropFadeIn 0.14s var(--ease-smooth) forwards;
+}
+
+.modal-backdrop:not(.hidden) > div {
+  animation: smoothModalScaleIn 0.18s var(--ease-smooth) forwards;
 }
 
 /* Smooth Sidecars & Drawers */
 #ai-copilot-drawer:not(.hidden) {
-  animation: smoothDrawerSlideRight var(--duration-smooth) var(--ease-smooth) forwards;
-  will-change: transform, opacity;
+  animation: smoothDrawerSlideRight 0.2s var(--ease-smooth) forwards;
 }
 
 #calculator-drawer:not(.hidden) {
-  animation: smoothDrawerSlideBottom var(--duration-smooth) var(--ease-smooth) forwards;
-  will-change: transform, opacity;
+  animation: smoothDrawerSlideBottom 0.2s var(--ease-smooth) forwards;
 }
 
 /* Smooth Data Tables & Rows */

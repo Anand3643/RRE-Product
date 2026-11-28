@@ -56,7 +56,7 @@ body.au-rail-open #au-rail .sub.open { display: grid; gap: 1px; animation: auEnt
 #aurora-bg { display: none; position: fixed; inset: 0; z-index: 0; overflow: hidden; pointer-events: none;
   background: radial-gradient(1200px 700px at 15% -10%, #1b2a7a 0%, rgba(27, 42, 122, 0) 60%), radial-gradient(900px 600px at 105% 10%, #3b1d8f 0%, rgba(59, 29, 143, 0) 55%), linear-gradient(180deg, #050816 0%, #070b1f 60%, #04060f 100%); }
 [data-au="dark"] #aurora-bg { display: block; }
-#aurora-bg .blob { position: absolute; border-radius: 50%; filter: blur(70px); opacity: .55; will-change: transform; }
+#aurora-bg .blob { position: absolute; border-radius: 50%; opacity: .55; }
 #aurora-bg .b1 { width: 46vw; height: 46vw; left: -12vw; top: -10vw; background: radial-gradient(circle, #3b5bff, rgba(59, 91, 255, 0) 70%); animation: auDrift1 26s ease-in-out infinite alternate; }
 #aurora-bg .b2 { width: 40vw; height: 40vw; right: -10vw; top: 12vh; background: radial-gradient(circle, #7c3aed, rgba(124, 58, 237, 0) 70%); animation: auDrift2 31s ease-in-out infinite alternate; }
 #aurora-bg .b3 { width: 34vw; height: 34vw; left: 30vw; bottom: -16vw; background: radial-gradient(circle, #06b6d4, rgba(6, 182, 212, 0) 70%); opacity: .32; animation: auDrift3 36s ease-in-out infinite alternate; }
@@ -88,7 +88,7 @@ body.au-rail-open #au-rail .sub.open { display: grid; gap: 1px; animation: auEnt
 [data-au="dark"] .gateway-item { border-radius: 10px; transition: background .2s var(--au-ease), transform .2s var(--au-ease), box-shadow .2s var(--au-ease); }
 [data-au="dark"] .gateway-item:hover, [data-au="dark"] .gateway-item.selected { background: linear-gradient(90deg, rgba(91, 124, 255, .45), rgba(124, 58, 237, .35)) !important; transform: translateX(4px); box-shadow: 0 8px 24px -10px rgba(91, 124, 255, .8); }
 [data-au="dark"] .hotkey { color: #67e8f9; }
-[data-au="dark"] button, [data-au="dark"] .tally-v-btn { transition: transform .18s var(--au-ease), box-shadow .18s var(--au-ease), background-color .18s, filter .18s; }
+[data-au="dark"] button, [data-au="dark"] .tally-v-btn { transition: transform .14s var(--au-ease), box-shadow .14s var(--au-ease), background-color .14s var(--au-ease); }
 [data-au="dark"] .bg-blue-600, [data-au="dark"] .bg-blue-700, [data-au="dark"] .bg-indigo-600 { background-image: linear-gradient(135deg, #4f6bff, #7c3aed); }
 [data-au="dark"] .tally-v-btn { background: rgba(255, 255, 255, .06); border: 1px solid rgba(140, 158, 255, .25); color: #e8edff; border-radius: 10px; }
 [data-au="dark"] .tally-v-btn:hover { background: rgba(91, 124, 255, .28); transform: translateY(-1px); }
@@ -3086,8 +3086,9 @@ body.au-rail-open #au-rail button.item { padding: 0 14px; }
 .au-stage, .au-orb, .au-tilt, .au-hero { transform-style: flat !important; perspective: none !important; }
 .au-tilt.au-tilting, .au-motion .au-reveal.is-in.au-tilt.au-tilting { transform: none !important; }
 .au-tilt::after { display: none !important; }
-.au-motion .au-reveal, .au-motion .au-reveal.is-in, .au-motion .au-reveal.is-in.au-depth { transform: none !important; will-change: auto !important; transition: opacity .25s ease !important; }
-.au-motion main > section[id^="view-"].au-enter { animation: auFade .2s ease both !important; }
+.au-motion .au-reveal, .au-motion .au-reveal.is-in, .au-motion .au-reveal.is-in.au-depth { transform: none !important; will-change: auto !important; transition: opacity .18s ease !important; }
+.au-motion main > section[id^="view-"].au-enter { animation: auFade .16s cubic-bezier(.22, 1, .36, 1) both !important; }
+.au-panel, .au-stat { contain: layout style; }
 @keyframes auFade { from { opacity: 0; } to { opacity: 1; } }
 
 /* ---------- no layout jumps: the dashboard keeps room for figures and charts that arrive after the first paint ---------- */

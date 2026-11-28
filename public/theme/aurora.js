@@ -15,9 +15,10 @@
   const motionOn = () => isOn() && !mqReduce.matches;
   const base = () => (typeof API_BASE !== 'undefined' ? API_BASE : '/api');
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const money = (n) => (typeof formatCurrency === 'function' ? formatCurrency(n || 0) : '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+  const INR_FMT = typeof Intl !== 'undefined' ? new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 }) : null;
+  const money = (n) => (typeof formatCurrency === 'function' ? formatCurrency(n || 0) : (INR_FMT ? INR_FMT.format(Number(n) || 0) : '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })));
   const compact = (n) => { const a = Math.abs(n), s = n < 0 ? '-' : ''; return a >= 1e7 ? s + (a / 1e7).toFixed(1) + 'Cr' : a >= 1e5 ? s + (a / 1e5).toFixed(1) + 'L' : a >= 1e3 ? s + (a / 1e3).toFixed(0) + 'k' : s + Math.round(a); };
-  const icons = () => { try { if (window.lucide) window.lucide.createIcons(); } catch (e) { /* decoration */ } };
+  const icons = (scope) => { try { if (window.lucide) { const root = scope || doc; if (root.querySelector && root.querySelector('[data-lucide]')) window.lucide.createIcons({ root }); } } catch (e) { /* decoration */ } };
   const $ = (s, r) => (r || doc).querySelector(s), $$ = (s, r) => Array.from((r || doc).querySelectorAll(s));
   // in this layout the whole page scrolls (the body grows with its content); fall back to <main> if it ever scrolls by itself
   const scroller = () => { const m = $('main'); return m && m.scrollHeight > m.clientHeight + 4 ? m : (doc.scrollingElement || html); };
@@ -40,7 +41,7 @@
   // ------------------------------------------------------------------ motion switch
   function syncMotion() { html.classList.toggle('au-motion', motionOn()); }
 
-  // ------------------------------------------------------------------ ambient 3D background
+  // ------------------------------------------------------------------ ambient background
   let bgEls = null;
   function ambient() {
     if ($('#aurora-bg')) return;
@@ -48,13 +49,6 @@
     bg.innerHTML = '<div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="grid"></div>';
     doc.body.insertBefore(bg, doc.body.firstChild);
     bgEls = { b: $$('.blob', bg), g: $('.grid', bg) };
-    let px = 0, py = 0, tick = false;
-    window.addEventListener('pointermove', (e) => {
-      return; // pointer parallax removed (3D effects off)
-      px =e.clientX / window.innerWidth - .5; py = e.clientY / window.innerHeight - .5;
-      if (tick) return; tick = true;
-      requestAnimationFrame(() => { tick = false; bgEls.b.forEach((b, i) => { b.style.translate = `${(px * (i + 1) * -26).toFixed(1)}px ${(py * (i + 1) * -18).toFixed(1)}px`; }); bgEls.g.style.translate = `${(px * 30).toFixed(1)}px 0`; });
-    }, { passive: true });
   }
 
   // ------------------------------------------------------------------ navigation rail
@@ -110,7 +104,7 @@
       if (b.dataset.act === 'theme') { if (typeof openThemeSelectorModal === 'function') openThemeSelectorModal(); return; }
       const it = ITEMS[+b.dataset.i]; if (window.RREInventory) window.RREInventory.close(); try { it[2](); } catch (err) { console.warn('[Aurora] navigation:', err.message); }
     });
-    icons(); moveInd();
+    icons(railEl); moveInd();
   }
   // phones: the same destinations as a bottom tab bar
   const TABS = ['Gateway', 'Dashboard', 'Vouchers', 'Sales & Reports', 'RRE Inventory'];
@@ -121,7 +115,7 @@
     tabEl.innerHTML = TABS.map((t) => { const i = ITEMS.findIndex((x) => x[0] === t), it = ITEMS[i]; return `<button type="button" data-i="${i}" class="${it[4] || ''}"><i data-lucide="${it[1]}"></i><span>${esc(t.replace('Sales & Reports', 'Reports'))}</span></button>`; }).join('');
     doc.body.appendChild(tabEl);
     tabEl.addEventListener('click', (e) => { const b = e.target.closest('button'); if (b) { if (!b.classList.contains('inv') && window.RREInventory) window.RREInventory.close(); try { ITEMS[+b.dataset.i][2](); } catch (err) { /* ignore */ } } });
-    icons();
+    icons(tabEl);
   }
   function activeIndex() {
     if ((window.RREInventory && window.RREInventory.isOpen && window.RREInventory.isOpen())) return ITEMS.findIndex((x) => x[3] && x[3][0] === '__inventory');
@@ -162,11 +156,27 @@
     }, { passive: true });
     doc.addEventListener('pointerleave', () => { if (cur) { cur.classList.remove('au-tilting'); cur = null; } }, true);
   }
+  const countJobs = new Map();
+  let countRaf = 0;
+  function stepCounts(t) {
+    countRaf = 0;
+    const ease = (p) => (p === 1 ? 1 : 1 - Math.pow(1 - p, 3));
+    for (const [el, j] of countJobs) {
+      if (!el.isConnected) { countJobs.delete(el); continue; }
+      const p = Math.min(1, (t - j.t0) / j.dur);
+      const val = p < 1 ? j.from + (j.to - j.from) * ease(p) : j.to;
+      el.textContent = j.fmt(val);
+      if (p >= 1) { el._auVal = j.to; countJobs.delete(el); }
+    }
+    if (countJobs.size) countRaf = requestAnimationFrame(stepCounts);
+  }
   function countUp(el, to, fmt) {
-    if (!el) return; const from = 0; if (!motionOn()) { el.textContent = fmt(to); return; }
-    const t0 = performance.now(), dur = 1100, ease = (p) => (p === 1 ? 1 : 1 - Math.pow(2, -10 * p));
-    const step = (t) => { const p = Math.min(1, (t - t0) / dur); el.textContent = fmt(from + (to - from) * ease(p)); if (p < 1) requestAnimationFrame(step); else el.textContent = fmt(to); };
-    requestAnimationFrame(step);
+    if (!el) return;
+    const target = Number(to) || 0;
+    if (!motionOn() || el._auVal === target) { el._auVal = target; el.textContent = fmt(target); return; }
+    const from = typeof el._auVal === 'number' ? el._auVal : 0;
+    countJobs.set(el, { from, to: target, fmt, t0: performance.now(), dur: 380 });
+    if (!countRaf) countRaf = requestAnimationFrame(stepCounts);
   }
 
   // ------------------------------------------------------------------ charts (inline SVG, no library)
@@ -225,7 +235,7 @@
       if (g) { try { openReport(g.dataset.go); } catch (err) { /* ignore */ } }
     });
     portfolioEl.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches('[data-go]')) { e.preventDefault(); e.target.click(); } });
-    icons();
+    icons(portfolioEl);
   }
   const when = (d) => { try { const x = new Date(String(d).replace(' ', 'T')); return x.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' }); } catch (e) { return d || ''; } };
   const monthLabel = (m) => { const [y, mm] = String(m).split('-'); return ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][(+mm || 1) - 1] || m; };
@@ -254,7 +264,7 @@
       ['Bank balance', fv('bank_balance'), 'landmark', 'bank-recon', 'All bank accounts', ''], [gstDue != null && gstDue < 0 ? 'GST credit carried' : 'GST payable', gstDue == null ? null : Math.abs(gstDue), 'percent', 'gst', 'Output GST less input credit', ''], ['GST input credit', fv('gst_input_credit'), 'badge-percent', 'gst', 'GST paid on purchases', '']];
     const sEl = $('#au-stats');
     if (!sEl.children.length) {
-      sEl.innerHTML = stats.map((s, i) => `<div class="au-stat au-tilt au-reveal ${s[5]}" style="--au-d:${(i * .07).toFixed(2)}s" data-go="${s[3]}" role="button" tabindex="0"><div class="ico"><i data-lucide="${s[2]}"></i></div><small>${s[0]}</small><div class="val" data-i="${i}">—</div><div class="sub">${esc(s[4])}</div></div>`).join(''); icons(); observe(sEl);
+      sEl.innerHTML = stats.map((s, i) => `<div class="au-stat au-tilt au-reveal ${s[5]}" style="--au-d:${(i * .03).toFixed(2)}s" data-go="${s[3]}" role="button" tabindex="0"><div class="ico"><i data-lucide="${s[2]}"></i></div><small>${s[0]}</small><div class="val" data-i="${i}">—</div><div class="sub">${esc(s[4])}</div></div>`).join(''); icons(sEl); observe(sEl);
     }
     stats.forEach((s, i) => { const el = $(`.val[data-i="${i}"]`, sEl), card = el && el.closest('.au-stat'); if (!el) return; card.classList.remove('pos', 'neg'); if (s[5]) card.classList.add(s[5]); const lab = card.querySelector('small'); if (lab && lab.textContent !== s[0]) lab.textContent = s[0]; if (s[1] == null) { el.textContent = 'Not available'; el.title = 'Financial figures need permission to view'; } else countUp(el, s[1], money); const sub = $('.sub', card); if (sub) sub.textContent = s[4]; });
     if (cash != null) countUp($('#au-f-cash'), cash, money); if (stock != null) countUp($('#au-f-stock'), stock, money);
@@ -286,7 +296,7 @@
     const gr0 = gr; void gr0;
     $('#au-act-all').innerHTML = list.slice(0, 7).map(li).join('') || empty('No transactions yet.'); $('#au-act-sales').innerHTML = by(/^Sales|Credit Note/, 6).map(li).join('') || empty('No sales yet.');
     $('#au-act-purch').innerHTML = by(/^Purchase|Debit Note/, 6).map(li).join('') || empty('No purchases yet.'); $('#au-act-stock').innerHTML = by(/Stock/, 6).map(li).join('') || empty('No stock updates yet.');
-    icons(); observe(portfolioEl); $$('.au-chart', portfolioEl).forEach(drawLines); update();
+    icons(portfolioEl); observe(portfolioEl); $$('.au-chart', portfolioEl).forEach(drawLines); update();
   }
 
   // ------------------------------------------------------------------ hooks into the existing app (wrap, never replace)
@@ -297,8 +307,8 @@
   }
   function onView(id) {
     if (window.RREInventory) window.RREInventory.close(); // any RRE screen replaces the inventory area
-    moveInd(); window.scrollTo(0, 0); const m = $('main'); if (m) m.scrollTop = 0;
-    const el = id && doc.getElementById(id); if (el && motionOn()) { el.classList.remove('au-enter'); void el.offsetWidth; el.classList.add('au-enter'); }
+    moveInd(); if (scrollTopNow() > 2) window.scrollTo(0, 0); const m = $('main'); if (m && m.scrollTop > 2) m.scrollTop = 0;
+    const el = id && doc.getElementById(id); if (el && motionOn()) { el.classList.remove('au-enter'); requestAnimationFrame(() => el.classList.add('au-enter')); }
     if (id === 'view-dashboard') { buildPortfolio(); observe(portfolioEl); }
   }
   // ------------------------------------------------------------------ Light (white) / Dark mode
@@ -317,7 +327,7 @@
     t.innerHTML = '<button type="button" data-m="light" title="White theme"><i data-lucide="sun"></i><span>Light</span></button><button type="button" data-m="dark" title="Dark theme"><i data-lucide="moon"></i><span>Dark</span></button>';
     anchor.parentElement.insertBefore(t, anchor);
     t.addEventListener('click', (e) => { const b = e.target.closest('button[data-m]'); if (b) setMode(b.dataset.m); });
-    icons(); syncToggle();
+    icons(t); syncToggle();
   }
   function enable() {
     applyMode(); syncMotion(); modeToggle(); if (!isOn()) return; ambient(); rail(); tabbar(); buildPortfolio(); if (portfolioEl) observe(portfolioEl); moveInd();

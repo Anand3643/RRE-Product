@@ -17,7 +17,7 @@
   const base = () => (typeof API_BASE !== 'undefined' ? API_BASE : '/api') + '/inv';
   const perms = () => (typeof appState !== 'undefined' && appState.permissions) || {};
   const can = { write: () => !!perms().canCreateVouchers, move: () => !!perms().canEditVouchers, remove: () => !!perms().canDeleteVouchers, value: () => !!perms().canViewFinancials };
-  const icons = () => { try { if (window.lucide) window.lucide.createIcons(); } catch (e) { /* icons are decoration */ } };
+  const icons = (scope) => { try { if (window.lucide) { const r = scope || root(); if (r && r.querySelector && r.querySelector('[data-lucide]')) window.lucide.createIcons({ root: r }); } } catch (e) { /* icons are decoration */ } };
   const ic = (n, cls = '') => `<i data-lucide="${n}" class="${cls}" style="width:16px;height:16px"></i>`;
   const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
   const today = () => new Date().toISOString().slice(0, 10);
@@ -56,7 +56,7 @@
     ov.addEventListener('mousedown', (e) => { if (e.target === ov) close(); });
     ov.addEventListener('click', (e) => { if (e.target.closest('[data-x]')) close(); });
     root().addEventListener('keydown', onKey);
-    root().appendChild(ov); icons();
+    root().appendChild(ov); icons(ov);
     const first = ov.querySelector('input:not([type=hidden]),select,textarea'); if (first && !o.drawer) first.focus();
     return { el: ov, close };
   }
