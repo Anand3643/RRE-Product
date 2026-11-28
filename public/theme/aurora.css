@@ -3125,3 +3125,16 @@ body.au-rail-open #au-rail button.item { padding: 0 14px; }
   [data-theme="aurora"] #vx-btn { right: 16px; bottom: 128px; }
   [data-theme="aurora"] #vx-panel { right: 8px; left: 8px !important; width: auto; bottom: 180px; max-height: calc(100vh - 240px); }
 }
+
+/* the menu's collapse / expand toggle: an icon in the logo row at the top */
+#au-rail .au-collapse { margin-left: auto; flex: none; width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 9px; background: rgba(255, 255, 255, .06); color: #b4bfe8; cursor: pointer; transition: background .2s, color .2s; }
+#au-rail .au-collapse:hover { color: #fff; background: rgba(255, 255, 255, .14); }
+#au-rail .au-collapse:focus-visible { outline: 2px solid #22d3ee; outline-offset: 1px; }
+#au-rail .au-collapse svg { width: 18px; height: 18px; }
+body.au-rail-open #au-rail .au-collapse .when-closed, body:not(.au-rail-open) #au-rail .au-collapse .when-open { display: none; }
+/* collapsed (narrow) menu: no room beside the logo, so the toggle sits right under it */
+body:not(.au-rail-open) #au-rail .brand { flex-direction: column; gap: 10px; padding: 4px 0 12px; }
+body:not(.au-rail-open) #au-rail .brand .lbl { display: none; }
+body:not(.au-rail-open) #au-rail .au-collapse { margin-left: 0; }
+[data-au="light"] #au-rail .au-collapse { background: rgba(15, 23, 42, .06); color: #475569; }
+[data-au="light"] #au-rail .au-collapse:hover { background: rgba(15, 23, 42, .12); color: #0f172a; }

@@ -93,12 +93,16 @@
     if (railEl) return;
     railEl = doc.createElement('nav'); railEl.id = 'au-rail'; railEl.setAttribute('aria-label', 'Main navigation');
     const logo = 'rre_icon.png';
-    railEl.innerHTML = `<div class="brand"><img src="${logo}" alt=""><span class="lbl">RRE Entries</span></div><div class="nav"><div class="ind"></div>${ITEMS.map(railItem).join('')}</div>
-      <div class="foot"><button type="button" class="item rre-auth-only" data-act="users" title="Users & security"><i data-lucide="users"></i><span class="lbl">Users</span></button><button type="button" class="item" data-act="theme" title="Theme (Alt+T)"><i data-lucide="palette"></i><span class="lbl">Theme</span></button><button type="button" class="item" data-act="collapse" title="Collapse / expand"><i data-lucide="panel-left"></i><span class="lbl">Collapse</span></button></div>`;
+    railEl.innerHTML = `<div class="brand"><img src="${logo}" alt=""><span class="lbl">RRE Entries</span><button type="button" class="au-collapse" data-act="collapse" title="Collapse / expand the menu" aria-label="Collapse or expand the menu"><i data-lucide="panel-left-close" class="when-open"></i><i data-lucide="panel-left-open" class="when-closed"></i></button></div><div class="nav"><div class="ind"></div>${ITEMS.map(railItem).join('')}</div>
+      <div class="foot"><button type="button" class="item rre-auth-only" data-act="users" title="Users & security"><i data-lucide="users"></i><span class="lbl">Users</span></button><button type="button" class="item" data-act="theme" title="Theme (Alt+T)"><i data-lucide="palette"></i><span class="lbl">Theme</span></button></div>`;
     doc.body.appendChild(railEl);
     if (store.get('au_rail_open') === '1') doc.body.classList.add('au-rail-open');
+    // the toggle says what it will do (screen readers); the icon itself follows body.au-rail-open in CSS
+    const syncCollapse = () => { const c = $('.au-collapse', railEl); if (c) c.setAttribute('aria-expanded', doc.body.classList.contains('au-rail-open') ? 'true' : 'false'); };
+    syncCollapse(); new MutationObserver(syncCollapse).observe(doc.body, { attributes: true, attributeFilter: ['class'] });
     railEl.addEventListener('click', (e) => {
       const sb = e.target.closest('.sub button[data-path]'); if (sb) { try { window.RREInventoryGo(sb.dataset.path); } catch (err) { /* ignore */ } return; }
+      if (e.target.closest('.au-collapse')) { doc.body.classList.toggle('au-rail-open'); store.set('au_rail_open', doc.body.classList.contains('au-rail-open') ? '1' : '0'); syncCollapse(); setTimeout(moveInd, 380); return; }
       const b = e.target.closest('button.item'); if (!b) return;
       if (b.classList.contains('inv')) { const wasOpen = $('#au-inv-sub').classList.contains('open'); toggleInvMenu(); if (!wasOpen || !(window.RREInventory && window.RREInventory.isOpen && window.RREInventory.isOpen())) { try { window.RREInventoryGo('/admin'); } catch (err) { /* ignore */ } } return; }
       if (b.dataset.act === 'collapse') { doc.body.classList.toggle('au-rail-open'); store.set('au_rail_open', doc.body.classList.contains('au-rail-open') ? '1' : '0'); setTimeout(moveInd, 380); return; }
