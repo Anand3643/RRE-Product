@@ -858,10 +858,7 @@ async function loadGatewayInfo() {
         : 'px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800';
     }
 
-    if (d.current_date) {
-      setElText('top-current-date', formatDateDisplay(d.current_date));
-      setElText('gateway-date', formatDateDisplay(d.current_date));
-    }
+    showWorkingDate(); // today on this computer (or the date chosen with F2 today), not the date of the last voucher
     setElText('gateway-vouchers-count', d.total_vouchers ?? 0);
     setElText('gateway-ledgers-count', d.total_ledgers ?? 0);
 
@@ -1285,7 +1282,7 @@ function updateVoucherMeta(type) {
   title.textContent = `${type} Voucher Creation`;
   vNo.value = generatedNo;
   vRef.value = generatedNo;
-  vDate.value = new Date().toISOString().split('T')[0];
+  vDate.value = workingDate();
   document.getElementById('bill-due-date').value = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 }
 
@@ -3176,6 +3173,7 @@ function openChangeDateModal() {
   openModal('changeDateModal');
   const dInput = document.getElementById('input-change-date');
   if (dInput) {
+    dInput.value = workingDate();
     setTimeout(() => dInput.focus(), 50);
   }
 }
@@ -3184,6 +3182,27 @@ function openChangeDateModal() {
  * The reporting period (F2): Profit & Loss for it, Balance Sheet and Trial Balance as on its last day. Remembered on this device;
  * the company's financial year until someone chooses another.
  */
+/**
+ * The working ("current") date: today on this computer, so it moves on by itself every day. A date chosen with F2 is used for the
+ * rest of that day only (new vouchers start on it); the next day it is today again.
+ */
+function localToday() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
+function workingDate() {
+  try {
+    const w = JSON.parse(localStorage.getItem('rre_working_date') || 'null');
+    if (w && w.chosen_on === localToday() && /^\d{4}-\d{2}-\d{2}$/.test(w.date || '')) return w.date;
+  } catch (e) { /* storage unavailable: today */ }
+  return localToday();
+}
+function showWorkingDate() {
+  const t = `${formatDateDisplay(workingDate())} (F2)`;
+  ['top-current-date', 'gateway-date'].forEach((id) => { const el = document.getElementById(id); if (el) el.textContent = t; });
+}
+// a screen left open overnight: show the new day (and forget yesterday's F2 date) without a reload
+let __shownDay = null;
+setInterval(() => { const t = localToday(); if (__shownDay && __shownDay !== t) showWorkingDate(); __shownDay = t; }, 60 * 1000);
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', () => { __shownDay = localToday(); showWorkingDate(); }); else { __shownDay = localToday(); showWorkingDate(); }
+
 function reportPeriod() {
   let p = null;
   try { p = JSON.parse(localStorage.getItem('rre_report_period') || 'null'); } catch (e) { /* storage unavailable */ }
@@ -3215,10 +3234,11 @@ async function handleChangeDate(e) {
   }
 
   const formattedDate = formatDateDisplay(newDate);
-  const topDateEl = document.getElementById('top-current-date');
-  const gwDateEl = document.getElementById('gateway-date');
-  if (topDateEl) topDateEl.textContent = `${formattedDate} (F2)`;
-  if (gwDateEl) gwDateEl.textContent = `${formattedDate} (F2)`;
+  try {
+    if (newDate === localToday()) localStorage.removeItem('rre_working_date');
+    else localStorage.setItem('rre_working_date', JSON.stringify({ date: newDate, chosen_on: localToday() }));
+  } catch (err) { /* storage unavailable: shown for now only */ }
+  showWorkingDate();
 
   closeModal('changeDateModal');
   alert(`Current voucher date changed to ${formattedDate}. Reports are for ${formatDateDisplay(reportPeriod().from)} to ${formatDateDisplay(reportPeriod().to)}.`);
@@ -4236,6 +4256,9 @@ function formatCurrency(val) {
 
 function formatDateDisplay(dStr) {
   if (!dStr) return '';
+  // a plain date (YYYY-MM-DD) is that calendar day everywhere (new Date() would read it as UTC and could show the day before)
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dStr));
+  if (m) return `${+m[3]}-${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][+m[2] - 1]}-${m[1]}`;
   const d = new Date(dStr);
   if (isNaN(d.getTime())) return dStr;
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];

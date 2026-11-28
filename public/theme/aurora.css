@@ -3128,11 +3128,13 @@ body.au-rail-open #au-rail button.item { padding: 0 14px; }
 
 /* the menu's collapse / expand toggle: an icon in its own row at the top of the menu */
 #au-rail .au-collapse-row { display: flex; padding: 0 6px 8px; }
-#au-rail .au-collapse { flex: none; width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 9px; background: rgba(255, 255, 255, .06); color: #b4bfe8; cursor: pointer; transition: background .2s, color .2s; }
+#au-rail .au-collapse { flex: none; min-width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 7px; font-size: 12.5px; font-weight: 600; border: 0; border-radius: 9px; background: rgba(255, 255, 255, .06); color: #b4bfe8; cursor: pointer; transition: background .2s, color .2s; }
 #au-rail .au-collapse:hover { color: #fff; background: rgba(255, 255, 255, .14); }
 #au-rail .au-collapse:focus-visible { outline: 2px solid #22d3ee; outline-offset: 1px; }
 #au-rail .au-collapse svg { width: 18px; height: 18px; }
 body.au-rail-open #au-rail .au-collapse .when-closed, body:not(.au-rail-open) #au-rail .au-collapse .when-open { display: none; }
 body:not(.au-rail-open) #au-rail .au-collapse-row { justify-content: center; padding: 0 0 8px; }
+body.au-rail-open #au-rail .au-collapse { padding: 0 12px 0 8px; }
+body:not(.au-rail-open) #au-rail .au-collapse .lbl { display: none; } /* the narrow menu: the icon only */
 [data-au="light"] #au-rail .au-collapse { background: rgba(15, 23, 42, .06); color: #475569; }
 [data-au="light"] #au-rail .au-collapse:hover { background: rgba(15, 23, 42, .12); color: #0f172a; }

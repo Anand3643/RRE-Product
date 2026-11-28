@@ -93,7 +93,7 @@
     if (railEl) return;
     railEl = doc.createElement('nav'); railEl.id = 'au-rail'; railEl.setAttribute('aria-label', 'Main navigation');
     const logo = 'rre_icon.png';
-    railEl.innerHTML = `<div class="brand"><img src="${logo}" alt=""><span class="lbl">RRE Entries</span></div><div class="au-collapse-row"><button type="button" class="au-collapse" data-act="collapse" title="Collapse / expand the menu" aria-label="Collapse or expand the menu"><i data-lucide="panel-left-close" class="when-open"></i><i data-lucide="panel-left-open" class="when-closed"></i></button></div><div class="nav"><div class="ind"></div>${ITEMS.map(railItem).join('')}</div>
+    railEl.innerHTML = `<div class="brand"><img src="${logo}" alt=""><span class="lbl">RRE Entries</span></div><div class="au-collapse-row"><button type="button" class="au-collapse" data-act="collapse" title="Collapse / expand the menu" aria-label="Collapse or expand the menu"><i data-lucide="panel-left-close" class="when-open"></i><i data-lucide="panel-left-open" class="when-closed"></i><span class="lbl">Collapse</span></button></div><div class="nav"><div class="ind"></div>${ITEMS.map(railItem).join('')}</div>
       <div class="foot"><button type="button" class="item rre-auth-only" data-act="users" title="Users & security"><i data-lucide="users"></i><span class="lbl">Users</span></button><button type="button" class="item" data-act="theme" title="Theme (Alt+T)"><i data-lucide="palette"></i><span class="lbl">Theme</span></button></div>`;
     doc.body.appendChild(railEl);
     if (store.get('au_rail_open') === '1') doc.body.classList.add('au-rail-open');

@@ -380,7 +380,7 @@ app.get('/api/gateway/info', async (req, res) => {
       success: true,
       data: {
         company: comp || { name: 'RRE Entries', gstin: '', state: 'Tamil Nadu', state_code: '33' },
-        current_date: lastVoucher ? lastVoucher.date : '2026-06-01',
+        current_date: (() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; })(), // today (it was the last voucher's date)
         financial_year: '1-Apr-2026 to 31-Mar-2027',
         last_voucher: lastVoucher || null,
         total_vouchers: totalVouchers.count || 0,
