@@ -95,15 +95,18 @@
     const follow = () => { const m = document.documentElement.getAttribute('data-au'); if (m) el.classList.toggle('dark', m === 'dark'); };
     new MutationObserver(follow).observe(document.documentElement, { attributes: true, attributeFilter: ['data-au'] }); setTimeout(follow, 0);
     el.innerHTML = `<aside class="sp-side"><div class="sp-brand"><span class="sp-logo">${ic('boxes')}</span><span class="sp-lbl">RRE Inventory</span></div>
-      <nav>${NAV.map(([g, links]) => `${g ? `<div class="sp-grp">${g}</div>` : ''}${links.map(([k, t, i]) => `<button class="sp-nav" data-go="${k}" title="${t}"><span class="sp-ic">${ic(i)}</span><span class="sp-lbl">${t}</span></button>`).join('')}`).join('')}</nav>
-      <div style="padding:8px;border-top:1px solid rgb(var(--line))"><button class="sp-nav" id="sp-collapse"><span class="sp-ic">${ic('chevrons-left')}</span><span class="sp-lbl">Collapse</span></button></div></aside>
+      <div class="sp-collapse-row"><button type="button" class="sp-collapse" id="sp-collapse" title="Collapse / expand the menu" aria-label="Collapse or expand the menu" aria-expanded="true"><span class="when-open">${ic('chevrons-left')}</span><span class="when-closed">${ic('chevrons-right')}</span></button></div>
+      <nav>${NAV.map(([g, links]) => `${g ? `<div class="sp-grp">${g}</div>` : ''}${links.map(([k, t, i]) => `<button class="sp-nav" data-go="${k}" title="${t}"><span class="sp-ic">${ic(i)}</span><span class="sp-lbl">${t}</span></button>`).join('')}`).join('')}</nav></aside>
       <div class="sp-main"><header class="sp-top"><button class="btn sm" id="sp-back" data-tip="Back to RRE Entries">${ic('arrow-left')} RRE Entries</button><h1 id="sp-title"></h1>
         <input class="input" id="sp-quick" placeholder="Search items…  ( / )" style="width:220px" aria-label="Search items"><button class="btn flat sm" id="sp-theme" data-tip="Light / dark">${ic('moon')}</button></header>
         <div class="sp-view" id="sp-view"></div></div><div class="toasts" role="status" aria-live="polite"></div>`;
     document.body.appendChild(el);
     el.addEventListener('click', onClick);
     el.querySelector('#sp-back').onclick = close;
-    el.querySelector('#sp-collapse').onclick = () => el.classList.toggle('collapsed');
+    // collapse / expand, remembered like the main menu
+    const setCollapsed = (on) => { el.classList.toggle('collapsed', on); el.querySelector('#sp-collapse').setAttribute('aria-expanded', on ? 'false' : 'true'); };
+    setCollapsed(store.get('sp-collapsed') === '1');
+    el.querySelector('#sp-collapse').onclick = () => { const on = !el.classList.contains('collapsed'); setCollapsed(on); store.set('sp-collapsed', on ? '1' : '0'); };
     el.querySelector('#sp-theme').onclick = () => { el.classList.toggle('dark'); store.set('sp-theme', el.classList.contains('dark') ? 'dark' : 'light'); };
     el.querySelector('#sp-quick').addEventListener('keydown', (e) => { if (e.key === 'Enter') { S.q.items = { ...(S.q.items || {}), q: e.target.value, page: 1 }; go('items'); } });
     // Keystrokes inside the workspace stay inside it: RRE's own global shortcuts (Esc leaves the screen, letters open menus) must not react.

@@ -101,3 +101,12 @@
 @media (pointer: coarse) {
   #sp-app .btn, #sp-app .input, #sp-app select, #sp-app input:not([type="checkbox"]):not([type="radio"]), #sp-app .sp-nav, #sp-app textarea { min-height: 44px; }
 }
+
+/* the menu's collapse / expand toggle: an icon in its own row at the top of the menu */
+:is(#sp-app, #pt-app) .sp-collapse-row { display: flex; padding: 8px 8px 0; }
+:is(#sp-app, #pt-app) .sp-collapse { width: 32px; height: 32px; display: grid; place-items: center; border: 0; border-radius: 6px; background: rgb(var(--ink) / .06); color: rgb(var(--sub)); cursor: pointer; transition: background-color .15s, color .15s; }
+:is(#sp-app, #pt-app) .sp-collapse:hover { background: rgb(var(--ink) / .12); color: rgb(var(--ink)); }
+:is(#sp-app, #pt-app) .sp-collapse:focus-visible { outline: 2px solid rgb(var(--brand)); outline-offset: 1px; }
+:is(#sp-app, #pt-app) .sp-collapse .when-closed, :is(#sp-app, #pt-app).collapsed .sp-collapse .when-open { display: none; }
+:is(#sp-app, #pt-app).collapsed .sp-collapse .when-closed { display: inline-flex; }
+:is(#sp-app, #pt-app).collapsed .sp-collapse-row { justify-content: center; padding: 8px 0 0; }
